@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(gh repo:*)",
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm run:*)",
+      "Bash(bun run:*)",
+      "Bash(open:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(netstat:*)"
+    ]
+  }
+}
