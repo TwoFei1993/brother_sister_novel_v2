@@ -1,0 +1,258 @@
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Orbitron:wght@400;700&family=Creepster&family=Cinzel:wght@400;700&family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Default / 穿越重生 - Ink & Brush */
+  :root, [data-theme="chuanyue"] {
+    --background: 40 30% 92%;
+    --foreground: 25 40% 16%;
+    --card: 40 25% 88%;
+    --card-foreground: 25 40% 16%;
+    --popover: 40 25% 90%;
+    --popover-foreground: 25 40% 16%;
+    --primary: 38 70% 45%;
+    --primary-foreground: 40 30% 95%;
+    --secondary: 30 20% 82%;
+    --secondary-foreground: 25 40% 16%;
+    --muted: 35 15% 85%;
+    --muted-foreground: 25 15% 45%;
+    --accent: 38 70% 45%;
+    --accent-foreground: 40 30% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 20% 78%;
+    --input: 30 20% 80%;
+    --ring: 38 70% 45%;
+    --radius: 0.5rem;
+    --sidebar-background: 40 25% 88%;
+    --sidebar-foreground: 25 40% 16%;
+    --sidebar-primary: 38 70% 45%;
+    --sidebar-primary-foreground: 40 30% 95%;
+    --sidebar-accent: 35 20% 84%;
+    --sidebar-accent-foreground: 25 40% 16%;
+    --sidebar-border: 30 20% 78%;
+    --sidebar-ring: 38 70% 45%;
+    --theme-glow: 38 70% 45%;
+    --theme-font-heading: 'Ma Shan Zheng', cursive;
+    --theme-font-body: 'Noto Serif SC', serif;
+  }
+
+  /* 星际科幻 - Deep Space */
+  [data-theme="scifi"] {
+    --background: 220 25% 8%;
+    --foreground: 200 80% 90%;
+    --card: 220 25% 12%;
+    --card-foreground: 200 80% 90%;
+    --popover: 220 25% 10%;
+    --popover-foreground: 200 80% 90%;
+    --primary: 190 90% 50%;
+    --primary-foreground: 220 25% 8%;
+    --secondary: 220 30% 18%;
+    --secondary-foreground: 200 80% 90%;
+    --muted: 220 20% 16%;
+    --muted-foreground: 200 30% 55%;
+    --accent: 190 90% 50%;
+    --accent-foreground: 220 25% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 20% 20%;
+    --input: 220 20% 18%;
+    --ring: 190 90% 50%;
+    --theme-glow: 190 90% 50%;
+    --theme-font-heading: 'Orbitron', sans-serif;
+    --theme-font-body: 'Inter', sans-serif;
+  }
+
+  /* 末世求生 - Post-Apocalyptic */
+  [data-theme="moshi"] {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 80%;
+    --card: 0 0% 14%;
+    --card-foreground: 0 0% 80%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 80%;
+    --primary: 0 70% 50%;
+    --primary-foreground: 0 0% 95%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 80%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 70% 50%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 22%;
+    --input: 0 0% 20%;
+    --ring: 0 70% 50%;
+    --theme-glow: 0 70% 50%;
+    --theme-font-heading: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', sans-serif;
+  }
+
+  /* 无限流 - Infinite */
+  [data-theme="wuxian"] {
+    --background: 260 30% 8%;
+    --foreground: 260 20% 85%;
+    --card: 260 30% 12%;
+    --card-foreground: 260 20% 85%;
+    --popover: 260 30% 10%;
+    --popover-foreground: 260 20% 85%;
+    --primary: 270 70% 60%;
+    --primary-foreground: 260 30% 8%;
+    --secondary: 260 25% 18%;
+    --secondary-foreground: 260 20% 85%;
+    --muted: 260 20% 16%;
+    --muted-foreground: 260 15% 50%;
+    --accent: 220 70% 55%;
+    --accent-foreground: 260 30% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 260 20% 22%;
+    --input: 260 20% 18%;
+    --ring: 270 70% 60%;
+    --theme-glow: 270 70% 60%;
+    --theme-font-heading: 'Cinzel', serif;
+    --theme-font-body: 'Inter', sans-serif;
+  }
+
+  /* 玄幻修仙 - Xianxia */
+  [data-theme="xuanhuan"] {
+    --background: 240 35% 10%;
+    --foreground: 45 40% 90%;
+    --card: 240 30% 14%;
+    --card-foreground: 45 40% 90%;
+    --popover: 240 30% 12%;
+    --popover-foreground: 45 40% 90%;
+    --primary: 45 80% 55%;
+    --primary-foreground: 240 35% 10%;
+    --secondary: 240 25% 18%;
+    --secondary-foreground: 45 40% 90%;
+    --muted: 240 20% 16%;
+    --muted-foreground: 240 15% 50%;
+    --accent: 45 80% 55%;
+    --accent-foreground: 240 35% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 20% 22%;
+    --input: 240 20% 18%;
+    --ring: 45 80% 55%;
+    --theme-glow: 45 80% 55%;
+    --theme-font-heading: 'ZCOOL XiaoWei', serif;
+    --theme-font-body: 'Noto Serif SC', serif;
+  }
+
+  /* 混合类型 - Mixed */
+  [data-theme="hunhe"] {
+    --background: 260 15% 10%;
+    --foreground: 45 20% 88%;
+    --card: 260 15% 14%;
+    --card-foreground: 45 20% 88%;
+    --popover: 260 15% 12%;
+    --popover-foreground: 45 20% 88%;
+    --primary: 45 70% 55%;
+    --primary-foreground: 260 15% 10%;
+    --secondary: 260 12% 18%;
+    --secondary-foreground: 45 20% 88%;
+    --muted: 260 10% 16%;
+    --muted-foreground: 260 10% 50%;
+    --accent: 280 50% 55%;
+    --accent-foreground: 260 15% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 260 12% 22%;
+    --input: 260 12% 18%;
+    --ring: 45 70% 55%;
+    --theme-glow: 280 50% 55%;
+    --theme-font-heading: 'Cinzel', serif;
+    --theme-font-body: 'Inter', sans-serif;
+  }
+
+  /* Reading modes */
+  [data-reading="night"] {
+    --reading-bg: 0 0% 6%;
+    --reading-fg: 0 0% 75%;
+  }
+  [data-reading="eye"] {
+    --reading-bg: 85 30% 88%;
+    --reading-fg: 85 20% 20%;
+  }
+  [data-reading="space"] {
+    --reading-bg: 230 30% 6%;
+    --reading-fg: 200 60% 80%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--theme-font-body, 'Noto Serif SC', serif);
+  }
+}
+
+@layer utilities {
+  .font-heading {
+    font-family: var(--theme-font-heading, 'Ma Shan Zheng', cursive);
+  }
+  .font-body {
+    font-family: var(--theme-font-body, 'Noto Serif SC', serif);
+  }
+  .theme-glow {
+    box-shadow: 0 0 20px hsl(var(--theme-glow) / 0.3);
+  }
+  .theme-glow-text {
+    text-shadow: 0 0 10px hsl(var(--theme-glow) / 0.5);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+}
+
+/* Loading animations */
+@keyframes inkWrite {
+  0% { width: 0; opacity: 0; }
+  10% { opacity: 1; }
+  100% { width: 100%; opacity: 1; }
+}
+@keyframes dataFlow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes alertScan {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+@keyframes runeFloat {
+  0% { transform: translateY(10px); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateY(-10px); opacity: 0; }
+}
+@keyframes cloudDrift {
+  0% { transform: translateX(-20px); opacity: 0.3; }
+  50% { opacity: 0.8; }
+  100% { transform: translateX(20px); opacity: 0.3; }
+}
+
+.anim-ink { animation: inkWrite 2s ease-in-out infinite; }
+.anim-data { 
+  background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
+  background-size: 200% 100%;
+  animation: dataFlow 1.5s linear infinite; 
+}
+.anim-alert { animation: alertScan 1s ease-in-out infinite; }
+.anim-rune { animation: runeFloat 2s ease-in-out infinite; }
+.anim-cloud { animation: cloudDrift 3s ease-in-out infinite; }
+
+/* Highlight for TTS */
+.tts-highlight {
+  background-color: hsl(var(--primary) / 0.15);
+  border-left: 3px solid hsl(var(--primary));
+  padding-left: 8px;
+  transition: all 0.3s ease;
+}
