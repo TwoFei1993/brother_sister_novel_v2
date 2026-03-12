@@ -1,0 +1,9 @@
+# Zeabur 部署配置 - easyvoice 后端
+# 目录: easyvoice/packages/backend
+
+easyvoice-backend:
+  path: easyvoice/packages/backend
+  build:
+    engine: pnpm
+  runtime:
+    port: 3000
