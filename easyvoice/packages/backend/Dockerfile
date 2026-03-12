@@ -1,29 +1,24 @@
-# 使用更精简的基础镜像
+# 使用 node 基础镜像
 FROM node:20-alpine
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装 pnpm
-RUN npm install -g pnpm
+# 安装依赖（包含 ffmpeg）
+RUN apk add --no-cache ffmpeg
 
-# 复制包管理文件
-COPY package.json tsconfig.json ./
+# 复制 package.json
+COPY package.json ./
 
-# 安装依赖
-RUN pnpm install
+# 安装依赖（使用 npm）
+RUN npm install
 
 # 复制源代码
 COPY src/ ./src/
 
-# 构建项目
-RUN pnpm run build
-
-# 安装 ffmpeg
-RUN apk add --no-cache ffmpeg
-
+# 直接使用 tsx 运行，不需要构建
 ENV NODE_ENV=production
 EXPOSE 3000
 
-# 启动命令
-CMD ["pnpm", "start"]
+# 使用 tsx 直接运行
+CMD ["npx", "tsx", "src/server.ts"]
