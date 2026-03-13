@@ -48,6 +48,7 @@ EOF
           chmod +x deploy/scf_bootstrap
 
       - name: Upload package
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: scf-package
