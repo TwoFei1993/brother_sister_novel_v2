@@ -17,22 +17,16 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install all dependencies
+      - name: Install dependencies
         run: |
           cd easyvoice/packages/backend
           npm install --include=dev --ignore-scripts
-
-      - name: Build TypeScript
-        run: |
-          cd easyvoice/packages/backend
-          npm run build || true
-        continue-on-error: true
+          npm install tsx --save-dev --ignore-scripts
 
       - name: Create deployment package
         run: |
           cd easyvoice/packages/backend
           mkdir -p deploy
-          cp -r dist deploy/ 2>/dev/null || true
           cp -r node_modules deploy/
           cp package.json deploy/
           cp -r src deploy/
@@ -41,7 +35,7 @@ jobs:
           echo 'export PORT=9000' >> deploy/scf_bootstrap
           echo 'export NODE_ENV=production' >> deploy/scf_bootstrap
           echo 'cd /var/user' >> deploy/scf_bootstrap
-          echo '/var/lang/node18/bin/node dist/index.js' >> deploy/scf_bootstrap
+          echo '/var/lang/node18/bin/node node_modules/tsx/dist/cli.js src/index.ts' >> deploy/scf_bootstrap
           chmod +x deploy/scf_bootstrap
           ls -la deploy/
 
