@@ -17,11 +17,10 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install dependencies
+      - name: Install all dependencies
         run: |
           cd easyvoice/packages/backend
-          npm install --ignore-scripts
-          npm install @types/node --save-dev --ignore-scripts
+          npm install --include=dev --ignore-scripts
 
       - name: Build TypeScript
         run: |
