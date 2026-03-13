@@ -20,8 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd easyvoice/packages/backend
-          npm install --include=dev --ignore-scripts
-          npm install tsx --save-dev --ignore-scripts
+          npm install --include=dev --legacy-peer-deps
 
       - name: Create deployment package
         run: |
@@ -31,10 +30,10 @@ jobs:
           cp package.json deploy/
           cp -r src deploy/
           cp -r ../packages/shared deploy/
-          ls -la
+          ls -la deploy/
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: scf-package
-          path: easyvoice/packages/backend/
+          path: easyvoice/packages/backend/deploy/
