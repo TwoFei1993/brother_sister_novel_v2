@@ -2,4 +2,4 @@
 export PORT=9000
 export NODE_ENV=production
 cd /var/user
-/var/lang/node18/bin/node --loader tsx --no-warnings src/index.ts
+/var/lang/node18/bin/node dist/index.js

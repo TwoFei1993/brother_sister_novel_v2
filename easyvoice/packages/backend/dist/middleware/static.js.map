@@ -1,0 +1,1 @@
+{"version":3,"file":"static.js","sourceRoot":"","sources":["../../src/middleware/static.ts"],"names":[],"mappings":";;;;;AAQA,oDAMC;AAbD,sDAA6B;AAO7B,SAAgB,oBAAoB,CAClC,GAAgB,EAChB,EAAE,QAAQ,EAAE,SAAS,EAAgB;IAErC,GAAG,CAAC,GAAG,CAAC,iBAAO,CAAC,MAAM,CAAC,QAAQ,CAAC,CAAC,CAAA;IACjC,GAAG,CAAC,GAAG,CAAC,iBAAO,CAAC,MAAM,CAAC,SAAS,CAAC,CAAC,CAAA;AACpC,CAAC"}

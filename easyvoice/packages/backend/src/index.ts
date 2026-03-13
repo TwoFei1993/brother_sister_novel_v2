@@ -1,16 +1,17 @@
 /**
  * 腾讯云 SCF 入口文件
  */
-const { createApp } = require('./app');
-const { AUDIO_DIR, PUBLIC_DIR, RATE_LIMIT, RATE_LIMIT_WINDOW, PORT } = require('./config');
-const { ttsPluginManager } = require('./tts/pluginManager');
+import { Application } from 'express';
+import { createApp } from './app';
+import { AUDIO_DIR, PUBLIC_DIR, RATE_LIMIT, RATE_LIMIT_WINDOW, PORT } from './config';
+import { ttsPluginManager } from './tts/pluginManager';
 
-let app;
+let app: Application | undefined;
 
 /**
  * 初始化应用
  */
-async function init() {
+async function init(): Promise<Application> {
   if (!app) {
     app = createApp({
       isDev: process.env.NODE_ENV === 'development',
@@ -18,7 +19,7 @@ async function init() {
       rateLimitWindow: RATE_LIMIT_WINDOW,
       audioDir: AUDIO_DIR,
       publicDir: PUBLIC_DIR,
-    });
+    }) as Application;
     await ttsPluginManager.initializeEngines();
   }
   return app;
@@ -27,10 +28,10 @@ async function init() {
 /**
  * 云函数入口 - SCF 会调用这个函数
  */
-exports.main_handler = async (event, context) => {
+export async function main_handler(event: any, context: any): Promise<any> {
   // 等待应用初始化
-  await init();
+  const expressApp = await init();
 
   // 返回 Express app 用于 SCF
-  return app(event, context);
-};
+  return expressApp(event, context);
+}
