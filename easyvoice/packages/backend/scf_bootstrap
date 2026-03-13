@@ -1,3 +1,5 @@
 #!/bin/bash
 export PORT=9000
-/var/lang/node18/bin/node index.js
+export NODE_ENV=production
+cd /var/user
+/var/lang/node18/bin/node -r tsx src/index.ts
