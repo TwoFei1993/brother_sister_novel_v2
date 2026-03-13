@@ -11,7 +11,15 @@
       "Bash(bun run:*)",
       "Bash(open:*)",
       "Bash(cmd.exe:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(npm run:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(zeabur:*)",
+      "WebFetch(domain:hzh.sealos.run)",
+      "Bash(gh auth:*)",
+      "Bash(gh run:*)",
+      "WebFetch(domain:sealos.io)"
     ]
   }
 }

@@ -17,7 +17,8 @@ export const VOICES = {
 // 默认声音
 const DEFAULT_VOICE = 'xiaoxiao';
 
-const EASYVOICE_API = 'http://localhost:3000/api/v1/tts';
+// 使用相对路径，通过 Vite 代理访问后端
+const EASYVOICE_API = '/api/v1/tts';
 
 export function useEasyTTS(onChapterEnd?: () => void) {
   const [isPlaying, setIsPlaying] = useState(false);

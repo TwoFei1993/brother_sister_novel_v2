@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { NovelSettings, defaultSettings, GenreType, BrotherPersonality, SisterPersonality, RelationType, StoryTone, LengthType, WritingStyle } from '@/types/novel';
-import { genres, brotherPersonalities, sisterPersonalities, relationTypes, storyTones, lengthOptions, writingStyles } from '@/data/genres';
+import { NovelSettings, defaultSettings, GenreType, BrotherPersonality, SisterPersonality, RelationType, StoryTone, WritingStyle } from '@/types/novel';
+import { genres, brotherPersonalities, sisterPersonalities, relationTypes, storyTones, writingStyles } from '@/data/genres';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -492,21 +492,30 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
             <h3 className="text-sm font-semibold text-primary mb-3">📖 剧情设定</h3>
             <div className="space-y-3">
               <div>
-                <Label className="text-xs">故事基调</Label>
+                <Label className="text-xs">故事基调（可多选）</Label>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {storyTones.map(t => (
-                    <button
-                      key={t}
-                      onClick={() => update('storyTone', t)}
-                      className={`text-xs px-2 py-1 rounded-full border transition-colors ${
-                        settings.storyTone === t
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                  {storyTones.map(t => {
+                    const isSelected = settings.storyTones.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => {
+                          const newTones = isSelected
+                            ? settings.storyTones.filter(tone => tone !== t)
+                            : [...settings.storyTones, t];
+                          update('storyTones', newTones);
+                        }}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 inline mr-1" />}
+                        {t}
+                      </button>
+                    );
+                  })}
                 </div>
                 <Input
                   value={settings.customStoryTone}
@@ -517,46 +526,52 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
               </div>
 
               <div>
-                <Label className="text-xs">篇幅选择</Label>
-                <div className="grid grid-cols-2 gap-1 mt-1">
-                  {lengthOptions.map(l => (
-                    <button
-                      key={l.id}
-                      onClick={() => update('lengthType', l.id)}
-                      className={`text-xs p-2 rounded-lg border text-left transition-colors ${
-                        settings.lengthType === l.id
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <div className="font-medium">{l.label}</div>
-                      <div className="opacity-70">{l.desc}</div>
-                    </button>
-                  ))}
+                <Label className="text-xs">期望生成章节数: {settings.desiredChapterCount} 章</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Slider
+                    value={[settings.desiredChapterCount]}
+                    onValueChange={v => update('desiredChapterCount', v[0])}
+                    min={3} max={500} step={1}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    value={settings.desiredChapterCount}
+                    onChange={e => {
+                      const val = parseInt(e.target.value) || 3;
+                      update('desiredChapterCount', Math.min(500, Math.max(3, val)));
+                    }}
+                    className="w-20 text-xs"
+                    min={3}
+                    max={500}
+                  />
                 </div>
               </div>
 
               <div>
-                <Label className="text-xs">期望生成章节数: {settings.desiredChapterCount} 章</Label>
-                <Slider
-                  value={[settings.desiredChapterCount]}
-                  onValueChange={v => update('desiredChapterCount', v[0])}
-                  min={3} max={50} step={1}
-                  className="mt-1"
-                />
+                <Label className="text-xs">生成细纲的章节数: {settings.outlineChapterCount} 章</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Slider
+                    value={[settings.outlineChapterCount]}
+                    onValueChange={v => update('outlineChapterCount', v[0])}
+                    min={1} max={settings.desiredChapterCount} step={1}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    value={settings.outlineChapterCount}
+                    onChange={e => {
+                      const val = parseInt(e.target.value) || 1;
+                      update('outlineChapterCount', Math.min(settings.desiredChapterCount, Math.max(1, val)));
+                    }}
+                    className="w-20 text-xs"
+                    min={1}
+                    max={settings.desiredChapterCount}
+                  />
+                </div>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  「完成整本小说」时将生成此数量的章节
+                  只生成到第 {settings.outlineChapterCount} 章的详细大纲，后续章节保留整体节奏规划
                 </p>
-              </div>
-
-              <div>
-                <Label className="text-xs">额外要求</Label>
-                <Textarea
-                  value={settings.extraRequirements}
-                  onChange={e => update('extraRequirements', e.target.value)}
-                  placeholder="自由补充任何细节..."
-                  className="mt-1 text-xs h-14"
-                />
               </div>
             </div>
           </section>

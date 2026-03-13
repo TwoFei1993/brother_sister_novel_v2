@@ -11,7 +11,7 @@ import { OutlineConfirmDialog } from '@/components/OutlineConfirmDialog';
 import { useNovelGenerator } from '@/hooks/useNovelGenerator';
 import { useEasyTTS } from '@/hooks/useEasyTTS';
 import { NovelSettings, NovelProject, defaultSettings, GenreType } from '@/types/novel';
-import { genres, brotherPersonalities, sisterPersonalities, relationTypes, storyTones, lengthOptions, writingStyles } from '@/data/genres';
+import { genres, brotherPersonalities, sisterPersonalities, relationTypes, storyTones, writingStyles } from '@/data/genres';
 import { toast } from 'sonner';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,9 +42,10 @@ function randomize(): NovelSettings {
     sisterAge: 16 + Math.floor(Math.random() * 15),
     sisterPersonalities: pickN(sisterPersonalities, 1 + Math.floor(Math.random() * 3)) as any,
     relationType: relationTypes[Math.floor(Math.random() * relationTypes.length)] as any,
-    storyTone: storyTones[Math.floor(Math.random() * storyTones.length)] as any,
+    storyTones: [storyTones[Math.floor(Math.random() * storyTones.length)]],
     writingStyle: nonCustomStyles[Math.floor(Math.random() * nonCustomStyles.length)].id,
-    lengthType: lengthOptions[Math.floor(Math.random() * lengthOptions.length)].id,
+    desiredChapterCount: 50,
+    outlineChapterCount: 50,
   };
 }
 
@@ -213,6 +214,13 @@ const Index = () => {
 
   const handleContinue = useCallback(async () => {
     const nextChapter = chapters.length + 1;
+    const outlineLimit = settings.outlineChapterCount || settings.desiredChapterCount;
+
+    if (nextChapter > outlineLimit) {
+      toast.info(`详细大纲只生成到第${outlineLimit}章，后续章节请先扩展大纲！`);
+      return;
+    }
+
     try {
       await generateChapter(settings, worldBuilding.content, chapters, nextChapter);
       setCurrentChapter(nextChapter);
@@ -224,32 +232,114 @@ const Index = () => {
     }
   }, [chapters, settings, worldBuilding.content, generateChapter, currentProjectId, bookTitle]);
 
-  // Complete entire novel
-  const handleCompleteNovel = useCallback(async () => {
+  // Generate next 3 chapters
+  const handleContinue3 = useCallback(async () => {
     const totalChapters = settings.desiredChapterCount || 10;
+    const outlineLimit = settings.outlineChapterCount || totalChapters;
     const startFrom = chapters.length + 1;
-    if (startFrom > totalChapters) {
-      toast.info('小说已完成！');
+    const endAt = Math.min(startFrom + 2, totalChapters);
+
+    if (startFrom > outlineLimit) {
+      toast.info(`详细大纲只生成到第${outlineLimit}章，后续章节请先扩展大纲！`);
       return;
     }
 
+    // 限制在实际大纲范围内
+    const actualEndAt = Math.min(endAt, outlineLimit);
+
     setIsCompletingNovel(true);
-    setGenerationProgress({ current: startFrom - 1, total: totalChapters });
+    setGenerationProgress({ current: startFrom - 1, total: actualEndAt });
 
     let currentChapters = [...chapters];
     try {
-      for (let i = startFrom; i <= totalChapters; i++) {
-        setGenerationProgress({ current: i, total: totalChapters });
+      for (let i = startFrom; i <= endAt; i++) {
+        setGenerationProgress({ current: i, total: endAt });
         await generateChapter(settings, worldBuilding.content, currentChapters, i);
-        // Get updated chapters for next iteration
-        // We need to read from the hook's state, but since it's async we pass currentChapters
-        currentChapters = [...currentChapters]; // Will be updated by the hook
+        currentChapters = [...currentChapters];
         setCurrentChapter(i);
         if (currentProjectId) {
           saveToHistory(settings, worldBuilding.content, currentChapters, currentProjectId, bookTitle);
         }
       }
-      toast.success('小说创作完成！');
+      toast.success(`已生成第 ${startFrom} - ${endAt} 章`);
+    } catch (err: any) {
+      if (err.name !== 'AbortError') toast.error(err.message || '生成失败');
+    } finally {
+      setIsCompletingNovel(false);
+      setGenerationProgress(null);
+    }
+  }, [chapters, settings, worldBuilding.content, generateChapter, currentProjectId, bookTitle]);
+
+  // Generate next 10 chapters
+  const handleContinue10 = useCallback(async () => {
+    const totalChapters = settings.desiredChapterCount || 10;
+    const outlineLimit = settings.outlineChapterCount || totalChapters;
+    const startFrom = chapters.length + 1;
+    const endAt = Math.min(startFrom + 9, totalChapters);
+
+    if (startFrom > outlineLimit) {
+      toast.info(`详细大纲只生成到第${outlineLimit}章，后续章节请先扩展大纲！`);
+      return;
+    }
+
+    // 限制在实际大纲范围内
+    const actualEndAt = Math.min(endAt, outlineLimit);
+
+    setIsCompletingNovel(true);
+    setGenerationProgress({ current: startFrom - 1, total: actualEndAt });
+
+    let currentChapters = [...chapters];
+    try {
+      for (let i = startFrom; i <= actualEndAt; i++) {
+        setGenerationProgress({ current: i, total: actualEndAt });
+        await generateChapter(settings, worldBuilding.content, currentChapters, i);
+        currentChapters = [...currentChapters];
+        setCurrentChapter(i);
+        if (currentProjectId) {
+          saveToHistory(settings, worldBuilding.content, currentChapters, currentProjectId, bookTitle);
+        }
+      }
+      if (actualEndAt < endAt) {
+        toast.info(`已生成第 ${startFrom} - ${actualEndAt} 章，详细大纲到第${outlineLimit}章为止`);
+      } else {
+        toast.success(`已生成第 ${startFrom} - ${actualEndAt} 章`);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') toast.error(err.message || '生成失败');
+    } finally {
+      setIsCompletingNovel(false);
+      setGenerationProgress(null);
+    }
+  }, [chapters, settings, worldBuilding.content, generateChapter, currentProjectId, bookTitle]);
+
+  // Complete entire novel (kept for backward compatibility but hidden)
+  const handleCompleteNovel = useCallback(async () => {
+    const totalChapters = settings.desiredChapterCount || 10;
+    const outlineLimit = settings.outlineChapterCount || totalChapters;
+    const startFrom = chapters.length + 1;
+
+    if (startFrom > outlineLimit) {
+      toast.info(`详细大纲只生成到第${outlineLimit}章，后续章节请先扩展大纲！`);
+      return;
+    }
+
+    const endAt = Math.min(outlineLimit, totalChapters);
+
+    setIsCompletingNovel(true);
+    setGenerationProgress({ current: startFrom - 1, total: endAt });
+
+    let currentChapters = [...chapters];
+    try {
+      for (let i = startFrom; i <= endAt; i++) {
+        setGenerationProgress({ current: i, total: endAt });
+        await generateChapter(settings, worldBuilding.content, currentChapters, i);
+        currentChapters = [...currentChapters];
+        setCurrentChapter(i);
+        if (currentProjectId) {
+          saveToHistory(settings, worldBuilding.content, currentChapters, currentProjectId, bookTitle);
+        }
+      }
+      toast.success(`已生成到第 ${endAt} 章！详细大纲已完成。`);
     } catch (err: any) {
       if (err.name !== 'AbortError') toast.error(err.message || '生成失败');
     } finally {
@@ -405,6 +495,8 @@ const Index = () => {
               currentChapter={currentChapter}
               onSelectChapter={setCurrentChapter}
               onContinue={handleContinue}
+              onContinue3={handleContinue3}
+              onContinue10={handleContinue10}
               onRewrite={handleRewrite}
               isGenerating={isGenerating}
               genre={settings.genre}
@@ -419,7 +511,6 @@ const Index = () => {
               onLineHeightChange={setLineHeight}
               hasContent={hasContent}
               onSwitchVersion={switchChapterVersion}
-              onCompleteNovel={handleCompleteNovel}
               onEditOutline={handleOpenOutlineEdit}
               isCompletingNovel={isCompletingNovel}
               generationProgress={generationProgress}

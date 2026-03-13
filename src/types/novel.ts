@@ -29,8 +29,6 @@ export type StoryTone = '热血爽文' | '虐中带甜' | '深度烧脑' | '恐�
 
 export type WritingStyle = 'default' | 'qidian' | 'jjwxc' | 'fanqie' | 'custom';
 
-export type LengthType = 'trial' | 'short' | 'medium' | 'long';
-
 export type CoverIcon = 'heart' | 'star' | 'none';
 
 export interface NovelSettings {
@@ -52,14 +50,13 @@ export interface NovelSettings {
   powerSystem: string;
   factions: string;
   coreConflict: string;
-  storyTone: StoryTone;
+  storyTones: StoryTone[];
   customStoryTone: string;
   writingStyle: WritingStyle;
   customWritingStyle: string;
-  lengthType: LengthType;
   desiredChapterCount: number;
+  outlineChapterCount: number;
   pastedOutline: string;
-  extraRequirements: string;
 }
 
 export interface ChapterVersion {
@@ -121,12 +118,11 @@ export const defaultSettings: NovelSettings = {
   powerSystem: '',
   factions: '',
   coreConflict: '',
-  storyTone: '热血爽文',
+  storyTones: ['热血爽文'],
   customStoryTone: '',
   writingStyle: 'default',
   customWritingStyle: '',
-  lengthType: 'long',
-  desiredChapterCount: 10,
+  desiredChapterCount: 50,
+  outlineChapterCount: 50,
   pastedOutline: '',
-  extraRequirements: '',
 };

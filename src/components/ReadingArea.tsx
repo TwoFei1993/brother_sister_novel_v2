@@ -12,6 +12,8 @@ interface ReadingAreaProps {
   currentChapter: number;
   onSelectChapter: (id: number) => void;
   onContinue: () => void;
+  onContinue3: () => void;
+  onContinue10: () => void;
   onRewrite: (id: number) => void;
   isGenerating: boolean;
   genre: GenreType;
@@ -26,7 +28,6 @@ interface ReadingAreaProps {
   onLineHeightChange: (lh: string) => void;
   hasContent: boolean;
   onSwitchVersion: (chapterId: number, versionIndex: number) => void;
-  onCompleteNovel: () => void;
   onEditOutline: () => void;
   isCompletingNovel: boolean;
   generationProgress: { current: number; total: number } | null;
@@ -53,11 +54,11 @@ const lineHeights = [
 ];
 
 export function ReadingArea({
-  chapters, currentChapter, onSelectChapter, onContinue, onRewrite,
+  chapters, currentChapter, onSelectChapter, onContinue, onContinue3, onContinue10, onRewrite,
   isGenerating, genre, ttsCurrentParagraph, ttsSelectedParagraph, onParagraphClick,
   readingMode, onReadingModeChange, fontSize, onFontSizeChange,
   lineHeight, onLineHeightChange, hasContent, onSwitchVersion,
-  onCompleteNovel, onEditOutline, isCompletingNovel, generationProgress,
+  onEditOutline, isCompletingNovel, generationProgress,
 }: ReadingAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [versionOpen, setVersionOpen] = useState(false);
@@ -284,8 +285,11 @@ export function ReadingArea({
                   <Button onClick={onContinue} disabled={isGenerating} className="gap-1 theme-glow font-heading">
                     续写下一章
                   </Button>
-                  <Button onClick={onCompleteNovel} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading">
-                    {isCompletingNovel ? '自动写作中...' : '完成整本小说'}
+                  <Button onClick={onContinue3} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading">
+                    {isCompletingNovel ? '写作中...' : '生成下三章'}
+                  </Button>
+                  <Button onClick={onContinue10} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading">
+                    生成下十章
                   </Button>
                 </div>
               )}

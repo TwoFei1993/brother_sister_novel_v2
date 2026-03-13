@@ -79,7 +79,7 @@ function buildWorldBuildingPrompt(settings: NovelSettings): string {
   const brotherP = getEffectivePersonalities(settings.brotherPersonalities as string[], settings.customBrotherPersonality);
   const sisterP = getEffectivePersonalities(settings.sisterPersonalities as string[], settings.customSisterPersonality);
   const relation = settings.customRelationType || settings.relationType;
-  const tone = settings.customStoryTone || settings.storyTone;
+  const tone = settings.customStoryTone || settings.storyTones.join('、');
   const styleBlock = getWritingStyleBlock(settings);
   const chapterCount = settings.desiredChapterCount || 10;
 
@@ -87,7 +87,7 @@ function buildWorldBuildingPrompt(settings: NovelSettings): string {
     ? `\n\n【用户提供的原始大纲/架构 - 请务必着重参考以下内容，在满足其他设定分类的同时，以此为核心展开】\n${settings.pastedOutline}\n`
     : '';
 
-  return `请根据以下设定，生成一份完整的世界观与大纲文档（总字数控制在8000字以内）。
+  return `请根据以下设定，生成一份完整的世界观与大纲文档（总字数控制在20000字以内）。
 
 题材：${genre} - ${subGenre}
 故事背景补充：${settings.backgroundNote || '无'}
@@ -99,7 +99,7 @@ function buildWorldBuildingPrompt(settings: NovelSettings): string {
 核心矛盾：${settings.coreConflict || '由你设计'}
 故事基调：${tone}
 计划章节数：${chapterCount}章
-额外要求：${settings.extraRequirements || '无'}
+详细大纲章节数：${settings.outlineChapterCount || chapterCount}章（后续章节保留整体节奏规划）
 ${styleBlock}
 ${pastedOutlineBlock}
 
@@ -110,18 +110,20 @@ ${pastedOutlineBlock}
 2. 书名二
 3. 书名三
 
-## 世界背景介绍（500字）
-## 能力体系详细说明（300字）
-## 哥哥人物档案（200字，包含姓名/外貌特征/性格细节/背景/隐藏秘密/语言风格/标志性动作或习惯）
-## 妹妹人物档案（200字，包含姓名/外貌特征/性格细节/背景/隐藏秘密/语言风格/标志性动作或习惯）
+## 世界背景介绍（800字）
+## 能力体系详细说明（500字）
+## 哥哥人物档案（300字，包含姓名/外貌特征/性格细节/背景/隐藏秘密/语言风格/标志性动作或习惯）
+## 妹妹人物档案（300字，包含姓名/外貌特征/性格细节/背景/隐藏秘密/语言风格/标志性动作或习惯）
 ## 主要势力简介
 
-## 全书${chapterCount}章详细大纲
-请为每一章生成：
-- 章节标题（格式：第X章 标题）
-- 该章细纲（150-300字，包含本章核心事件、人物互动、情节转折、章末钩子）
+## 全书${chapterCount}章大纲规划
 
-【重要】最后一章（第${chapterCount}章）必须是故事的大结局章节，要完整收束所有主线和重要支线，给出明确的结局。请务必生成完整的${chapterCount}章大纲，不要中途截断。
+### 详细大纲部分（共${settings.outlineChapterCount || chapterCount}章）
+请为前${settings.outlineChapterCount || chapterCount}章生成详细细纲：
+- 章节标题（格式：第X章 标题）
+- 该章细纲（200-400字，包含本章核心事件、人物互动、情节转折、章末钩子）
+
+【重要】第${settings.outlineChapterCount || chapterCount}章必须是本阶段的小高潮或转折点，为后续情节做铺垫。
 
 示例格式：
 ### 第1章 标题
@@ -130,7 +132,11 @@ ${pastedOutlineBlock}
 ### 第2章 标题
 细纲内容...
 
-（依此类推，直到第${chapterCount}章，最后一章为大结局）
+（依此类推）
+
+### 整体节奏规划（后续${chapterCount - (settings.outlineChapterCount || chapterCount)}章）
+请用简洁的语言（每章50字以内）规划后续章节的核心走向：
+- 第${(settings.outlineChapterCount || chapterCount) + 1}-${chapterCount}章：整体故事走向、最终高潮点、大结局方向
 
 【特别注意】
 - 人物档案中请务必明确每个角色的外貌特征（发色、瞳色、体型、标志性穿着）、说话方式和口头禅、标志性小动作或习惯
@@ -148,9 +154,9 @@ function buildChapterPrompt(
   chapters: Chapter[],
   chapterNum: number
 ): string {
-  const lengthMap = { trial: 3000, short: 8000, medium: 15000, long: 5000 };
-  const targetWords = lengthMap[settings.lengthType];
-  
+  // 首章5000字，后续章节根据目标章节数调整
+  const targetWords = chapterNum === 1 ? 5000 : Math.max(3000, 6000 - chapterNum * 50);
+
   const previousSummary = chapters.length > 0
     ? `\n\n前文摘要：\n${chapters.map(c => `第${c.id}章「${c.title}」：${c.content.slice(0, 300)}...`).join('\n')}`
     : '';
