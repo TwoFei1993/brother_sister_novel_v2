@@ -34,17 +34,13 @@ jobs:
           cp -r dist deploy/
           cp -r node_modules deploy/
           cp package.json deploy/
-          cp -r src deploy/  # for config files
-          cp ../packages/shared deploy/
-
-          # Create scf_bootstrap
-          cat > deploy/scf_bootstrap << 'EOF'
-#!/bin/bash
-export PORT=9000
-export NODE_ENV=production
-cd /var/user
-/var/lang/node18/bin/node dist/index.js
-EOF
+          cp -r src deploy/
+          cp -r ../packages/shared deploy/
+          echo '#!/bin/bash' > deploy/scf_bootstrap
+          echo 'export PORT=9000' >> deploy/scf_bootstrap
+          echo 'export NODE_ENV=production' >> deploy/scf_bootstrap
+          echo 'cd /var/user' >> deploy/scf_bootstrap
+          echo '/var/lang/node18/bin/node dist/index.js' >> deploy/scf_bootstrap
           chmod +x deploy/scf_bootstrap
 
       - name: Upload package
