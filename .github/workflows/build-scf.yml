@@ -21,6 +21,7 @@ jobs:
         run: |
           cd easyvoice/packages/backend
           npm install --ignore-scripts
+          npm install @types/node --save-dev --ignore-scripts
 
       - name: Build TypeScript
         run: |
