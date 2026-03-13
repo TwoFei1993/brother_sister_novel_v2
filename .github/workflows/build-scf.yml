@@ -31,17 +31,10 @@ jobs:
           cp package.json deploy/
           cp -r src deploy/
           cp -r ../packages/shared deploy/
-          echo '#!/bin/bash' > deploy/scf_bootstrap
-          echo 'export PORT=9000' >> deploy/scf_bootstrap
-          echo 'export NODE_ENV=production' >> deploy/scf_bootstrap
-          echo 'cd /var/user' >> deploy/scf_bootstrap
-          echo '/var/lang/node18/bin/node node_modules/tsx/dist/cli.js src/index.ts' >> deploy/scf_bootstrap
-          chmod +x deploy/scf_bootstrap
-          ls -la deploy/
+          ls -la
 
       - name: Upload package
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: scf-package
-          path: easyvoice/packages/backend/deploy/
+          path: easyvoice/packages/backend/
