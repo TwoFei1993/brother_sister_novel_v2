@@ -19,7 +19,9 @@
       "WebFetch(domain:hzh.sealos.run)",
       "Bash(gh auth:*)",
       "Bash(gh run:*)",
-      "WebFetch(domain:sealos.io)"
+      "WebFetch(domain:sealos.io)",
+      "Bash(cp:*)",
+      "Bash(gh api:*)"
     ]
   }
 }
