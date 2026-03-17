@@ -20,7 +20,8 @@ const DEFAULT_VOICE = 'xiaoxiao';
 // 使用环境变量或默认地址
 // 开发环境用 /api/v1/tts (通过 Vite 代理)
 // 生产环境用 cpolar 暴露的公网地址
-const EASYVOICE_API = import.meta.env.VITE_EASYVOICE_API || '/api/v1/tts';
+// 注意：cpolar 免费版每次重启 URL 会变化，需要手动更新此地址
+const EASYVOICE_API = import.meta.env.VITE_EASYVOICE_API || 'http://547ca346.r38.cpolar.top';
 
 export function useEasyTTS(onChapterEnd?: () => void) {
   const [isPlaying, setIsPlaying] = useState(false);
