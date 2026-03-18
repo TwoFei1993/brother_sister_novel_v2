@@ -69,10 +69,28 @@ export const getVoiceList = async () => {
   return response.data
 }
 
+// 提取API域名，用于拼接相对路径
+const getApiBaseUrl = () => {
+  const url = baseURL
+  // 移除 /api/v1/tts 后缀，获取域名
+  return url.replace(/\/api\/v1\/tts$/, '')
+}
+
+// 处理相对路径，转换为完整URL
+const normalizeUrl = (url: string) => {
+  if (url.startsWith('http')) return url
+  return `${getApiBaseUrl()}${url}`
+}
+
 export const generateTTS = async (data: GenerateRequest) => {
   const response = await api.post<ResponseWrapper<GenerateResponse>>('/generate', data)
   if (response.data?.code !== 200 || !response.data?.success) {
     throw new Error(response.data?.message || '生成语音失败')
+  }
+  // 转换相对路径为完整URL
+  if (response.data.data) {
+    response.data.data.audio = normalizeUrl(response.data.data.audio)
+    response.data.data.srt = response.data.data.srt ? normalizeUrl(response.data.data.srt) : undefined
   }
   return response.data
 }
@@ -110,6 +128,11 @@ export const createTaskStream = async (data: TaskRequest) => {
   ) {
     const text = await new Response(response.data as any).text()
     const responseData = JSON.parse(text)
+    // 转换相对路径为完整URL
+    if (responseData.data) {
+      responseData.data.audio = normalizeUrl(responseData.data.audio)
+      responseData.data.srt = responseData.data.srt ? normalizeUrl(responseData.data.srt) : undefined
+    }
     return responseData
   }
   return response.data as ReadableStream
