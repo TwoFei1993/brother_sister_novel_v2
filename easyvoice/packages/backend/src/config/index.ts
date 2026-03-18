@@ -20,7 +20,9 @@ export const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 export const MODEL_NAME = process.env.MODEL_NAME
 
-export const STATIC_DOMAIN = process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : ''
+// 支持通过 STATIC_DOMAIN 环境变量配置公网域名
+// 开发环境默认 localhost:3000，生产环境可配置 cpolar 地址
+export const STATIC_DOMAIN = process.env.STATIC_DOMAIN || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '')
 
 export const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW || '0') || 10
 export const RATE_LIMIT = parseInt(process.env.RATE_LIMIT || '0') || 1e6
