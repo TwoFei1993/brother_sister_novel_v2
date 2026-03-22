@@ -22,6 +22,12 @@ const DEFAULT_VOICE = 'xiaoxiao';
 // 生产环境用公网地址
 const EASYVOICE_API = import.meta.env.VITE_EASYVOICE_API || 'https://api.brothersisterhome.cloud/api/v1/tts';
 
+// 处理音频 URL，确保是完整路径
+const normalizeAudioUrl = (audio: string): string => {
+  if (audio.startsWith('http')) return audio;
+  return `${EASYVOICE_API.replace('/api/v1/tts', '')}${audio}`;
+};
+
 export function useEasyTTS(onChapterEnd?: () => void) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -93,7 +99,7 @@ export function useEasyTTS(onChapterEnd?: () => void) {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          preloadCacheRef.current.set(cacheKey, result.data.audio);
+          preloadCacheRef.current.set(cacheKey, normalizeAudioUrl(result.data.audio));
         }
       }
     } catch (e) {
@@ -138,7 +144,7 @@ export function useEasyTTS(onChapterEnd?: () => void) {
       throw new Error(result.message || 'Failed to generate audio');
     }
 
-    return result.data.audio;
+    return normalizeAudioUrl(result.data.audio);
   }, [convertRate, getCacheKey]);
 
   // Play a single paragraph
