@@ -138,4 +138,14 @@ export const createTaskStream = async (data: TaskRequest) => {
   return response.data as ReadableStream
 }
 
-export const downloadFile = (file: string) => `${api.defaults.baseURL}/download/${file}`
+// 处理相对路径和绝对路径
+const getStaticUrl = () => {
+  const url = baseURL.replace(/\/api\/v1\/tts$/, '')
+  return url || ''
+}
+
+export const downloadFile = (file: string) => {
+  // 如果是完整 URL（包含协议），直接返回
+  if (file.startsWith('http')) return file
+  return `${getStaticUrl()}/download/${file}`
+}
