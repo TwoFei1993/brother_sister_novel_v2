@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 const DEV_URL = 'http://localhost:3000/api/v1/tts'
-const PROD_URL = import.meta.env.VITE_API_URL || '/api/v1/tts'
+// 生产环境使用固定的 API 地址
+const PROD_URL = 'https://api.brothersisterhome.cloud/api/v1/tts'
 const baseURL = import.meta.env.MODE === 'development' ? DEV_URL : PROD_URL
 
 const api = axios.create({
