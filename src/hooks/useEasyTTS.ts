@@ -20,7 +20,7 @@ const DEFAULT_VOICE = 'xiaoxiao';
 // 使用环境变量或默认地址
 // 开发环境用 /api/v1/tts (通过 Vite 代理)
 // 生产环境用公网地址
-const EASYVOICE_API = import.meta.env.VITE_EASYVOICE_API || 'https://api.brothersisterhome.cloud';
+const EASYVOICE_API = import.meta.env.VITE_EASYVOICE_API || 'https://api.brothersisterhome.cloud/api/v1/tts';
 
 export function useEasyTTS(onChapterEnd?: () => void) {
   const [isPlaying, setIsPlaying] = useState(false);
