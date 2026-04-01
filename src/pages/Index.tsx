@@ -462,7 +462,7 @@ const Index = () => {
               variant="ghost"
               size="icon"
               onClick={() => setSettingsOpen(!settingsOpen)}
-              className="fixed top-14 left-2 z-50 lg:hidden bg-card/80 backdrop-blur-sm border border-border"
+              className="fixed top-12 left-2 z-50 lg:hidden bg-card/80 backdrop-blur-sm border border-border pt-safe"
             >
               <Menu className="h-4 w-4" />
             </Button>

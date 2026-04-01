@@ -28,7 +28,7 @@ export function WorldBuildingSidebar({ worldBuilding, isOpen, onToggle }: WorldB
 
       <div className={`border-r border-border bg-card/50 backdrop-blur-sm transition-all duration-300 flex flex-col ${
         isOpen ? 'w-[85vw] sm:w-80 min-w-0 sm:min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'
-      } fixed inset-y-12 left-0 z-30 lg:relative lg:inset-auto`}>
+      } fixed inset-y-12 left-0 z-30 lg:relative lg:inset-auto pt-safe`}>
         <div className="flex items-center justify-between p-3 border-b border-border">
           <h3 className="font-heading text-sm font-bold flex items-center gap-1">
             <Globe className="h-4 w-4 text-primary" /> 世界观 & 大纲

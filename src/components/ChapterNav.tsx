@@ -29,7 +29,7 @@ export function ChapterNav({ chapters, currentChapter, onSelectChapter, isOpen, 
 
       <div className={`border-l border-border bg-card/50 backdrop-blur-sm transition-all duration-300 flex flex-col ${
         isOpen ? 'w-[70vw] sm:w-56 min-w-0 sm:min-w-[224px]' : 'w-0 min-w-0 overflow-hidden'
-      } fixed inset-y-12 right-0 z-30 lg:relative lg:inset-auto`}>
+      } fixed inset-y-12 right-0 z-30 lg:relative lg:inset-auto pt-safe`}>
         <div className="flex items-center justify-between p-3 border-b border-border">
           <h3 className="font-heading text-sm font-bold flex items-center gap-1">
             <List className="h-4 w-4 text-primary" /> 章节目录

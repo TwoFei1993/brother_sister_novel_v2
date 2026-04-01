@@ -137,16 +137,16 @@ export function ReadingArea({
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-2 sm:px-4 py-1.5 sm:py-2 border-b border-border flex-wrap gap-1 sm:gap-2">
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap">
+      <div className="flex items-center justify-between px-2 sm:px-4 py-2 border-b border-border flex-wrap gap-1 sm:gap-2">
+        <div className="flex items-center gap-1 flex-wrap">
           {readingModes.map(m => (
             <button
               key={m.id}
               onClick={() => onReadingModeChange(m.id)}
-              className={`p-1 sm:p-1.5 rounded text-xs ${readingMode === m.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`p-1.5 sm:p-1.5 rounded text-xs min-w-[36px] min-h-[36px] flex items-center justify-center ${readingMode === m.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
               title={m.label}
             >
-              <m.icon className="h-3 w-3" />
+              <m.icon className="h-4 w-4" />
             </button>
           ))}
           <span className="text-muted-foreground mx-0.5 sm:mx-1 hidden sm:inline">|</span>
@@ -154,7 +154,7 @@ export function ReadingArea({
             <button
               key={f.id}
               onClick={() => onFontSizeChange(f.id)}
-              className={`px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs ${fontSize === f.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`px-2 sm:px-1.5 py-1.5 rounded text-xs min-w-[36px] min-h-[36px] flex items-center justify-center ${fontSize === f.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             >
               {f.label}
             </button>
@@ -164,21 +164,21 @@ export function ReadingArea({
             <button
               key={l.id}
               onClick={() => onLineHeightChange(l.id)}
-              className={`px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs hidden sm:inline-block ${lineHeight === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`px-2 sm:px-1.5 py-1.5 rounded text-xs hidden sm:inline-block min-w-[36px] min-h-[36px] flex items-center justify-center ${lineHeight === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             >
               {l.label}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-0.5 sm:gap-1">
-          <Button variant="ghost" size="sm" onClick={onEditOutline} className="text-[10px] sm:text-xs gap-1 h-6 sm:h-7 px-1.5 sm:px-2">
-            <Edit3 className="h-3 w-3" /> <span className="hidden sm:inline">调整大纲</span><span className="sm:hidden">大纲</span>
+        <div className="flex items-center gap-1 sm:gap-1">
+          <Button variant="ghost" size="sm" onClick={onEditOutline} className="text-xs gap-1 h-9 sm:h-8 px-2 sm:px-2">
+            <Edit3 className="h-4 w-4" /> <span className="hidden sm:inline">调整大纲</span><span className="sm:hidden">大纲</span>
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyAll} className="text-[10px] sm:text-xs gap-1 h-6 sm:h-7 px-1.5 sm:px-2">
-            <Copy className="h-3 w-3" /> <span className="hidden sm:inline">复制</span>
+          <Button variant="ghost" size="sm" onClick={handleCopyAll} className="text-xs gap-1 h-9 sm:h-8 px-2 sm:px-2">
+            <Copy className="h-4 w-4" /> <span className="hidden sm:inline">复制</span>
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleExportTxt} className="text-[10px] sm:text-xs gap-1 h-6 sm:h-7 px-1.5 sm:px-2">
-            <Download className="h-3 w-3" /> <span className="hidden sm:inline">TXT</span>
+          <Button variant="ghost" size="sm" onClick={handleExportTxt} className="text-xs gap-1 h-9 sm:h-8 px-2 sm:px-2">
+            <Download className="h-4 w-4" /> <span className="hidden sm:inline">TXT</span>
           </Button>
         </div>
       </div>
@@ -218,10 +218,11 @@ export function ReadingArea({
                             variant="outline"
                             size="sm"
                             onClick={() => { setVersionChapter(chapter); setVersionOpen(true); }}
-                            className="text-xs gap-1 h-7"
+                            className="text-xs gap-1 h-9 sm:h-8 px-2 sm:px-2"
                           >
                             <History className="h-3 w-3" />
-                            {currentVersionLabel || '版本'} ({versionCount})
+                            <span className="hidden sm:inline">{currentVersionLabel || '版本'} ({versionCount})</span>
+                            <span className="sm:hidden">{versionCount}版</span>
                           </Button>
                         )}
                         <Button
@@ -229,9 +230,9 @@ export function ReadingArea({
                           size="sm"
                           onClick={() => onRewrite(chapter.id)}
                           disabled={isGenerating}
-                          className="text-xs gap-1 h-7"
+                          className="text-xs gap-1 h-9 sm:h-8 px-2 sm:px-2"
                         >
-                          <RefreshCw className="h-3 w-3" /> 重写
+                          <RefreshCw className="h-3 w-3" /> <span className="hidden sm:inline">重写</span>
                         </Button>
                       </div>
                     </div>
@@ -281,14 +282,14 @@ export function ReadingArea({
 
               {/* Single bottom action area */}
               {!isGenerating && chapters.length > 0 && (
-                <div className="flex justify-center gap-3 mt-4 mb-12 flex-wrap">
-                  <Button onClick={onContinue} disabled={isGenerating} className="gap-1 theme-glow font-heading">
+                <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-3 mt-4 mb-12 px-2">
+                  <Button onClick={onContinue} disabled={isGenerating} className="gap-1 theme-glow font-heading h-12 sm:h-10 text-base sm:text-sm">
                     续写下一章
                   </Button>
-                  <Button onClick={onContinue3} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading">
+                  <Button onClick={onContinue3} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading h-12 sm:h-10 text-base sm:text-sm">
                     {isCompletingNovel ? '写作中...' : '生成下三章'}
                   </Button>
-                  <Button onClick={onContinue10} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading">
+                  <Button onClick={onContinue10} disabled={isGenerating || isCompletingNovel} variant="outline" className="gap-1 font-heading h-12 sm:h-10 text-base sm:text-sm">
                     生成下十章
                   </Button>
                 </div>

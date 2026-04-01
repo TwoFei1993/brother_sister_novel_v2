@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { NovelProject, CoverIcon } from '@/types/novel';
 import { Button } from '@/components/ui/button';
-import { Trash2, BookOpen, PenLine, Plus, ArrowUpDown, Search, X, Heart, Star, Check, Edit3 } from 'lucide-react';
+import { Trash2, BookOpen, PenLine, Plus, ArrowUpDown, Search, X, Heart, Star, Check, Edit3, BookMarked, Library, Flame, Sparkles } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
@@ -43,8 +43,8 @@ const sortLabels: Record<SortOption, string> = {
 };
 
 const coverIconOptions: { value: CoverIcon; label: string; icon: React.ReactNode }[] = [
-  { value: 'heart', label: '❤️', icon: <Heart className="h-4 w-4 fill-red-400 text-red-400" /> },
-  { value: 'star', label: '⭐', icon: <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" /> },
+  { value: 'heart', label: '爱心', icon: <Heart className="h-4 w-4 fill-red-400 text-red-400" /> },
+  { value: 'star', label: '星星', icon: <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" /> },
   { value: 'none', label: '无', icon: null },
 ];
 
@@ -180,7 +180,13 @@ export function Bookshelf({ onOpenProject, onContinueProject, onNewProject }: Bo
 
         {sortedProjects.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-6xl mb-4">{searchQuery ? '🔍' : '📚'}</div>
+            <div className="mb-4 flex justify-center">
+              {searchQuery ? (
+                <Search className="h-16 w-16 text-muted-foreground/50" />
+              ) : (
+                <Library className="h-16 w-16 text-muted-foreground/50" />
+              )}
+            </div>
             <p className="text-muted-foreground text-lg">
               {searchQuery ? `没有找到"${searchQuery}"相关的作品` : '书架空空如也'}
             </p>

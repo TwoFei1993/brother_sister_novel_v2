@@ -16,7 +16,7 @@ export function TopNav({ onLoadProject, isGenerating, onStop, onGoToBookshelf, s
   const [apiOpen, setApiOpen] = useState(false);
 
   return (
-    <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-50">
+    <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-50 pt-safe">
       <div className="flex items-center gap-2">
         <BookOpen className="h-5 w-5 text-primary" />
         <h1 className="text-lg font-heading font-bold theme-glow-text">异界兄妹</h1>
@@ -32,7 +32,7 @@ export function TopNav({ onLoadProject, isGenerating, onStop, onGoToBookshelf, s
             <Library className="h-4 w-4" /> 书架
           </Button>
         )}
-        <Button variant="ghost" size="icon" onClick={() => setApiOpen(true)} title="API 设置">
+        <Button variant="ghost" size="icon" onClick={() => setApiOpen(true)} title="API 设置" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Settings className="h-4 w-4" />
         </Button>
       </div>

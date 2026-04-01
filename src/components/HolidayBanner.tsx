@@ -53,10 +53,10 @@ export function HolidayBanner() {
           ))}
         </span>
       )}
-      <span className="text-lg">{holiday.emoji}</span>
+      <span className="text-base">{holiday.emoji}</span>
       <span className="font-heading text-foreground">{holiday.greeting}</span>
-      <button onClick={dismiss} className="ml-2 text-muted-foreground hover:text-foreground transition-colors">
-        <X className="h-3.5 w-3.5" />
+      <button onClick={dismiss} className="ml-2 text-muted-foreground hover:text-foreground transition-colors p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center rounded hover:bg-black/10">
+        <X className="h-4 w-4" />
       </button>
     </div>
   );

@@ -10,7 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sparkles, Play, ChevronLeft, ClipboardPaste, Wand2, Check, X } from 'lucide-react';
+import { Sparkles, Play, ChevronLeft, ClipboardPaste, Wand2, Check, X, BookOpen, PenLine, Users, Globe, BookText, ClipboardList, CheckCircle, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface SettingsPanelProps {
@@ -206,7 +206,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
               value={settings.pastedOutline}
               onChange={e => update('pastedOutline', e.target.value)}
               placeholder="在这里粘贴你已有的故事大纲、架构、设定文档等大段文字...&#10;&#10;系统会自动识别其中的背景、能力、势力等信息并填入下方对应区域。生成大纲时也会着重参考这里的内容。"
-              className="mt-1 text-xs h-32 resize-y"
+              className="mt-1 text-sm h-32 resize-y"
             />
             <Button
               variant="outline"
@@ -216,7 +216,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
               className="w-full mt-2 gap-1 text-xs"
             >
               <Wand2 className="h-3 w-3" />
-              {showAutoFillSuccess ? '✅ 已填入！' : '一键填入下方设定'}
+              {showAutoFillSuccess ? '已填入！' : '一键填入下方设定'}
             </Button>
           </section>
 
@@ -224,7 +224,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
 
           {/* 基础设定 */}
           <section>
-            <h3 className="text-sm font-semibold text-primary mb-3">📚 基础设定</h3>
+            <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-1"><BookOpen className="h-4 w-4" /> 基础设定</h3>
             <div className="space-y-3">
               <div>
                 <Label className="text-xs">题材类型</Label>
@@ -233,7 +233,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   const newSubGenre = g && g.subGenres.length > 0 ? g.subGenres[0].id : '';
                   onChange({ ...settings, genre: v, subGenre: newSubGenre });
                 }}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="mt-1 text-sm h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {genres.map(g => (
                       <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>
@@ -249,7 +249,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                     value={settings.customGenre}
                     onChange={e => update('customGenre', e.target.value)}
                     placeholder="例如：都市异能、校园推理、仙侠言情..."
-                    className="mt-1 text-xs"
+                    className="mt-1 text-sm h-9"
                   />
                 </div>
               )}
@@ -258,7 +258,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                 <div>
                   <Label className="text-xs">子类型</Label>
                   <Select value={settings.subGenre} onValueChange={v => update('subGenre', v)}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="mt-1 text-sm h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {currentGenre.subGenres.map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
@@ -276,7 +276,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                     value={settings.customSubGenre}
                     onChange={e => update('customSubGenre', e.target.value)}
                     placeholder="输入自定义子类型..."
-                    className="mt-1 text-xs"
+                    className="mt-1 text-sm h-9"
                   />
                 </div>
               )}
@@ -287,7 +287,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.backgroundNote}
                   onChange={e => update('backgroundNote', e.target.value)}
                   placeholder="自由描述额外世界观细节..."
-                  className="mt-1 text-xs h-16"
+                  className="mt-1 text-sm h-16"
                 />
               </div>
             </div>
@@ -297,21 +297,21 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
 
           {/* 文风选择 */}
           <section>
-            <h3 className="text-sm font-semibold text-primary mb-3">✍️ 文风选择</h3>
+            <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-1"><PenLine className="h-4 w-4" /> 文风选择</h3>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {writingStyles.map(ws => (
                   <button
                     key={ws.id}
                     onClick={() => update('writingStyle', ws.id)}
-                    className={`text-xs p-2 rounded-lg border text-left transition-colors ${
+                    className={`text-sm p-3 rounded-lg border text-left transition-colors ${
                       settings.writingStyle === ws.id
                         ? 'bg-primary text-primary-foreground border-primary'
                         : 'border-border hover:border-primary/50'
                     }`}
                   >
                     <div className="font-medium">{ws.label}</div>
-                    <div className="opacity-70">{ws.desc}</div>
+                    <div className="opacity-70 text-xs">{ws.desc}</div>
                   </button>
                 ))}
               </div>
@@ -322,7 +322,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                     value={settings.customWritingStyle}
                     onChange={e => update('customWritingStyle', e.target.value)}
                     placeholder="例如：鲁迅式冷峻讽刺、古龙式短句飘逸、余华式平静叙述..."
-                    className="mt-1 text-xs h-16"
+                    className="mt-1 text-sm h-16"
                   />
                 </div>
               )}
@@ -333,7 +333,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
 
           {/* 人物设定 */}
           <section>
-            <h3 className="text-sm font-semibold text-primary mb-3">👥 人物设定</h3>
+            <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-1"><Users className="h-4 w-4" /> 人物设定</h3>
 
             {/* 哥哥 */}
             <div className="space-y-2 mb-4">
@@ -344,7 +344,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={[settings.brotherAge]}
                   onValueChange={v => update('brotherAge', v[0])}
                   min={18} max={35} step={1}
-                  className="mt-1"
+                  className="mt-1 w-full"
                 />
               </div>
               <div>
@@ -368,7 +368,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.customBrotherPersonality}
                   onChange={e => update('customBrotherPersonality', e.target.value)}
                   placeholder="自定义性格，如：毒舌傲娇、外冷内热..."
-                  className="mt-1 text-xs"
+                  className="mt-1 text-sm h-9"
                 />
               </div>
               <div>
@@ -377,7 +377,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.brotherAbility}
                   onChange={e => update('brotherAbility', e.target.value)}
                   placeholder="系统加持 / 前世记忆 / 神级天赋..."
-                  className="mt-1 text-xs h-12"
+                  className="mt-1 text-sm h-12"
                 />
               </div>
             </div>
@@ -391,7 +391,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={[settings.sisterAge]}
                   onValueChange={v => update('sisterAge', v[0])}
                   min={16} max={30} step={1}
-                  className="mt-1"
+                  className="mt-1 w-full"
                 />
               </div>
               <div>
@@ -415,7 +415,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.customSisterPersonality}
                   onChange={e => update('customSisterPersonality', e.target.value)}
                   placeholder="自定义性格，如：腹黑女王、治愈系..."
-                  className="mt-1 text-xs"
+                  className="mt-1 text-sm h-9"
                 />
               </div>
               <div>
@@ -424,7 +424,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.sisterAbility}
                   onChange={e => update('sisterAbility', e.target.value)}
                   placeholder="异能觉醒 / 空间能力 / 医术天才..."
-                  className="mt-1 text-xs h-12"
+                  className="mt-1 text-sm h-12"
                 />
               </div>
             </div>
@@ -433,10 +433,10 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
             <div className="space-y-2">
               <Label className="text-xs font-semibold">兄妹关系模式</Label>
               <Select value={settings.relationType} onValueChange={(v: RelationType) => update('relationType', v)}>
-                <SelectTrigger className="mt-1 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="mt-1 text-sm h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {relationTypes.map(r => (
-                    <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+                    <SelectItem key={r} value={r} className="text-sm">{r}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -444,7 +444,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                 value={settings.customRelationType}
                 onChange={e => update('customRelationType', e.target.value)}
                 placeholder="自定义关系模式，如：青梅竹马型..."
-                className="text-xs"
+                className="text-sm h-9"
               />
             </div>
           </section>
@@ -453,7 +453,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
 
           {/* 世界观设定 */}
           <section>
-            <h3 className="text-sm font-semibold text-primary mb-3">🌍 世界观设定</h3>
+            <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-1"><Globe className="h-4 w-4" /> 世界观设定</h3>
             <div className="space-y-3">
               <div>
                 <Label className="text-xs">能力/修炼体系</Label>
@@ -461,7 +461,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.powerSystem}
                   onChange={e => update('powerSystem', e.target.value)}
                   placeholder="境界划分、异能等级、积分体系..."
-                  className="mt-1 text-xs h-14"
+                  className="mt-1 text-sm h-14"
                 />
               </div>
               <div>
@@ -470,7 +470,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.factions}
                   onChange={e => update('factions', e.target.value)}
                   placeholder="世界中的主要派系阵营..."
-                  className="mt-1 text-xs h-14"
+                  className="mt-1 text-sm h-14"
                 />
               </div>
               <div>
@@ -479,7 +479,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.coreConflict}
                   onChange={e => update('coreConflict', e.target.value)}
                   placeholder="故事最大的冲突或谜题..."
-                  className="mt-1 text-xs h-14"
+                  className="mt-1 text-sm h-14"
                 />
               </div>
             </div>
@@ -489,7 +489,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
 
           {/* 剧情设定 */}
           <section>
-            <h3 className="text-sm font-semibold text-primary mb-3">📖 剧情设定</h3>
+            <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-1"><BookText className="h-4 w-4" /> 剧情设定</h3>
             <div className="space-y-3">
               <div>
                 <Label className="text-xs">故事基调（可多选）</Label>
@@ -521,7 +521,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                   value={settings.customStoryTone}
                   onChange={e => update('customStoryTone', e.target.value)}
                   placeholder="自定义基调，如：黑色幽默、悬疑惊悚..."
-                  className="mt-1 text-xs"
+                  className="mt-1 text-sm h-9"
                 />
               </div>
 
@@ -541,7 +541,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                       const val = parseInt(e.target.value) || 3;
                       update('desiredChapterCount', Math.min(500, Math.max(3, val)));
                     }}
-                    className="w-20 text-xs"
+                    className="w-16 text-sm h-9"
                     min={3}
                     max={500}
                   />
@@ -564,7 +564,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
                       const val = parseInt(e.target.value) || 1;
                       update('outlineChapterCount', Math.min(settings.desiredChapterCount, Math.max(1, val)));
                     }}
-                    className="w-20 text-xs"
+                    className="w-16 text-sm h-9"
                     min={1}
                     max={settings.desiredChapterCount}
                   />
@@ -599,7 +599,7 @@ export function SettingsPanel({ settings, onChange, onGenerate, onRandomize, isG
       <Dialog open={showAutoFillPreview} onOpenChange={setShowAutoFillPreview}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base">📋 一键填入预览</DialogTitle>
+            <DialogTitle className="text-base flex items-center gap-1"><ClipboardList className="h-4 w-4" /> 一键填入预览</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-[50vh] overflow-y-auto">
             {autoFillPreview && Object.entries(autoFillPreview).map(([key, value]) => (
