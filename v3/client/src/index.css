@@ -1,37 +1,288 @@
-/* Tailwind 4 CSS-first 入口（完整主题系统 Task 32；此处仅暗色基调骨架） */
+/* Tailwind 4 CSS-first 入口。
+ * 主题体系（Task 32）：:root 暗色基调 + 6 套 [data-theme] 题材主题（旧站完整移植）
+ * + [data-reading] 阅读模式变量 + safe-area / touch-action 移动端工具。
+ * 每套主题在旧站 shadcn 色板之外同步派生 v3 组件变量（--bg/--surface/...），
+ * 使既有组件随题材一键换肤。 */
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Orbitron:wght@400;700&family=Cinzel:wght@400;700&family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* 暗色主题基调：hsl 三元组变量（组件以 hsl(var(--x)) 引用，便于后续主题扩展） */
-:root {
-  --bg: 240 6% 5%; /* 页面底色 */
-  --surface: 240 5% 9%; /* 卡片/面板 */
-  --border-soft: 240 4% 16%; /* 描边 */
-  --fg: 40 15% 92%; /* 主文字（暖白） */
-  --fg-muted: 240 4% 60%; /* 次级文字 */
-  --accent: 262 60% 60%; /* 主强调色 */
-  --accent-fg: 0 0% 100%; /* 强调色上的文字 */
-  --danger: 0 65% 58%; /* 错误/警示 */
+/* ---------- 题材主题（旧站 6 套 data-theme 完整移植） ----------
+ * 变量值为 "H S% L%" 三元组（组件以 hsl(var(--x)) 引用）；
+ * 末段派生映射接通 v3 组件变量。
+ * 注意：:root 与 [data-theme] 必须同处一层（同特异性时后者按源码顺序取胜），
+ * 若 :root 落在 layer 外会以 unlayered 高优先级压制全部主题。 */
+@layer base {
+  /* ---------- 默认暗色基调（v3 自有；未挂题材作品/全局页回落至此） ---------- */
+  :root {
+    --bg: 240 6% 5%; /* 页面底色 */
+    --surface: 240 5% 9%; /* 卡片/面板 */
+    --border-soft: 240 4% 16%; /* 描边 */
+    --fg: 40 15% 92%; /* 主文字（暖白） */
+    --fg-muted: 240 4% 60%; /* 次级文字 */
+    --accent: 262 60% 60%; /* 主强调色 */
+    --accent-fg: 0 0% 100%; /* 强调色上的文字 */
+    --danger: 0 65% 58%; /* 错误/警示 */
+    --theme-glow: 262 60% 60%;
+    --theme-font-heading: inherit;
+    --theme-font-body: inherit;
+  }
+
+
+  /* 穿越重生 - Ink & Brush（水墨亮色） */
+  [data-theme='chuanyue'] {
+    --background: 40 30% 92%;
+    --foreground: 25 40% 16%;
+    --card: 40 25% 88%;
+    --card-foreground: 25 40% 16%;
+    --popover: 40 25% 90%;
+    --popover-foreground: 25 40% 16%;
+    --primary: 38 70% 45%;
+    --primary-foreground: 40 30% 95%;
+    --secondary: 30 20% 82%;
+    --secondary-foreground: 25 40% 16%;
+    --muted: 35 15% 85%;
+    --muted-foreground: 25 15% 45%;
+    --accent: 38 70% 45%;
+    --accent-foreground: 40 30% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 20% 78%;
+    --input: 30 20% 80%;
+    --ring: 38 70% 45%;
+    --radius: 0.5rem;
+    --sidebar-background: 40 25% 88%;
+    --sidebar-foreground: 25 40% 16%;
+    --sidebar-primary: 38 70% 45%;
+    --sidebar-primary-foreground: 40 30% 95%;
+    --sidebar-accent: 35 20% 84%;
+    --sidebar-accent-foreground: 25 40% 16%;
+    --sidebar-border: 30 20% 78%;
+    --sidebar-ring: 38 70% 45%;
+    --theme-glow: 38 70% 45%;
+    --theme-font-heading: 'Ma Shan Zheng', cursive;
+    --theme-font-body: 'Noto Serif SC', serif;
+    /* v3 组件变量派生 */
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+    /* 注：--accent 语义为"主题主强调色"，指向 shadcn --primary */
+    --accent: var(--primary);
+  }
+
+  /* 星际科幻 - Deep Space */
+  [data-theme='scifi'] {
+    --background: 220 25% 8%;
+    --foreground: 200 80% 90%;
+    --card: 220 25% 12%;
+    --card-foreground: 200 80% 90%;
+    --popover: 220 25% 10%;
+    --popover-foreground: 200 80% 90%;
+    --primary: 190 90% 50%;
+    --primary-foreground: 220 25% 8%;
+    --secondary: 220 30% 18%;
+    --secondary-foreground: 200 80% 90%;
+    --muted: 220 20% 16%;
+    --muted-foreground: 200 30% 55%;
+    --accent: 190 90% 50%;
+    --accent-foreground: 220 25% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 20% 20%;
+    --input: 220 20% 18%;
+    --ring: 190 90% 50%;
+    --theme-glow: 190 90% 50%;
+    --theme-font-heading: 'Orbitron', sans-serif;
+    --theme-font-body: 'Inter', sans-serif;
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent: var(--primary);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+  }
+
+  /* 末世求生 - Post-Apocalyptic */
+  [data-theme='moshi'] {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 80%;
+    --card: 0 0% 14%;
+    --card-foreground: 0 0% 80%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 80%;
+    --primary: 0 70% 50%;
+    --primary-foreground: 0 0% 95%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 80%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 70% 50%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 22%;
+    --input: 0 0% 20%;
+    --ring: 0 70% 50%;
+    --theme-glow: 0 70% 50%;
+    --theme-font-heading: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', sans-serif;
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent: var(--primary);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+  }
+
+  /* 无限流 - Infinite */
+  [data-theme='wuxian'] {
+    --background: 260 30% 8%;
+    --foreground: 260 20% 85%;
+    --card: 260 30% 12%;
+    --card-foreground: 260 20% 85%;
+    --popover: 260 30% 10%;
+    --popover-foreground: 260 20% 85%;
+    --primary: 270 70% 60%;
+    --primary-foreground: 260 30% 8%;
+    --secondary: 260 25% 18%;
+    --secondary-foreground: 260 20% 85%;
+    --muted: 260 20% 16%;
+    --muted-foreground: 260 15% 50%;
+    --accent: 220 70% 55%;
+    --accent-foreground: 260 30% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 260 20% 22%;
+    --input: 260 20% 18%;
+    --ring: 270 70% 60%;
+    --theme-glow: 270 70% 60%;
+    --theme-font-heading: 'Cinzel', serif;
+    --theme-font-body: 'Inter', sans-serif;
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent: var(--primary);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+  }
+
+  /* 玄幻修仙 - Xianxia */
+  [data-theme='xuanhuan'] {
+    --background: 240 35% 10%;
+    --foreground: 45 40% 90%;
+    --card: 240 30% 14%;
+    --card-foreground: 45 40% 90%;
+    --popover: 240 30% 12%;
+    --popover-foreground: 45 40% 90%;
+    --primary: 45 80% 55%;
+    --primary-foreground: 240 35% 10%;
+    --secondary: 240 25% 18%;
+    --secondary-foreground: 45 40% 90%;
+    --muted: 240 20% 16%;
+    --muted-foreground: 240 15% 50%;
+    --accent: 45 80% 55%;
+    --accent-foreground: 240 35% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 20% 22%;
+    --input: 240 20% 18%;
+    --ring: 45 80% 55%;
+    --theme-glow: 45 80% 55%;
+    --theme-font-heading: 'ZCOOL XiaoWei', serif;
+    --theme-font-body: 'Noto Serif SC', serif;
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent: var(--primary);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+  }
+
+  /* 混合类型 - Mixed（custom 题材兜底同款） */
+  [data-theme='hunhe'] {
+    --background: 260 15% 10%;
+    --foreground: 45 20% 88%;
+    --card: 260 15% 14%;
+    --card-foreground: 45 20% 88%;
+    --popover: 260 15% 12%;
+    --popover-foreground: 45 20% 88%;
+    --primary: 45 70% 55%;
+    --primary-foreground: 260 15% 10%;
+    --secondary: 260 12% 18%;
+    --secondary-foreground: 45 20% 88%;
+    --muted: 260 10% 16%;
+    --muted-foreground: 260 10% 50%;
+    --accent: 280 50% 55%;
+    --accent-foreground: 260 15% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 260 12% 22%;
+    --input: 260 12% 18%;
+    --ring: 45 70% 55%;
+    --theme-glow: 280 50% 55%;
+    --theme-font-heading: 'Cinzel', serif;
+    --theme-font-body: 'Inter', sans-serif;
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent: var(--primary);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+  }
+
+  /* ---------- 阅读模式变量 ----------
+   * 与 lib/readingPrefs.ts 的 JS 内联色值同源（Task 20 既有实现走 JS），
+   * 此处为 data-reading 属性驱动的 CSS 侧定义，供后续组件按属性取色。 */
+  [data-reading='night'] {
+    --reading-bg: 0 0% 6%;
+    --reading-fg: 0 0% 75%;
+  }
+  [data-reading='eye'] {
+    --reading-bg: 85 30% 88%;
+    --reading-fg: 85 20% 20%;
+  }
+  [data-reading='space'] {
+    --reading-bg: 230 30% 6%;
+    --reading-fg: 200 60% 80%;
+  }
+
+  html {
+    /* 中文 UI 字体栈：系统字体优先，兼顾 Win/mac/移动端；
+     * 挂题材主题后由 --theme-font-body 覆盖（见下方 body 规则） */
+    font-family:
+      system-ui,
+      -apple-system,
+      'PingFang SC',
+      'Microsoft YaHei',
+      'Noto Sans SC',
+      sans-serif;
+  }
+
+  body {
+    background: hsl(var(--bg));
+    color: hsl(var(--fg));
+    font-family: var(--theme-font-body);
+    /* 移动端下拉/回弹不露白 */
+    overscroll-behavior-y: none;
+  }
 }
 
-html {
-  /* 中文 UI 字体栈：系统字体优先，兼顾 Win/mac/移动端 */
-  font-family:
-    system-ui,
-    -apple-system,
-    'PingFang SC',
-    'Microsoft YaHei',
-    'Noto Sans SC',
-    sans-serif;
-}
+/* ---------- 工具类 ---------- */
 
-body {
-  background: hsl(var(--bg));
-  color: hsl(var(--fg));
-  /* 移动端下拉/回弹不露白 */
-  overscroll-behavior-y: none;
-}
-
-/* safe-area 工具类（PWA 全屏时刘海/手势条避让，Task 30 完善触控体系） */
+/* safe-area 避让（PWA 全屏时刘海/手势条） */
 @utility safe-top {
   padding-top: max(0.75rem, env(safe-area-inset-top));
 }
@@ -43,4 +294,49 @@ body {
 @utility safe-x {
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* 旧站同名工具类（裸 padding 版，供 Task 33 移动端布局选用） */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 主题字体 / 辉光（旧站移植，--theme-* 变量的消费类） */
+@utility font-heading {
+  font-family: var(--theme-font-heading);
+}
+
+@utility font-body {
+  font-family: var(--theme-font-body);
+}
+
+@utility theme-glow {
+  box-shadow: 0 0 20px hsl(var(--theme-glow) / 0.3);
+}
+
+@utility theme-glow-text {
+  text-shadow: 0 0 10px hsl(var(--theme-glow) / 0.5);
+}
+
+/* ---------- 触控优化 ---------- */
+
+/* 移除移动端点击 300ms 延迟与点击高亮 */
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 滚动容器惯性滚动（仅滚动面生效） */
+.scroll-area,
+[data-scroll],
+.overflow-auto,
+.overflow-y-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
 }
