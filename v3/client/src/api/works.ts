@@ -37,13 +37,15 @@ export interface UpdateWorkTitleInput {
   title: string;
 }
 
-/** 作品设置保存入参（写作台设置抽屉）：全部可选，只传变更项 */
+/** 作品设置保存入参（写作台设置抽屉/语音绑定面板）：全部可选，只传变更项 */
 export interface UpdateWorkSettingsInput {
   revision: number;
   title?: string;
   settings?: Work['settings'];
   allowCardOverride?: boolean;
   viewPreference?: Work['viewPreference'];
+  /** 角色名 → TTS 声音 id（TTS 分声绑定，Task 29） */
+  voiceMap?: Work['voiceMap'];
 }
 
 export async function listWorks(): Promise<WorkSummary[]> {
