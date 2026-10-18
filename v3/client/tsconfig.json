@@ -1,0 +1,11 @@
+{
+  // 前端 TS 配置：继承根配置，追加 DOM 与 JSX（vite build 用 esbuild，tsc 供 IDE/校验）
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "include": ["src", "vite.config.ts"]
+}

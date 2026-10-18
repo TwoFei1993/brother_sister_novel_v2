@@ -1,0 +1,17 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 运行时目录：内容不入库，但保留 .gitkeep 占位
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# 备份与客户端构建输出（client 构建产物输出到 server/public/）
+backups/
+server/public/
+
+# 日志与杂项
+*.log
+.DS_Store

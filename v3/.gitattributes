@@ -1,0 +1,2 @@
+# Windows 环境保障：bash 脚本强制 LF，避免 Git 检出为 CRLF 导致脚本报错
+*.sh text eol=lf

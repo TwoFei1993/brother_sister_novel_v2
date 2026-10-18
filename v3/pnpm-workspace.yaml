@@ -1,0 +1,9 @@
+# pnpm workspace 包声明：前端 / 后端 / 共享类型三个子包
+packages:
+  - client
+  - server
+  - shared
+
+# 允许执行安装脚本的依赖（esbuild 需要安装平台二进制，vite/tsx 依赖它）
+onlyBuiltDependencies:
+  - esbuild

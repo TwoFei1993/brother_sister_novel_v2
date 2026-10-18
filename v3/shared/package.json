@@ -1,0 +1,10 @@
+{
+  "name": "@v3/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "前后端共享 TS 类型与 zod schema（Task 2 填充）",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

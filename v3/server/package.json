@@ -1,0 +1,21 @@
+{
+  "name": "@v3/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Express 薄代理服务端：协议转换 + 密钥 + JSON 文件存储 + 同源托管客户端",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node --import tsx src/main.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

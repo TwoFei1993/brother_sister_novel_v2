@@ -1,0 +1,30 @@
+{
+  // TS 基础配置：所有子包（client/server/shared）extends 本文件
+  // 规范：strict 全开、ESM、bundler 解析（Vite/tsx 友好）
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    // 严格模式全家桶（含 noImplicitAny，禁隐式 any）
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // ESM 约束：type-only 导入必须显式，禁止 CommonJS 习惯
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // 工程通用
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+
+    // 跨包引用：client/server 均可用 @shared/* 直接引 shared 源码
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["shared/src/*"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "v3",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "酒馆化改版（V3）monorepo 根包：所有脚本统一委托 scripts/*.sh",
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "build": "bash scripts/build.sh",
+    "test": "bash scripts/test.sh",
+    "backup": "bash scripts/backup.sh",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  // 服务端 TS 配置：继承根配置；tsc 产物仅作类型校验（生产经 tsx 直跑源码）
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
