@@ -54,8 +54,13 @@ const server = createServer((req, res) => {
     req.on('end', () => {
       calls += 1;
       let text = '';
+      let voice = '';
+      let rate = '';
       try {
-        text = String(JSON.parse(Buffer.concat(chunks).toString('utf8')).text ?? '');
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        text = String(body.text ?? '');
+        voice = String(body.voice ?? '');
+        rate = String(body.rate ?? '');
       } catch {
         /* 空文本兜底 */
       }
@@ -64,7 +69,9 @@ const server = createServer((req, res) => {
       audioLibrary.set(path, silentWav(seconds));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, data: { audio: path } }));
-      console.log(`[mock-tts] #${calls} text=${text.slice(0, 20)}… → ${path}（${seconds.toFixed(1)}s）`);
+      console.log(
+        `[mock-tts] #${calls} voice=${voice || '-'} rate=${rate || '-'} text=${text.slice(0, 20)}… → ${path}（${seconds.toFixed(1)}s）`,
+      );
     });
     return;
   }

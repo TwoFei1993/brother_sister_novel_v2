@@ -7,6 +7,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 
 import { apiFetch } from './api/client';
+import { useSettingsStore, type ConfigDto } from './stores/settings';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RootPage = lazy(() => import('./pages/RootPage'));
@@ -32,7 +33,15 @@ function AuthGuard() {
     let alive = true;
     apiFetch('/api/auth/check', { keepOn401: true })
       .then(() => {
-        if (alive) setChecked(true);
+        if (!alive) return;
+        // config 是会话内存态（原本仅 LoginPage 登录时拉取）：整页刷新后丢失，
+        // 导致 TTS 等运行配置失效到下次登录。已登录刷新时补拉一次（失败不阻塞）。
+        if (useSettingsStore.getState().config === null) {
+          apiFetch<ConfigDto>('/api/config')
+            .then((c) => useSettingsStore.getState().setConfig(c))
+            .catch(() => {});
+        }
+        setChecked(true);
       })
       .catch(() => {
         navigate('/login', { replace: true });
