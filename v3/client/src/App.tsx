@@ -14,9 +14,7 @@ const WorkPage = lazy(() => import('./pages/Placeholders').then((m) => ({ defaul
 const LibraryPage = lazy(() =>
   import('./pages/Placeholders').then((m) => ({ default: m.LibraryPage })),
 );
-const SettingsPage = lazy(() =>
-  import('./pages/Placeholders').then((m) => ({ default: m.SettingsPage })),
-);
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 function PageLoading() {
   return (

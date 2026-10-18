@@ -1,6 +1,7 @@
 /**
- * 占位页集中导出（避免文件数膨胀）：/work/:id /library /settings
- * 后续任务逐个替换为独立实现并改路由 import（书架已于 Task 10 独立为 pages/RootPage.tsx）
+ * 占位页集中导出（避免文件数膨胀）：/work/:id /library
+ * 后续任务逐个替换为独立实现并改路由 import
+ * （书架 → Task 10 RootPage；设置 → Task 18 pages/SettingsPage）
  */
 
 interface PlaceholderProps {
@@ -27,9 +28,4 @@ export function WorkPage() {
 /** /library 资源库：角色卡/世界书/预设/正则 + 资源中心（Task 25） */
 export function LibraryPage() {
   return <Placeholder title="资源库" hint="角色卡 · 世界书 · 预设 · 正则 · 资源中心" task="Task 25" />;
-}
-
-/** /settings：LLM 三通道 / TTS / 界面 / 旧数据迁移（Task 26+） */
-export function SettingsPage() {
-  return <Placeholder title="设置" hint="LLM 通道 · TTS · 界面 · 旧数据迁移" task="Task 26+" />;
 }
