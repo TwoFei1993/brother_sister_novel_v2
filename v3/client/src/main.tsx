@@ -1,4 +1,4 @@
-// 应用入口：挂载 React 根组件（路由表于 Task 9 接入）
+// 应用入口：挂载 React 根组件（路由表见 App.tsx，设计 §7.1）
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';

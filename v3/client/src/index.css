@@ -1,2 +1,46 @@
-/* Tailwind 4 CSS-first 入口：无需 tailwind.config（主题变量于 Task 32 扩充） */
+/* Tailwind 4 CSS-first 入口（完整主题系统 Task 32；此处仅暗色基调骨架） */
 @import "tailwindcss";
+
+/* 暗色主题基调：hsl 三元组变量（组件以 hsl(var(--x)) 引用，便于后续主题扩展） */
+:root {
+  --bg: 240 6% 5%; /* 页面底色 */
+  --surface: 240 5% 9%; /* 卡片/面板 */
+  --border-soft: 240 4% 16%; /* 描边 */
+  --fg: 40 15% 92%; /* 主文字（暖白） */
+  --fg-muted: 240 4% 60%; /* 次级文字 */
+  --accent: 262 60% 60%; /* 主强调色 */
+  --accent-fg: 0 0% 100%; /* 强调色上的文字 */
+  --danger: 0 65% 58%; /* 错误/警示 */
+}
+
+html {
+  /* 中文 UI 字体栈：系统字体优先，兼顾 Win/mac/移动端 */
+  font-family:
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei',
+    'Noto Sans SC',
+    sans-serif;
+}
+
+body {
+  background: hsl(var(--bg));
+  color: hsl(var(--fg));
+  /* 移动端下拉/回弹不露白 */
+  overscroll-behavior-y: none;
+}
+
+/* safe-area 工具类（PWA 全屏时刘海/手势条避让，Task 30 完善触控体系） */
+@utility safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@utility safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@utility safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}

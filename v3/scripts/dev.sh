@@ -17,6 +17,9 @@ if [ ! -d node_modules ]; then
   pnpm install
 fi
 
+# ---- 登录密码：本地默认 dev123（外部已设置则不覆盖；生产部署必须显式配置）----
+export ACCESS_PASSWORD="${ACCESS_PASSWORD:-dev123}"
+
 # ---- 并发启动：记录 PID，退出时统一回收 ----
 pids=()
 
