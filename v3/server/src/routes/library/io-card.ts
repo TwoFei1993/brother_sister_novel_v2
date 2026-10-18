@@ -1,10 +1,10 @@
 /**
  * 角色卡导入导出路由（Task 24）：ioCardRouter 自带 authRequired。
- * 挂载方式（协调者在 library/index.ts 接线）：
- *   libraryRouter.use('/', ioCardRouter);  // 或 app.use('/api', ioCardRouter)
- * 对外端点：
- *   POST /io/characters/import  multipart（file 字段 png/json 二选一）→ 201 CharacterAsset
- *   POST /io/characters/export  body {id, format:'png'|'json'} → 文件下载
+ * 挂载方式（library/index.ts 已接线）：
+ *   libraryRouter.use('/io', ioCardRouter);  // app.use('/api', libraryRouter) 于 app.ts
+ * 对外端点（路由内为相对路径）：
+ *   POST /api/io/characters/import  multipart（file 字段 png/json 二选一）→ 201 CharacterAsset
+ *   POST /api/io/characters/export  body {id, format:'png'|'json'} → 文件下载
  * 存储：data/characters/<uuid>.json（资产）+ <uuid>.png（头像底图）。
  * avatar 暂存本地路径 /data-assets/characters/<uuid>.png，静态托管由后续任务接入。
  */
@@ -60,7 +60,7 @@ async function persist(asset: CharacterAsset, png?: Buffer): Promise<void> {
   await writeJsonAtomic(join(dir, `${asset.id}.json`), asset);
 }
 
-ioCardRouter.post('/io/characters/import', upload.single('file'), async (req, res, next) => {
+ioCardRouter.post('/characters/import', upload.single('file'), async (req, res, next) => {
   try {
     const file = req.file;
     if (!file) throw new HttpError(400, '请通过 file 字段上传角色卡文件（png 或 json）');
@@ -97,7 +97,7 @@ const exportSchema = z.object({
   format: z.enum(['png', 'json']),
 });
 
-ioCardRouter.post('/io/characters/export', zodBody(exportSchema), async (req, res, next) => {
+ioCardRouter.post('/characters/export', zodBody(exportSchema), async (req, res, next) => {
   try {
     const { id, format } = req.body as z.infer<typeof exportSchema>;
     if (!ID_PATTERN.test(id)) throw new HttpError(404, '角色卡不存在');

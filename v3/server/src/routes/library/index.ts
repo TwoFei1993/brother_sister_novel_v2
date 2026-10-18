@@ -12,6 +12,8 @@ import { charactersRouter } from './characters';
 import { worldbooksRouter } from './worldbooks';
 import { presetsRouter } from './presets';
 import { regexRouter } from './regex';
+import { ioCardRouter } from './io-card';
+import { ioAssetsRouter } from './io-assets';
 
 export const libraryRouter = Router();
 
@@ -22,9 +24,9 @@ libraryRouter.use('/worldbooks', worldbooksRouter);
 libraryRouter.use('/presets', presetsRouter);
 libraryRouter.use('/regex-scripts', regexRouter);
 
-// ---- Task 24 预留：io-card（角色卡 PNG 导入/导出，V2/V3 转换） ----
-// libraryRouter.use('/io-card', ioCardRouter);
-// ---- Task 25 预留：io-assets（世界书/预设/正则 JSON 导入/导出） ----
-// libraryRouter.use('/io-assets', ioAssetsRouter);
+// ---- Task 24：io-card（角色卡 PNG 导入/导出，V2/V3 转换）→ /api/io/characters/* ----
+libraryRouter.use('/io', ioCardRouter);
+// ---- Task 25：io-assets（世界书/预设/正则 JSON 导入/导出）→ /api/io/{worldbooks|presets|regex-scripts}/* ----
+libraryRouter.use('/io', ioAssetsRouter);
 // ---- Task 30 预留：resources（资源中心：URL 直链拉取 + 格式校验导入） ----
 // libraryRouter.use('/resources', resourcesRouter);

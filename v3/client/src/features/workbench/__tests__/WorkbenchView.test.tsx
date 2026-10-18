@@ -8,9 +8,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Message } from '@shared/message';
-import StatusPanel from '../StatusPanel';
-import DirectiveHistory from '../DirectiveHistory';
-import WorkbenchView from '../WorkbenchView';
+import StatusPanel from '../bench/StatusPanel';
+import DirectiveHistory from '../bench/DirectiveHistory';
+import WorkbenchView from '../bench/WorkbenchView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

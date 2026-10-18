@@ -64,14 +64,14 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
 
 /**
  * 独立装配 + 错误处理，不起真实端口。
- * 挂载路径与协调者一致：libraryRouter.use('/io-assets', ioAssetsRouter) 且 app.use('/api', libraryRouter)，
- * strip 后 ioAssetsRouter 收到的子路径不含 /io-assets 前缀，故此处直接挂 '/api/io-assets' 同语义。
+ * 挂载路径与协调者一致：libraryRouter.use('/io', ioAssetsRouter) 且 app.use('/api', libraryRouter)，
+ * strip 后 ioAssetsRouter 收到的子路径不含 /io 前缀，故此处直接挂 '/api/io' 同语义。
  * 另挂 libraryRouter 供资产读取走标准 CRUD GET（/api/worldbooks/:id 等）。
  */
 function makeApp(): Express {
   const app = express();
   app.use(express.json({ limit: '50mb' }));
-  app.use('/api/io-assets', ioAssetsRouter);
+  app.use('/api/io', ioAssetsRouter);
   app.use('/api', libraryRouter);
   app.use(errorHandler);
   return app;
@@ -90,7 +90,7 @@ function importJson(
   filename = 'sample.json',
 ): Promise<SupertestResponse> {
   return request(makeApp())
-    .post(`/api/io-assets/${segment}/import`)
+    .post(`/api/io/${segment}/import`)
     .set(authed())
     .attach('file', Buffer.from(content, 'utf8'), { filename, contentType: 'application/json' });
 }
@@ -105,7 +105,7 @@ async function importOk(segment: string, content: string, filename?: string): Pr
 /** 导出辅助：POST /export {id} → 文本体 */
 async function exportRaw(segment: string, id: string): Promise<SupertestResponse> {
   return request(makeApp())
-    .post(`/api/io-assets/${segment}/export`)
+    .post(`/api/io/${segment}/export`)
     .set(authed())
     .send({ id });
 }
@@ -310,7 +310,7 @@ describe('校验、鉴权与上传边界', () => {
 
   it('multipart 上传非 JSON 文件（text/plain）→ 400', async () => {
     const res = await request(makeApp())
-      .post('/api/io-assets/worldbooks/import')
+      .post('/api/io/worldbooks/import')
       .set(authed())
       .attach('file', Buffer.from('纯文本内容，不是 JSON', 'utf8'), {
         filename: 'notes.txt',
@@ -329,11 +329,11 @@ describe('校验、鉴权与上传边界', () => {
   it('未登录上传 → 401；未登录导出 → 401', async () => {
     const noAuth = request(makeApp());
     const up = await noAuth
-      .post('/api/io-assets/worldbooks/import')
+      .post('/api/io/worldbooks/import')
       .attach('file', Buffer.from('{}'), { filename: 'x.json' });
     expect(up.status).toBe(401);
     const down = await request(makeApp())
-      .post('/api/io-assets/worldbooks/export')
+      .post('/api/io/worldbooks/export')
       .send({ id: 'whatever' });
     expect(down.status).toBe(401);
   });
@@ -342,12 +342,12 @@ describe('校验、鉴权与上传边界', () => {
     const miss = await exportRaw('presets', '00000000-0000-4000-8000-000000000000');
     expect(miss.status).toBe(404);
     const noId = await request(makeApp())
-      .post('/api/io-assets/presets/export')
+      .post('/api/io/presets/export')
       .set(authed())
       .send({});
     expect(noId.status).toBe(400);
     const noFile = await request(makeApp())
-      .post('/api/io-assets/worldbooks/import')
+      .post('/api/io/worldbooks/import')
       .set(authed());
     expect(noFile.status).toBe(400);
   });

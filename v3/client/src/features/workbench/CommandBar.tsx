@@ -6,7 +6,7 @@
  * -「继续」：断流/停止后 partialKept=true 出现，以半成品重组上下文再发起（§9.2）
  * - 生成中：▶ 变 ⏹ 停止；输入与换一支禁用
  */
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 
 interface CommandBarProps {
   streaming: boolean;
@@ -24,6 +24,9 @@ interface CommandBarProps {
   onToggleSwipe: (delta: 1 | -1) => void;
   onContinue: () => void;
   onStop: () => void;
+  /** 外部指令复填（C 工作台侧栏点击快速指令/历史）：注入输入框，消费后回调复位 */
+  seedText?: string | null;
+  onSeedConsumed?: () => void;
 }
 
 const btnBase =
@@ -40,8 +43,17 @@ export default function CommandBar({
   onToggleSwipe,
   onContinue,
   onStop,
+  seedText = null,
+  onSeedConsumed,
 }: CommandBarProps) {
   const [directive, setDirective] = useState('');
+
+  // 外部指令复填：注入输入框后立即回调复位（允许同一指令再次点击重新注入）
+  useEffect(() => {
+    if (seedText == null) return;
+    setDirective(seedText);
+    onSeedConsumed?.();
+  }, [seedText, onSeedConsumed]);
 
   function submit(): void {
     if (disabled || streaming) return;

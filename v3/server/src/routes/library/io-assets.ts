@@ -1,11 +1,11 @@
 /**
  * 三类资产（世界书/预设/正则）JSON 导入/导出路由（Task 25，设计 §6）
  *
- * 挂载（协调者在 app.ts 统一执行，本文件不挂载）：
- *   libraryRouter.use('/io-assets', ioAssetsRouter)
+ * 挂载（library/index.ts 已接线，与 io-card 同挂 '/io'）：
+ *   libraryRouter.use('/io', ioAssetsRouter)
  * 端点（segment ∈ worldbooks | presets | regex-scripts）：
- *   POST /api/io-assets/<segment>/import  multipart 单文件字段 file → 201 资产 JSON
- *   POST /api/io-assets/<segment>/export  body {id} → raw JSON 附件下载
+ *   POST /api/io/<segment>/import  multipart 单文件字段 file → 201 资产 JSON
+ *   POST /api/io/<segment>/export  body {id} → raw JSON 附件下载
  * 导入管道：multer 内存存储 → JSON.parse → normalize（zod 校验 + 归一化）→ uuid 入库。
  * 导出只回 raw（酒馆原生格式），可直接再导入回本系统或酒馆。
  */

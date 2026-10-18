@@ -14,12 +14,9 @@ import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
 
-import { sanitizeMarkdownSource } from './sanitize';
+import { MARKDOWN_CLASS } from '../../../lib/markdown';
+import { sanitizeMarkdownSource } from '../../../lib/sanitize';
 import SwipeBar from './SwipeBar';
-
-/** 正文 markdown 基础排版（与 ReadingView.MARKDOWN_CLASS 同款；彼处未导出，待后续统一抽取） */
-const MARKDOWN_CLASS =
-  '[&_p]:my-3 [&_h1]:my-4 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:my-4 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:my-3 [&_h3]:font-bold [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[hsl(var(--border-soft))] [&_blockquote]:pl-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-[hsl(var(--accent))] [&_a]:underline [&_hr]:my-4 [&_code]:rounded [&_code]:bg-[hsl(var(--surface))] [&_code]:px-1 [&_code]:text-[0.9em]';
 
 /** 净化 markdown 渲染（sanitizeMarkdownSource 第一层 + rehype-sanitize 第二层，§9.3） */
 export function BubbleMarkdown({ text }: { text: string }) {

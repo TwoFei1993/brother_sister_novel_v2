@@ -60,7 +60,8 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
 function makeApp(): Express {
   const app = express();
   app.use(express.json({ limit: '50mb' }));
-  app.use('/api', ioCardRouter);
+  // 与协调者挂载一致：libraryRouter.use('/io', ioCardRouter) 且 app.use('/api', libraryRouter)
+  app.use('/api/io', ioCardRouter);
   app.use('/api/characters', charactersRouter);
   app.use(errorHandler);
   return app;

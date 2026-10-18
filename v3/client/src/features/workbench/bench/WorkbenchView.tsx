@@ -12,7 +12,7 @@ import type { Message } from '@shared/message';
 
 import ActivatedList, { type WorldbookEntryRef } from './ActivatedList';
 import DirectiveHistory from './DirectiveHistory';
-import ReadingView from './ReadingView';
+import ReadingView from '../ReadingView';
 import StatusPanel, { type SnapshotValue } from './StatusPanel';
 
 export interface WorkbenchViewProps {

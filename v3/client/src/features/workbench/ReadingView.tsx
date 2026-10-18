@@ -13,8 +13,9 @@ import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
 
-import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from './readingPrefs';
-import { sanitizeMarkdownSource } from './sanitize';
+import { MARKDOWN_CLASS } from '../../lib/markdown';
+import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/readingPrefs';
+import { sanitizeMarkdownSource } from '../../lib/sanitize';
 
 interface ReadingViewProps {
   messages: Message[];
@@ -26,10 +27,6 @@ interface ReadingViewProps {
   /** 触底（scrollTop<100）请求更早章节 */
   onNeedOlder: () => void;
 }
-
-/** 正文 markdown 基础排版（Tailwind 任意变体，避免动 index.css——主题体系 Task 32 定型） */
-const MARKDOWN_CLASS =
-  '[&_p]:my-3 [&_h1]:my-4 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:my-4 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:my-3 [&_h3]:font-bold [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[hsl(var(--border-soft))] [&_blockquote]:pl-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-[hsl(var(--accent))] [&_a]:underline [&_hr]:my-4 [&_code]:rounded [&_code]:bg-[hsl(var(--surface))] [&_code]:px-1 [&_code]:text-[0.9em]';
 
 /** 章节锚点 id（ChapterDrawer / 顶栏定位共用） */
 export function chapterAnchorId(index: number): string {
