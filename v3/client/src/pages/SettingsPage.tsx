@@ -1,23 +1,25 @@
 /**
- * 设置页（设计 §7.1 /settings）：分区导航 = LLM 接入 / TTS / 界面偏好
+ * 设置页（设计 §7.1 /settings）：分区导航 = LLM 接入 / TTS / 旧站迁移 / 界面偏好
  *
  * - LLM 接入：三通道密钥 + 默认生成参数（SecretsPanel / LlmPanel）
  * - TTS：easyvoice 地址与连通性（TtsPanel）
+ * - 旧站迁移：localStorage novel_history → 新站作品（MigratePanel，Task 31）
  * - 界面偏好：阅读字号/行高等属阅读体验（Task 20）、题材主题（Task 32），暂占位说明
- * - 旧数据迁移入口为 Task 31 的 MigratePanel，届时挂入本页
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import LlmPanel from '../features/settings/LlmPanel';
+import MigratePanel from '../features/settings/MigratePanel';
 import SecretsPanel from '../features/settings/SecretsPanel';
 import TtsPanel from '../features/settings/TtsPanel';
 
-type SectionId = 'llm' | 'tts' | 'ui';
+type SectionId = 'llm' | 'tts' | 'migrate' | 'ui';
 
 const SECTIONS: ReadonlyArray<{ id: SectionId; label: string }> = [
   { id: 'llm', label: 'LLM 接入' },
   { id: 'tts', label: 'TTS' },
+  { id: 'migrate', label: '旧站迁移' },
   { id: 'ui', label: '界面偏好' },
 ];
 
@@ -62,6 +64,7 @@ export default function SettingsPage() {
         </div>
       )}
       {section === 'tts' && <TtsPanel />}
+      {section === 'migrate' && <MigratePanel />}
       {section === 'ui' && (
         <div className="rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-5">
           <h3 className="mb-1 text-base font-semibold">界面偏好</h3>

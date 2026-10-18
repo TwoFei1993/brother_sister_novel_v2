@@ -8,6 +8,7 @@ import { Router } from 'express';
 
 import { authRequired, authRouter } from '../../middleware/auth';
 import { configRouter } from './config';
+import { migrateRouter } from './migrate';
 import { healthHandler } from './health';
 import { secretsRouter } from './secrets';
 
@@ -22,3 +23,6 @@ coreRouter.get('/health', healthHandler);
 // ---- 运行配置与密钥（Task 5，需登录）----
 coreRouter.use('/config', authRequired, configRouter);
 coreRouter.use('/secrets', authRequired, secretsRouter);
+
+// ---- 旧站数据迁移（Task 31，需登录）：coreRouter.use 一行挂载，路由自带 /migrate 前缀 ----
+coreRouter.use(migrateRouter);

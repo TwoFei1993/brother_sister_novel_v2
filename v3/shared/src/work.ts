@@ -97,6 +97,8 @@ export const NovelSettingsSchema = z.strictObject({
   outlineChapterCount: z.number().int().positive(),
   /** 粘贴的大纲原文 */
   pastedOutline: z.string(),
+  /** 旧站迁移专用（Task 31）：原 worldBuilding.content 原文保留；仅迁移写入，新建作品不产生 */
+  legacyWorldBuilding: z.string().optional(),
   /** 作者注释：按 noteDepth 深度注入（酒馆 Author's Note 对齐） */
   authorNote: z.string(),
   /** 作者注释注入深度（倒数第 N 条消息处），酒馆默认 4 */

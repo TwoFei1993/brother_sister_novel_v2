@@ -104,4 +104,14 @@ describe('SettingsPage', () => {
     await clickSection(container, '界面偏好');
     expect(container.textContent).toContain('界面偏好');
   });
+
+  it('切到旧站迁移分区：展示导出引导与上传入口（Task 31）', async () => {
+    maskMock.mockResolvedValue({ openai: false, gemini: false, claude: false });
+    const container = await renderSettings();
+    await clickSection(container, '旧站迁移');
+    const text = container.textContent ?? '';
+    expect(text).toContain('旧站数据迁移');
+    expect(text).toContain('localStorage.getItem'); // 控制台导出命令
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
+  });
 });
