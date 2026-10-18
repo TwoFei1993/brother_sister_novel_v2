@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "express": "^4.21.2",
+    "js-tiktoken": "^1.0.21",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
     "tsx": "^4.19.2",
