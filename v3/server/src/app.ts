@@ -18,6 +18,8 @@ import { ZodError } from 'zod';
 import { httpLogger, logger } from './middleware/logger';
 import { HttpError, formatZodError } from './middleware/validate';
 import { coreRouter } from './routes/core';
+import { libraryRouter } from './routes/library';
+import { worksRouter } from './routes/works';
 
 // client 构建产物目录（scripts/build.sh 产出；开发期不存在则跳过托管）
 const PUBLIC_DIR =
@@ -65,10 +67,10 @@ export function createApp(): Express {
 
   // API 路由组（设计 §6）
   app.use('/api', coreRouter);
+  app.use('/api', libraryRouter); // library/ 角色卡·世界书·预设·正则
+  app.use('/api', worksRouter);   // works/ 作品 CRUD + 消息流（messages 子路由 Task 8）
   // ---- 后续任务预留挂载位 ----
-  // Task 6: app.use('/api', libraryRouter);  // library/ 角色卡·世界书·预设·正则
-  // Task 7: app.use('/api', worksRouter);    // works/ 作品 CRUD + 消息流
-  // Task 9+: app.use('/api', llmRouter);     // llm/ 生成代理 + tokenize
+  // Task 17: app.use('/api', llmRouter);    // llm/ 生成代理 + tokenize
 
   app.use(notFound);
   app.use(errorHandler);
