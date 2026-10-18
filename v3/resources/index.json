@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-19",
+  "entries": [
+    {
+      "id": "builtin-default-preset",
+      "type": "preset",
+      "name": "官方 Default 预设",
+      "description": "SillyTavern 官方默认对话补全预设，提示词结构完整，适合作为自定义预设的起点。",
+      "tags": ["官方", "通用", "入门"],
+      "source": "SillyTavern 内置（本地复制）",
+      "ref": { "kind": "builtin", "path": "builtin/presets/Default.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "builtin-eldoria",
+      "type": "worldbook",
+      "name": "Eldoria 世界书",
+      "description": "官方示例奇幻世界观（大陆、势力、种族、历史），世界书条目写法的教学范本。",
+      "tags": ["官方", "奇幻", "世界观"],
+      "source": "SillyTavern 内置（本地复制）",
+      "ref": { "kind": "builtin", "path": "builtin/worldbooks/Eldoria.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "builtin-seraphina",
+      "type": "character",
+      "name": "Seraphina 角色卡",
+      "description": "官方示例精灵角色卡（PNG V2），卡字段与问候语的完整示范。",
+      "tags": ["官方", "示例卡", "PNG"],
+      "source": "SillyTavern 内置（本地复制）",
+      "ref": { "kind": "builtin", "path": "builtin/characters/default_Seraphina.png" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "sysprompt-roleplay-detailed",
+      "type": "preset",
+      "name": "系统提示词：Roleplay - Detailed",
+      "description": "详细化角色扮演系统提示词：全感官描写、放慢节奏、保持沉浸。",
+      "tags": ["官方", "系统提示词", "扮演"],
+      "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
+      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Roleplay - Detailed.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "sysprompt-roleplay-immersive",
+      "type": "preset",
+      "name": "系统提示词：Roleplay - Immersive",
+      "description": "沉浸式角色扮演系统提示词：减少出戏描述，专注场景与互动。",
+      "tags": ["官方", "系统提示词", "扮演"],
+      "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
+      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Roleplay - Immersive.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "sysprompt-roleplay-simple",
+      "type": "preset",
+      "name": "系统提示词：Roleplay - Simple",
+      "description": "轻量角色扮演系统提示词：只保留最基本的扮演约束，适合搭配强模型。",
+      "tags": ["官方", "系统提示词", "扮演"],
+      "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
+      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Roleplay - Simple.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "sysprompt-writer-creative",
+      "type": "preset",
+      "name": "系统提示词：Writer - Creative",
+      "description": "创意写作系统提示词：鼓励生动比喻与多样化叙事，适合小说创作。",
+      "tags": ["官方", "系统提示词", "写作"],
+      "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
+      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Writer - Creative.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "sysprompt-writer-realistic",
+      "type": "preset",
+      "name": "系统提示词：Writer - Realistic",
+      "description": "写实写作系统提示词：克制修辞、注重真实感与人物动机的一致性。",
+      "tags": ["官方", "系统提示词", "写作"],
+      "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
+      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Writer - Realistic.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "sysprompt-text-adventure",
+      "type": "preset",
+      "name": "系统提示词：Text Adventure",
+      "description": "文字冒险系统提示词：以第二人称推进剧情并提供选项，互动小说好搭档。",
+      "tags": ["官方", "系统提示词", "互动"],
+      "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
+      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Text Adventure.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "remote-sudachi-next",
+      "type": "preset",
+      "name": "Sudachi-Next 主预设",
+      "description": "社区知名的中文向对话预设，覆盖主流模型的开箱即用配置。",
+      "tags": ["社区", "中文", "通用"],
+      "source": "GitHub LimeBlogs/Sudachi-Next",
+      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/LimeBlogs/Sudachi-Next/main/Sudachi-Next-Preset.json" },
+      "license": "MIT"
+    },
+    {
+      "id": "remote-sudachi-next-dlc",
+      "type": "worldbook",
+      "name": "Sudachi-Next DLC 世界书",
+      "description": "Sudachi-Next 配套状态栏世界书（好感度、服饰、环境等变量的初始化与维护）。",
+      "tags": ["社区", "中文", "状态栏"],
+      "source": "GitHub LimeBlogs/Sudachi-Next",
+      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/LimeBlogs/Sudachi-Next/main/Sudachi-Next-DLC.json" },
+      "license": "MIT"
+    },
+    {
+      "id": "remote-marinara-universal",
+      "type": "preset",
+      "name": "Marinara's Spaghetti Recipe（Universal）",
+      "description": "MarinaraSpaghetti 的通用预设（Universal），兼容多种对话补全渠道。",
+      "tags": ["社区", "通用", "英文"],
+      "source": "Hugging Face MarinaraSpaghetti/SillyTavern-Settings",
+      "ref": { "kind": "remote", "url": "https://huggingface.co/MarinaraSpaghetti/SillyTavern-Settings/resolve/main/Chat%20Completion/Marinara's%20Spaghetti%20Recipe%20(Universal%20Preset).json" },
+      "license": "未标注"
+    },
+    {
+      "id": "remote-default-preset-raw",
+      "type": "preset",
+      "name": "官方 Default 预设（在线版）",
+      "description": "SillyTavern 仓库直链的 Default 预设，适合想始终取最新版的用户。",
+      "tags": ["官方", "在线"],
+      "source": "GitHub SillyTavern/SillyTavern（release 分支）",
+      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/presets/openai/Default.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "remote-eldoria-raw",
+      "type": "worldbook",
+      "name": "Eldoria 世界书（在线版）",
+      "description": "SillyTavern 仓库直链的 Eldoria 世界书，与内置版同源。",
+      "tags": ["官方", "在线", "奇幻"],
+      "source": "GitHub SillyTavern/SillyTavern（release 分支）",
+      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/Eldoria.json" },
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "remote-seraphina-raw",
+      "type": "character",
+      "name": "Seraphina 角色卡（在线版）",
+      "description": "SillyTavern 仓库直链的 Seraphina PNG 角色卡，与内置版同源。",
+      "tags": ["官方", "在线", "PNG"],
+      "source": "GitHub SillyTavern/SillyTavern（release 分支）",
+      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/default_Seraphina.png" },
+      "license": "AGPL-3.0"
+    }
+  ]
+}

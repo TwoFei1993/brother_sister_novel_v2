@@ -49,8 +49,8 @@ function kindOf(file: Express.Multer.File): 'png' | 'json' | null {
   return null;
 }
 
-/** 落盘 <uuid>.json；携带 PNG 底图时先写 <uuid>.png 并登记 avatar 路径 */
-async function persist(asset: CharacterAsset, png?: Buffer): Promise<void> {
+/** 落盘 <uuid>.json；携带 PNG 底图时先写 <uuid>.png 并登记 avatar 路径（资源中心导入复用） */
+export async function persist(asset: CharacterAsset, png?: Buffer): Promise<void> {
   const dir = charDir();
   await mkdir(dir, { recursive: true });
   if (png) {

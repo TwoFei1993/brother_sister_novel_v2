@@ -14,6 +14,7 @@ import { presetsRouter } from './presets';
 import { regexRouter } from './regex';
 import { ioCardRouter } from './io-card';
 import { ioAssetsRouter } from './io-assets';
+import { resourcesRouter } from './resources';
 
 export const libraryRouter = Router();
 
@@ -28,5 +29,5 @@ libraryRouter.use('/regex-scripts', regexRouter);
 libraryRouter.use('/io', ioCardRouter);
 // ---- Task 25：io-assets（世界书/预设/正则 JSON 导入/导出）→ /api/io/{worldbooks|presets|regex-scripts}/* ----
 libraryRouter.use('/io', ioAssetsRouter);
-// ---- Task 30 预留：resources（资源中心：URL 直链拉取 + 格式校验导入） ----
-// libraryRouter.use('/resources', resourcesRouter);
+// ---- Task 30：resources（资源中心：精选索引 + builtin/直链拉取导入）→ /api/io/resources/* ----
+libraryRouter.use('/io/resources', resourcesRouter);

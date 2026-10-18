@@ -13,9 +13,10 @@ import {
   ASSET_META, describeAsset, deleteAsset, exportAsset, getAsset, importAsset, listAssets,
   type AssetType, type LibraryAssetRef,
 } from '../api/library';
-import AssetTabs from '../features/library/AssetTabs';
+import AssetTabs, { type LibraryTab } from '../features/library/AssetTabs';
 import CardEditor from '../features/library/CardEditor';
 import PromptManager from '../features/library/PromptManager';
+import ResourceHub from '../features/library/ResourceHub';
 import WorldbookEditor from '../features/library/WorldbookEditor';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
@@ -187,7 +188,9 @@ function AssetPanel({ type, label, accept, notify, onEdit, refreshKey }: AssetPa
 
 export default function LibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = parseTab(searchParams.get('tab'));
+  const rawTab = searchParams.get('tab');
+  const isHub = rawTab === 'hub'; // 资源中心深链（?tab=hub，Task 30）
+  const tab: AssetType = parseTab(rawTab);
   const [toast, setToast] = useState<Toast>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ type: AssetType; id: string } | null>(null);
@@ -202,9 +205,13 @@ export default function LibraryPage() {
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
-  const setTab = (next: AssetType) => {
+  const setTab = (next: LibraryTab) => {
     setSelectedPresetId(null);
     setEditing(null);
+    if (next === 'hub') {
+      setSearchParams({ tab: 'hub' }, { replace: true });
+      return;
+    }
     setSearchParams(next === 'characters' ? {} : { tab: next }, { replace: true });
   };
 
@@ -252,9 +259,13 @@ export default function LibraryPage() {
         </div>
       )}
 
-      <AssetTabs value={tab} onChange={setTab} />
+      <AssetTabs value={isHub ? 'hub' : tab} onChange={setTab} />
 
-      {tab === 'presets' && selectedPresetId && (
+      {isHub ? (
+        <ResourceHub notify={notify} onJump={setTab} />
+      ) : (
+        <>
+          {tab === 'presets' && selectedPresetId && (
         <div className="mb-6 rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
           <PromptManager
             presetId={selectedPresetId}
@@ -292,6 +303,8 @@ export default function LibraryPage() {
           onClose={() => setEditing(null)}
           onSaved={onEditorSaved}
         />
+      )}
+        </>
       )}
     </main>
   );
