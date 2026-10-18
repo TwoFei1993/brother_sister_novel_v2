@@ -1,0 +1,35 @@
+# Docker 构建上下文排除清单
+# 目标：Windows 构建上下文传输最小化——依赖在镜像内重装（各阶段 pnpm install），
+# 数据/日志/产物目录属运行时或本地残留，一律不进上下文。
+
+# 依赖（任意层）：镜像内按阶段重装，Windows node_modules 体积大且有平台二进制
+**/node_modules
+
+# 运行时数据（Zeabur/Docker 卷挂载，本地开发数据不进镜像）
+data
+logs
+backups
+
+# 构建产物（builder 阶段镜像内重新构建，避免旧产物污染）
+**/dist
+server/public
+
+# 测试与工具链残留
+**/playwright-report
+**/test-results
+**/coverage
+
+# 文档（部署指南面向人，不进镜像）
+docs
+*.md
+
+# 版本库与编辑器
+.git
+.codegraph
+.idea
+.vscode
+
+# 杂项
+*.log
+.DS_Store
+Thumbs.db

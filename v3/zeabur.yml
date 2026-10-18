@@ -1,0 +1,17 @@
+# Zeabur 部署配置 - 兄妹小说工坊 v3 主服务
+# 目录: v3（构建走多阶段 Dockerfile；运行 CMD 与 scripts/deploy.sh 一致：tsx 直跑 server）
+#
+# 以下两项在 Zeabur 控制台按服务配置（zeabur.yml 仅作声明参考）：
+#   Volumes: /app/data（数据持久化，必配）、/app/logs（日志，可选）
+#   Env:     ACCESS_PASSWORD=你的登录密码（必填）
+# 详见 v3/docs/部署指南.md
+
+novel-workshop-v3:
+  path: v3
+  build:
+    engine: docker
+  runtime:
+    port: 3001
+    volumes:
+      - /app/data
+      - /app/logs
