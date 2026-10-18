@@ -101,6 +101,8 @@ export const NovelSettingsSchema = z.strictObject({
   authorNote: z.string(),
   /** 作者注释注入深度（倒数第 N 条消息处），酒馆默认 4 */
   noteDepth: z.number().int().nonnegative(),
+  /** 作品级变量（{{getvar}}/{{setvar}} 作用域，设计 §5.1③）；缺省视为空表 */
+  variables: z.record(z.string(), z.string()).optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 

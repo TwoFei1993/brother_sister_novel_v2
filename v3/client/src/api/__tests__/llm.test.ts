@@ -1,0 +1,192 @@
+/**
+ * LLM 生成流 API 测试：buildGenerateBody 组装 / generateStream SSE 帧分发 / tokenizeMessages
+ * fetch 模块级 stub（jsdom），SSE 响应体用 ReadableStream 构造。
+ */
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { buildGenerateBody, generateStream, tokenizeMessages } from '../llm';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+/** 构造 SSE 流式响应（与 client.test.ts 同模式） */
+function sseResponse(chunks: string[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(encoder.encode(c));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+}
+
+describe('buildGenerateBody', () => {
+  it('组装 source/model/messages 并默认 stream:true', () => {
+    const body = buildGenerateBody({
+      source: 'openai',
+      model: 'gpt-4o',
+      messages: [{ role: 'system', content: 'hi' }],
+    });
+    expect(body).toEqual({
+      source: 'openai',
+      model: 'gpt-4o',
+      messages: [{ role: 'system', content: 'hi' }],
+      stream: true,
+    });
+  });
+
+  it('采样参数映射进 params：temperature 原名、maxTokens→max_tokens', () => {
+    const body = buildGenerateBody({
+      source: 'claude',
+      model: 'claude-sonnet-4',
+      messages: [{ role: 'user', content: 'x' }],
+      temperature: 0.7,
+      maxTokens: 2048,
+    });
+    expect(body.params).toEqual({ temperature: 0.7, max_tokens: 2048 });
+  });
+
+  it('无采样参数时不携带 params 字段', () => {
+    const body = buildGenerateBody({
+      source: 'gemini',
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'x' }],
+    });
+    expect(body).not.toHaveProperty('params');
+  });
+
+  it('stream:false 可显式关闭（非流式预留）', () => {
+    const body = buildGenerateBody({
+      source: 'openai',
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'x' }],
+      stream: false,
+    });
+    expect(body.stream).toBe(false);
+  });
+});
+
+describe('generateStream', () => {
+  it('text 帧逐条 onChunk，[DONE] 结束后 onDone 恰一次', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([
+          'data: {"text":"第一"}\n\n',
+          'data: {"text":"段"}\n\n',
+          'data: {"text":"文字"}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      ),
+    );
+    const chunks: string[] = [];
+    let doneCount = 0;
+    await generateStream(
+      { source: 'openai', model: 'gpt-4o', messages: [], stream: true },
+      {
+        onChunk: (t) => chunks.push(t),
+        onDone: () => {
+          doneCount += 1;
+        },
+        onError: vi.fn(),
+      },
+    );
+    expect(chunks).toEqual(['第一', '段', '文字']);
+    expect(doneCount).toBe(1);
+  });
+
+  it('error 帧分发 onError（携带 code/message），不误触发 onChunk', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse(['data: {"error":{"code":"LLM_AUTH","message":"密钥无效"}}\n\n', 'data: [DONE]\n\n']),
+      ),
+    );
+    const onChunk = vi.fn();
+    const onError = vi.fn();
+    await generateStream(
+      { source: 'openai', model: 'x', messages: [], stream: true },
+      { onChunk, onDone: vi.fn(), onError },
+    );
+    expect(onChunk).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith({ code: 'LLM_AUTH', message: '密钥无效' });
+  });
+
+  it('上游非 2xx（未开流）向上抛 ApiError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ code: 'LLM_QUOTA', message: '额度不足' }), { status: 502 })),
+    );
+    await expect(
+      generateStream({ source: 'openai', model: 'x', messages: [], stream: true }, {
+        onChunk: vi.fn(),
+        onDone: vi.fn(),
+        onError: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('signal 中止时向上抛 AbortError', async () => {
+    // 永不结束的流：abort 后 read 拒绝
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_path: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      ),
+    );
+    const controller = new AbortController();
+    const pending = generateStream(
+      { source: 'openai', model: 'x', messages: [], stream: true },
+      { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
+      controller.signal,
+    );
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+describe('tokenizeMessages', () => {
+  it('POST /api/tokenize，body 携带 source/model 与各消息 content', async () => {
+    const fetchMock = vi.fn(
+      async (): Promise<Response> =>
+        new Response(JSON.stringify({ count: 42, approximate: false }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await tokenizeMessages('openai', 'gpt-4o', [
+      { role: 'system', content: 'a' },
+      { role: 'user', content: 'b' },
+    ]);
+    expect(result).toEqual({ count: 42, approximate: false });
+    const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe('/api/tokenize');
+    expect(JSON.parse(String(init.body))).toEqual({
+      source: 'openai',
+      model: 'gpt-4o',
+      messages: [{ content: 'a' }, { content: 'b' }],
+    });
+  });
+
+  it('model 缺省时不携带 model 字段', async () => {
+    const fetchMock = vi.fn(
+      async (): Promise<Response> =>
+        new Response(JSON.stringify({ count: 1, approximate: true }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await tokenizeMessages('gemini', undefined, [{ role: 'user', content: 'x' }]);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      source: 'gemini',
+      messages: [{ content: 'x' }],
+    });
+  });
+});
