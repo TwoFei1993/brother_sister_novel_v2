@@ -103,6 +103,8 @@ export const NovelSettingsSchema = z.strictObject({
   noteDepth: z.number().int().nonnegative(),
   /** 作品级变量（{{getvar}}/{{setvar}} 作用域，设计 §5.1③）；缺省视为空表 */
   variables: z.record(z.string(), z.string()).optional(),
+  /** 快速指令（C 工作台侧栏一键复填的常用指令，作品级）；缺省视为空表 */
+  quickDirectives: z.array(z.string()).optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 
