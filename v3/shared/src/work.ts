@@ -1,0 +1,165 @@
+/**
+ * 作品模型（设计 §4.3）与小说设定
+ *
+ * NovelSettings 从旧站 src/types/novel.ts 全量移植（题材/哥妹人设/能力/关系/
+ * 体系/势力/矛盾/基调/文风/章数/粘贴大纲），新增 authorNote/noteDepth（作者注释深度注入）。
+ * Work 为内部格式：strict 严格校验。
+ */
+import { z } from 'zod';
+
+// ---------- 旧站枚举（原样移植，中文字面量直接作值） ----------
+export const GenreTypeSchema = z.enum([
+  'chuanyue',
+  'scifi',
+  'moshi',
+  'wuxian',
+  'xuanhuan',
+  'hunhe',
+  'custom',
+]);
+export type GenreType = z.infer<typeof GenreTypeSchema>;
+
+export const BrotherPersonalitySchema = z.enum([
+  '冷酷腹黑',
+  '温柔强大',
+  '痞帅不羁',
+  '沉稳睿智',
+  '偏执危险',
+  '表面废物实则无敌',
+  '孤傲清冷',
+  '疯批危险',
+]);
+export type BrotherPersonality = z.infer<typeof BrotherPersonalitySchema>;
+
+export const SisterPersonalitySchema = z.enum([
+  '表面软萌实则腹黑',
+  '天才型',
+  '坚韧独立',
+  '呆萌可爱',
+  '冷静理智',
+  '神秘未知身份',
+  '外柔内刚',
+  '看似普通实则惊艳',
+]);
+export type SisterPersonality = z.infer<typeof SisterPersonalitySchema>;
+
+export const RelationTypeSchema = z.enum([
+  '相互扶持共同成长型',
+  '哥哥全力守护妹妹型',
+  '妹妹反向救赎哥哥型',
+  '各自成长后震撼重逢型',
+  '表面互怼实则深厚羁绊型',
+]);
+export type RelationType = z.infer<typeof RelationTypeSchema>;
+
+export const StoryToneSchema = z.enum([
+  '热血爽文',
+  '虐中带甜',
+  '深度烧脑',
+  '恐怖压抑',
+  '温情治愈',
+  '权谋博弈',
+]);
+export type StoryTone = z.infer<typeof StoryToneSchema>;
+
+export const WritingStyleSchema = z.enum(['default', 'qidian', 'jjwxc', 'fanqie', 'custom']);
+export type WritingStyle = z.infer<typeof WritingStyleSchema>;
+
+// ---------- 小说设定（旧站 NovelSettings 全字段 + authorNote/noteDepth） ----------
+export const NovelSettingsSchema = z.strictObject({
+  genre: GenreTypeSchema,
+  subGenre: z.string(),
+  customGenre: z.string(),
+  customSubGenre: z.string(),
+  /** 背景备注 */
+  backgroundNote: z.string(),
+  brotherAge: z.number(),
+  brotherPersonalities: z.array(BrotherPersonalitySchema),
+  customBrotherPersonality: z.string(),
+  brotherAbility: z.string(),
+  sisterAge: z.number(),
+  sisterPersonalities: z.array(SisterPersonalitySchema),
+  customSisterPersonality: z.string(),
+  sisterAbility: z.string(),
+  relationType: RelationTypeSchema,
+  customRelationType: z.string(),
+  /** 力量体系 */
+  powerSystem: z.string(),
+  /** 势力划分 */
+  factions: z.string(),
+  /** 核心矛盾 */
+  coreConflict: z.string(),
+  storyTones: z.array(StoryToneSchema),
+  customStoryTone: z.string(),
+  writingStyle: WritingStyleSchema,
+  customWritingStyle: z.string(),
+  desiredChapterCount: z.number().int().positive(),
+  outlineChapterCount: z.number().int().positive(),
+  /** 粘贴的大纲原文 */
+  pastedOutline: z.string(),
+  /** 作者注释：按 noteDepth 深度注入（酒馆 Author's Note 对齐） */
+  authorNote: z.string(),
+  /** 作者注释注入深度（倒数第 N 条消息处），酒馆默认 4 */
+  noteDepth: z.number().int().nonnegative(),
+});
+export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
+
+/** 新建作品的设定默认值（移植旧站 defaultSettings） */
+export const defaultNovelSettings: NovelSettings = {
+  genre: 'chuanyue',
+  subGenre: '异世大陆',
+  customGenre: '',
+  customSubGenre: '',
+  backgroundNote: '',
+  brotherAge: 22,
+  brotherPersonalities: [],
+  customBrotherPersonality: '',
+  brotherAbility: '',
+  sisterAge: 18,
+  sisterPersonalities: [],
+  customSisterPersonality: '',
+  sisterAbility: '',
+  relationType: '相互扶持共同成长型',
+  customRelationType: '',
+  powerSystem: '',
+  factions: '',
+  coreConflict: '',
+  storyTones: ['热血爽文'],
+  customStoryTone: '',
+  writingStyle: 'default',
+  customWritingStyle: '',
+  desiredChapterCount: 50,
+  outlineChapterCount: 50,
+  pastedOutline: '',
+  authorNote: '',
+  noteDepth: 4,
+};
+
+// ---------- 作品 ----------
+export const WorkModeSchema = z.enum(['novel', 'chat']);
+export type WorkMode = z.infer<typeof WorkModeSchema>;
+
+export const ViewPreferenceSchema = z.enum(['a', 'b', 'c']);
+export type ViewPreference = z.infer<typeof ViewPreferenceSchema>;
+
+export const WorkSchema = z.strictObject({
+  id: z.string().min(1),
+  /** 乐观版本号：每次写入 +1，PATCH 不匹配返回 409 */
+  revision: z.number().int().nonnegative(),
+  title: z.string(),
+  /** 同一数据结构，语义不同：novel=作者指令驱动，chat=角色扮演 */
+  mode: WorkModeSchema,
+  /** 题材主题（6 套 + custom，驱动前端主题切换） */
+  genre: z.string(),
+  characterIds: z.array(z.string()),
+  worldbookIds: z.array(z.string()),
+  presetId: z.string(),
+  regexScriptIds: z.array(z.string()),
+  settings: NovelSettingsSchema,
+  /** 角色名 → TTS 声音路由 */
+  voiceMap: z.record(z.string(), z.string()),
+  viewPreference: ViewPreferenceSchema.optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type Work = z.infer<typeof WorkSchema>;

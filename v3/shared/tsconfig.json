@@ -1,0 +1,9 @@
+{
+  // @v3/shared：纯类型与 schema 包，无构建产物（client/server 直接引源码）
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

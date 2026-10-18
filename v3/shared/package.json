@@ -3,8 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "前后端共享 TS 类型与 zod schema（Task 2 填充）",
+  "description": "前后端共享 TS 类型与 zod schema：内部格式严格校验，酒馆原生格式宽松校验（passthrough 保字段）",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
   }
 }
