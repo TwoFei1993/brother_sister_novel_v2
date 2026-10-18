@@ -15,6 +15,7 @@ import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDra
 import WorkSettingsSheet from '../features/workbench/WorkSettingsSheet';
 import WorkViewRouter from '../features/workbench/WorkViewRouter';
 import { useGenerate } from '../hooks/useGenerate';
+import { useWorkTheme } from '../lib/theme';
 import { useWorkStore } from '../stores/work';
 import type { Message } from '@shared/message';
 import type { ViewPreference } from '@shared/work';
@@ -53,7 +54,7 @@ function ViewSwitcher({
           disabled={disabled}
           data-testid={`view-tab-${t.id}`}
           onClick={() => onChange(t.id)}
-          className={`flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 text-sm transition-colors disabled:opacity-40 ${
+          className={`flex h-9 min-w-9 items-center justify-center rounded-md px-1.5 text-sm transition-colors disabled:opacity-40 ${
             value === t.id
               ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]'
               : 'text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]'
@@ -72,6 +73,8 @@ export default function WorkPage() {
   const { work, messages, loading, loadError, hasMore, loadingOlder, loadWork, loadOlder, setWork } =
     useWorkStore();
   const gen = useGenerate();
+  // 题材→主题：作品挂载时按 genre 换肤，离开还原默认暗色基调（Task 32）
+  useWorkTheme(work?.genre ?? 'hunhe');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 视图乐观切换覆盖值（PATCH 成功后清除，回落到 work.viewPreference 派生） */

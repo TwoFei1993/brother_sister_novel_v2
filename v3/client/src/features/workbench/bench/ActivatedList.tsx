@@ -55,7 +55,7 @@ export default function ActivatedList({ activatedIds, entries }: ActivatedListPr
               key={e.id}
               data-testid="entry-item"
               data-active={on ? 'true' : 'false'}
-              className={`flex min-h-7 items-center gap-2 rounded px-1.5 text-xs ${on ? 'bg-[hsl(var(--accent))]/10' : 'opacity-50'}`}
+              className={`flex min-h-9 items-center gap-2 rounded px-1.5 text-xs ${on ? 'bg-[hsl(var(--accent))]/10' : 'opacity-50'}`}
               title={e.id}
             >
               <span
@@ -72,7 +72,7 @@ export default function ActivatedList({ activatedIds, entries }: ActivatedListPr
           <li
             key={id}
             data-testid="entry-unknown"
-            className="flex min-h-7 items-center gap-2 rounded bg-amber-500/10 px-1.5 text-xs text-amber-600"
+            className="flex min-h-9 items-center gap-2 rounded bg-amber-500/10 px-1.5 text-xs text-amber-600"
             title={`未在已绑定世界书中找到：${id}`}
           >
             <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />

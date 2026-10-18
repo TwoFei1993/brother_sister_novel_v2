@@ -75,7 +75,7 @@ export default function TtsBar({
   return (
     <div
       data-testid="tts-bar"
-      className="fixed bottom-0 left-0 right-0 z-50 flex h-14 items-center justify-between gap-2 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 pb-[env(safe-area-inset-bottom)] sm:px-4"
+      className="flex h-14 shrink-0 items-center justify-between gap-2 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 sm:px-4"
     >
       {/* 章控制 */}
       <div className="flex items-center gap-1">
@@ -122,8 +122,8 @@ export default function TtsBar({
         )}
       </div>
 
-      {/* 声音与语速 */}
-      <div className="flex items-center gap-2 overflow-x-auto">
+      {/* 声音与语速（窄屏横向滑动，隐藏滚动条避免占行视觉） */}
+      <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <label className="flex items-center gap-1 text-xs text-[hsl(var(--fg-muted))]">
           <span className="hidden sm:inline">旁白声</span>
           <select

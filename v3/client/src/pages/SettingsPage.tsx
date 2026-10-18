@@ -39,14 +39,17 @@ export default function SettingsPage() {
         <h1 className="text-xl font-semibold">设置</h1>
       </header>
 
-      <nav aria-label="设置分区" className="mb-5 flex gap-2">
+      <nav
+        aria-label="设置分区"
+        className="mb-5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {SECTIONS.map((s) => (
           <button
             key={s.id}
             type="button"
             aria-current={section === s.id ? 'true' : undefined}
             onClick={() => setSection(s.id)}
-            className={`min-h-[36px] flex-1 rounded-lg border px-3 text-sm transition-colors ${
+            className={`min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm transition-colors ${
               section === s.id
                 ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/15 font-medium text-[hsl(var(--accent))]'
                 : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))] hover:border-[hsl(var(--accent))]'

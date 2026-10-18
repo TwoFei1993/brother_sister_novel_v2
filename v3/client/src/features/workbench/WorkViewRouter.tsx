@@ -7,11 +7,12 @@
  * - 指令复填闭环：C 侧栏点击指令 → directiveSeed → CommandBar 输入框（onSeedConsumed 复位）
  * - A 视图动作：swipe 切换 / 重roll / 正文编辑 / 指令重放（PATCH + 乐观回滚）
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Message } from '@shared/message';
 import type { Work, ViewPreference } from '@shared/work';
 
 import { patchMessage, upsertMessage } from '../../api/works';
+import { exportTxt } from '../../lib/export';
 import { loadAssembleAssets } from '../../hooks/generation-pipeline';
 import type { UseGenerateResult } from '../../hooks/useGenerate';
 import { useWorkbenchData } from '../../hooks/useWorkbenchData';
@@ -23,6 +24,7 @@ import WorkbenchView from './bench/WorkbenchView';
 import CommandBar from './CommandBar';
 import DialogView from './dialog/DialogView';
 import ReadingView from './ReadingView';
+import WorkTtsBar from '../tts/WorkTtsBar';
 
 /** 空态引导：无章节且未在生成时展示；含角色卡备选开场（alternate_greetings）一键入库 */
 function EmptyGuide({ work, onCreated }: { work: Work; onCreated: (m: Message) => void }) {
@@ -112,6 +114,14 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
   );
   const lastChapter = chapters.length > 0 ? chapters[chapters.length - 1] : null;
   const showReading = chapters.length > 0 || gen.streaming;
+  /** TTS 连播队列：按章号升序（与 ReadingView 渲染序同源，队列下标=渲染下标，供高亮对齐） */
+  const ttsChapters = useMemo(
+    () =>
+      [...chapters]
+        .sort((a, b) => a.chapter.index - b.chapter.index)
+        .map((m) => ({ text: m.content, voiceMap: work.voiceMap })),
+    [chapters, work.voiceMap],
+  );
 
   // ---------- novel 生成动作（CommandBar） ----------
 
@@ -235,11 +245,22 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             hasMore={hasMore}
             loadingOlder={loadingOlder}
             onNeedOlder={loadOlder}
+            onExportTxt={() =>
+              exportTxt(
+                work.title,
+                [...chapters]
+                  .sort((a, b) => a.chapter.index - b.chapter.index)
+                  .map((m) => ({ title: m.chapter.title, content: m.content })),
+              )
+            }
           />
         )
       ) : (
         <EmptyGuide work={work} onCreated={upsertLocal} />
       )}
+
+      {/* novel TTS 听书条（引擎常驻；仅 B 视图显示控制条，高亮由 ReadingView 读 tts store） */}
+      {work.mode === 'novel' && <WorkTtsBar work={work} chapters={ttsChapters} visible={currentView === 'b'} />}
 
       <CommandBar
         streaming={gen.streaming}

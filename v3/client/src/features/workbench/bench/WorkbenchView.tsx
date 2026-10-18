@@ -157,7 +157,7 @@ export default function WorkbenchView({
             onClick={() => setDrawerOpen(false)}
             aria-label="关闭工作台侧栏"
             data-testid="workbench-drawer-close"
-            className="flex h-8 min-w-8 items-center justify-center rounded text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+            className="flex h-9 min-w-9 items-center justify-center rounded text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
           >
             ×
           </button>

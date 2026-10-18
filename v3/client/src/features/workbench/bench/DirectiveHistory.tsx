@@ -53,7 +53,7 @@ export default function DirectiveHistory({
           <span
             key={`${q}-${i}`}
             data-testid="quick-directive"
-            className="flex min-h-7 items-center overflow-hidden rounded-full border border-[hsl(var(--border-soft))] text-xs"
+            className="flex min-h-9 items-center overflow-hidden rounded-full border border-[hsl(var(--border-soft))] text-xs"
           >
             <button
               type="button"
@@ -82,14 +82,14 @@ export default function DirectiveHistory({
             placeholder="新增常用指令"
             aria-label="新快速指令文本"
             data-testid="quick-input"
-            className="h-7 w-28 rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+            className="h-9 w-28 rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
           />
           <button
             type="submit"
             aria-label="添加快速指令"
             data-testid="add-quick"
             disabled={!draft.trim()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--border-soft))] text-sm transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--border-soft))] text-sm transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
           >
             ＋
           </button>

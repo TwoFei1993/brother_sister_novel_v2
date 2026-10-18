@@ -30,6 +30,8 @@ export interface ChatViewProps {
   buffer?: string;
   onSwipe?: (messageId: string, dir: 1 | -1) => void;
   onRegenerate?: (messageId: string) => void;
+  /** 消息点读（🔊）：宿主接 TTS engine.speakOne */
+  onSpeak?: (content: string) => void;
 }
 
 export default function ChatView({
@@ -43,10 +45,27 @@ export default function ChatView({
   buffer = '',
   onSwipe,
   onRegenerate,
+  onSpeak,
 }: ChatViewProps) {
   const [draft, setDraft] = useState('');
   const [pendingText, setPendingText] = useState('');
   const endRef = useRef<HTMLDivElement | null>(null);
+  /** 移动端软键盘抬起高度（visualViewport 收缩量），垫高输入栏避免被键盘遮挡 */
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  // 软键盘避让：visualViewport 高度收缩 + 偏移即键盘高度（桌面为 0 不影响布局）
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setKeyboardInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
 
   // 流式结束（成功或中断）清除本地暂存的刚发送文本（已入库消息接管展示）
   useEffect(() => {
@@ -96,6 +115,7 @@ export default function ChatView({
               canRegenerate={Boolean(onRegenerate)}
               onSwipe={onSwipe}
               onRegenerate={onRegenerate}
+              onSpeak={onSpeak}
             />
           ))}
           {pendingText && <UserBubble name="用户" content={pendingText} testid="chat-pending-bubble" />}
@@ -114,7 +134,10 @@ export default function ChatView({
         </div>
       </div>
 
-      <div className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4">
+      <div
+        className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4"
+        style={{ marginBottom: keyboardInset }}
+      >
         <div className="mx-auto flex max-w-3xl items-center gap-2">
           <input
             type="text"
@@ -174,12 +197,14 @@ function MessageBubble({
   canRegenerate,
   onSwipe,
   onRegenerate,
+  onSpeak,
 }: {
   message: Message;
   canSwipe: boolean;
   canRegenerate: boolean;
   onSwipe?: (messageId: string, dir: 1 | -1) => void;
   onRegenerate?: (messageId: string) => void;
+  onSpeak?: (content: string) => void;
 }) {
   if (message.role === 'user') {
     return <UserBubble name={message.name} content={message.content} />;
@@ -191,24 +216,54 @@ function MessageBubble({
       <div className="ml-2 max-w-[80%]">
         <p className="mb-0.5 text-xs text-[hsl(var(--fg-muted))]">{message.name}</p>
         <div className="rounded-2xl rounded-tl-sm bg-[hsl(var(--surface))] px-3 py-2 text-sm whitespace-pre-wrap">{content}</div>
-        {(canSwipe || canRegenerate) && (
+        {(canSwipe || canRegenerate || onSpeak) && (
           <div className="mt-1 flex items-center gap-1.5 text-xs text-[hsl(var(--fg-muted))]">
             {canSwipe && (
               <span className="flex items-center gap-1" data-testid="chat-swipe-controls">
-                <button type="button" title="上一支" data-testid="swipe-left" onClick={() => onSwipe?.(message.id, -1)} className="hover:text-[hsl(var(--fg))]">
+                <button
+                  type="button"
+                  title="上一支"
+                  data-testid="swipe-left"
+                  onClick={() => onSwipe?.(message.id, -1)}
+                  className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
+                >
                   ◀
                 </button>
                 <span data-testid="swipe-position">
                   {message.swipeId + 1}/{message.swipes.length}
                 </span>
-                <button type="button" title="下一支" data-testid="swipe-right" onClick={() => onSwipe?.(message.id, 1)} className="hover:text-[hsl(var(--fg))]">
+                <button
+                  type="button"
+                  title="下一支"
+                  data-testid="swipe-right"
+                  onClick={() => onSwipe?.(message.id, 1)}
+                  className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
+                >
                   ▶
                 </button>
               </span>
             )}
             {canRegenerate && (
-              <button type="button" title="重新生成本条" data-testid="regen-btn" onClick={() => onRegenerate?.(message.id)} className="hover:text-[hsl(var(--fg))]">
+              <button
+                type="button"
+                title="重新生成本条"
+                data-testid="regen-btn"
+                onClick={() => onRegenerate?.(message.id)}
+                className="flex h-9 items-center px-1 hover:text-[hsl(var(--fg))]"
+              >
                 ↻ 重roll
+              </button>
+            )}
+            {onSpeak && (
+              <button
+                type="button"
+                title="朗读本条"
+                aria-label={`朗读 ${message.name} 的消息`}
+                data-testid="speak-btn"
+                onClick={() => onSpeak(content)}
+                className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
+              >
+                🔊
               </button>
             )}
           </div>

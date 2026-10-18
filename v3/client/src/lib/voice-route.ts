@@ -84,8 +84,9 @@ function stripHeading(line: string): string {
   return line;
 }
 
-/** 切分：\n 切行 → 去标题 → trim → 滤空行 → 未闭合引号段吸收后续行 */
-function splitParagraphs(text: string): string[] {
+/** 切分：\n 切行 → 去标题 → trim → 滤空行 → 未闭合引号段吸收后续行
+ * （导出供 ReadingView 播放高亮按同一切分渲染段落，保证高亮段与朗读段对齐） */
+export function splitParagraphs(text: string): string[] {
   const lines = text
     .split('\n')
     .map((l) => stripHeading(l).trim())

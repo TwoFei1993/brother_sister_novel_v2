@@ -78,7 +78,7 @@ function DirectiveBubble({ text, disabled, busy, onReplay }: DirectiveBubbleProp
               <button
                 type="button"
                 data-testid="directive-cancel"
-                className="h-7 rounded-md px-2.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+                className="h-9 rounded-md px-2.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
                 onClick={() => setEditing(false)}
               >
                 取消
@@ -87,7 +87,7 @@ function DirectiveBubble({ text, disabled, busy, onReplay }: DirectiveBubbleProp
                 type="button"
                 disabled={disabled || draft.trim() === ''}
                 data-testid="directive-confirm"
-                className="h-7 rounded-md bg-[hsl(var(--accent))] px-2.5 text-xs text-[hsl(var(--accent-fg))] disabled:opacity-40"
+                className="h-9 rounded-md bg-[hsl(var(--accent))] px-2.5 text-xs text-[hsl(var(--accent-fg))] disabled:opacity-40"
                 onClick={confirmReplay}
               >
                 重写本章
@@ -108,7 +108,7 @@ function DirectiveBubble({ text, disabled, busy, onReplay }: DirectiveBubbleProp
             title="重放：修改指令后重写本章"
             data-testid="replay-btn"
             onClick={startEdit}
-            className="flex h-7 items-center gap-1 rounded-md px-1.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] disabled:opacity-40"
+            className="flex h-9 items-center gap-1 rounded-md px-1.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] disabled:opacity-40"
           >
             ↻ 重放
           </button>
@@ -182,7 +182,7 @@ function ChapterBubble({ message, disabled, busy, buffer, onSwipe, onReroll, onE
               <button
                 type="button"
                 data-testid="content-cancel"
-                className="h-7 rounded-md px-2.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+                className="h-9 rounded-md px-2.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
                 onClick={() => setEditing(false)}
               >
                 取消
@@ -191,7 +191,7 @@ function ChapterBubble({ message, disabled, busy, buffer, onSwipe, onReroll, onE
                 type="button"
                 disabled={disabled || draft.trim() === ''}
                 data-testid="content-save"
-                className="h-7 rounded-md bg-[hsl(var(--accent))] px-2.5 text-xs text-[hsl(var(--accent-fg))] disabled:opacity-40"
+                className="h-9 rounded-md bg-[hsl(var(--accent))] px-2.5 text-xs text-[hsl(var(--accent-fg))] disabled:opacity-40"
                 onClick={() => void saveEdit()}
               >
                 保存

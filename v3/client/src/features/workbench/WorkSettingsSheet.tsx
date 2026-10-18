@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { updateWork } from '../../api/works';
 import { listCharacters, listPresets, listWorldbooks, type LibraryAssetRef } from '../../api/library';
 import type { Work } from '@shared/work';
+import VoiceMapEditor from '../tts/VoiceMapEditor';
 
 interface WorkSettingsSheetProps {
   work: Work;
@@ -143,7 +144,7 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
               aria-checked={allowOverride}
               data-testid="allow-override"
               onClick={() => setAllowOverride((v) => !v)}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors after:absolute after:-inset-1.5 after:content-[''] ${
                 allowOverride ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--border-soft))]'
               }`}
             >
@@ -167,6 +168,11 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* TTS 分声绑定：独立 PATCH voiceMap（revision 乐观锁），保存后同步 store */}
+          <section className="border-t border-[hsl(var(--border-soft))] pt-4">
+            <VoiceMapEditor work={work} onSaved={onSaved} />
           </section>
         </div>
 

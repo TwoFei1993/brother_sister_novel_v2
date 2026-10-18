@@ -13,6 +13,7 @@ import type { Work } from '@shared/work';
 
 import { listCharacters } from '../../api/library';
 import { pickSpeaker, type ChatMember } from '../../engine/prompt/activation';
+import { createTtsEngine } from '../../hooks/useTts';
 import { useGenerationStore } from '../../stores/generation';
 import { useWorkStore } from '../../stores/work';
 
@@ -37,6 +38,8 @@ export default function ChatWorkspace({ work }: { work: Work }) {
   const chat = useChatGenerate(work, messages);
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [manualPickId, setManualPickId] = useState<string | null>(null);
+  /** 消息点读引擎（chat 与 novel 互斥挂载，独占全局 tts store 无冲突） */
+  const ttsEngine = useMemo(() => createTtsEngine(), []);
 
   // 解析绑定角色为对话成员（按绑定顺序；失败静默 → 空成员引导态）
   useEffect(() => {
@@ -137,6 +140,7 @@ export default function ChatWorkspace({ work }: { work: Work }) {
         buffer={chat.buffer}
         onSwipe={(id, dir) => void handleSwipe(id, dir)}
         onRegenerate={(id) => void handleRegenerate(id)}
+        onSpeak={(content) => ttsEngine.speakOne(content, { voiceMap: work.voiceMap })}
       />
     </div>
   );

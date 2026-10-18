@@ -23,7 +23,7 @@ interface SwipeBarProps {
 }
 
 const barBtn =
-  'flex h-8 min-w-8 items-center justify-center rounded px-1.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] disabled:cursor-not-allowed disabled:opacity-40';
+  'flex h-9 min-w-9 items-center justify-center rounded px-1.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] disabled:cursor-not-allowed disabled:opacity-40';
 
 export default function SwipeBar({
   index,
@@ -46,7 +46,7 @@ export default function SwipeBar({
             disabled={disabled}
             data-testid="swipe-left"
             onClick={() => onSwipe(-1)}
-            className={`${barBtn} h-7`}
+            className={`${barBtn}`}
           >
             ◀
           </button>
@@ -60,7 +60,7 @@ export default function SwipeBar({
             disabled={disabled}
             data-testid="swipe-right"
             onClick={() => onSwipe(1)}
-            className={`${barBtn} h-7`}
+            className={`${barBtn}`}
           >
             ▶
           </button>

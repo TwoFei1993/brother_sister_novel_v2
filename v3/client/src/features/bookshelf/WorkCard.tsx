@@ -140,8 +140,8 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
         <span className="text-[10px] text-white/60">{genreLabel(work.genre)}</span>
       </button>
 
-      {/* 悬浮操作条（≥36px 触控目标；移动端常显，桌面 hover 浮现） */}
-      <div className="absolute inset-x-0 bottom-0 flex translate-y-1 justify-center gap-2 p-1.5 transition-opacity sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100">
+      {/* 操作条：移动端常显（文档流，避免叠压信息区）；桌面 hover 悬浮浮现。触控目标 ≥36px */}
+      <div className="mt-2 flex justify-center gap-2 sm:absolute sm:inset-x-0 sm:bottom-0 sm:translate-y-1 sm:p-1.5 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100">
         <button
           type="button"
           onClick={openWork}

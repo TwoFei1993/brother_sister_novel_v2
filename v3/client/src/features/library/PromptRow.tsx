@@ -79,7 +79,7 @@ export default function PromptRow(props: PromptRowProps) {
           aria-label={`上移 ${name}`}
           disabled={isFirst}
           onClick={() => onMove(-1)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[hsl(var(--fg-muted))] hover:border-[hsl(var(--border-soft))] disabled:opacity-30"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-[hsl(var(--fg-muted))] hover:border-[hsl(var(--border-soft))] disabled:opacity-30"
         >
           ↑
         </button>
@@ -88,7 +88,7 @@ export default function PromptRow(props: PromptRowProps) {
           aria-label={`下移 ${name}`}
           disabled={isLast}
           onClick={() => onMove(1)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[hsl(var(--fg-muted))] hover:border-[hsl(var(--border-soft))] disabled:opacity-30"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-[hsl(var(--fg-muted))] hover:border-[hsl(var(--border-soft))] disabled:opacity-30"
         >
           ↓
         </button>

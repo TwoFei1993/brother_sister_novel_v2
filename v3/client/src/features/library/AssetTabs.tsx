@@ -21,7 +21,10 @@ const TAB_ITEMS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
 
 export default function AssetTabs({ value, onChange }: AssetTabsProps) {
   return (
-    <nav aria-label="资产分类" className="mb-5 flex flex-wrap gap-2">
+    <nav
+      aria-label="资产分类"
+      className="mb-5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {TAB_ITEMS.map((item) => (
         <button
           key={item.id}
@@ -29,7 +32,7 @@ export default function AssetTabs({ value, onChange }: AssetTabsProps) {
           aria-current={value === item.id ? 'true' : undefined}
           data-tab={item.id}
           onClick={() => onChange(item.id)}
-          className={`min-h-[36px] flex-1 rounded-lg border px-3 text-sm transition-colors ${
+          className={`min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm transition-colors ${
             value === item.id
               ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/15 font-medium text-[hsl(var(--accent))]'
               : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))] hover:border-[hsl(var(--accent))]'
