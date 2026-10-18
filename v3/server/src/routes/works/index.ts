@@ -9,6 +9,7 @@ import { Router } from 'express';
 
 import { authRequired } from '../../middleware/auth';
 import { zodBody } from '../../middleware/validate';
+import { messagesRouter } from './messages';
 import {
   createWork,
   createWorkSchema,
@@ -30,6 +31,5 @@ worksRouter.get('/works/:id', wrap(getWork));
 worksRouter.patch('/works/:id', zodBody(updateWorkSchema), wrap(updateWork));
 worksRouter.delete('/works/:id', wrap(deleteWork));
 
-// ---- Task 8 预留：messages 子路由（JSONL 消息流，设计 §6）----
-// import { messagesRouter } from './messages';
-// worksRouter.use('/works/:id/messages', messagesRouter);
+// messages 子路由（JSONL 消息流，设计 §6）：读三窗口 + 写三操作，见 messages.ts
+worksRouter.use('/works/:id/messages', messagesRouter);

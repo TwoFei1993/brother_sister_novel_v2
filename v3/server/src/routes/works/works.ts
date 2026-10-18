@@ -37,12 +37,12 @@ function workFile(id: string): string {
 
 /** id 直接作目录名：仅允许安全字符，杜绝 ../ 路径穿越（服务端生成的 UUID 天然满足） */
 const SAFE_ID_RE = /^[\w-]+$/;
-function assertSafeId(id: string): void {
+export function assertSafeId(id: string): void {
   if (!SAFE_ID_RE.test(id)) throw new HttpError(404, '作品不存在');
 }
 
-/** 读单个作品；不存在抛 404（work.json 缺失/损坏均视为不存在） */
-async function readWork(id: string): Promise<Work> {
+/** 读单个作品；不存在抛 404（work.json 缺失/损坏均视为不存在）。messages 路由复用同一作品判定 */
+export async function readWork(id: string): Promise<Work> {
   const work = await readJson<Work>(workFile(id));
   if (!work) throw new HttpError(404, '作品不存在');
   return work;
