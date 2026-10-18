@@ -3,3 +3,9 @@
  * 后续任务（regex.ts、memory.ts、assemble.ts、postprocess.ts）在此追加汇出
  */
 export { substituteParams } from './macros';
+export {
+  getRegexedString,
+  placementMatches,
+  runRegexScript,
+} from './regex';
+export type { RegexPlacement, RegexRunContext, RegexStringOpts } from './regex';
