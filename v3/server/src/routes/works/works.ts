@@ -10,6 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { rm, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
@@ -28,8 +29,12 @@ import {
 } from '@shared/work';
 
 // ---------- 路径解析（实时读 DATA_DIR，测试注入临时目录） ----------
-function worksDir(): string {
-  return resolve(process.env.DATA_DIR ?? 'data', 'works');
+// 基准与 main.ts/paths.ts 一致：相对路径以 server/ 为基准（本文件位于 src/routes/works/，上三级即 server/），
+// 不再相对 cwd 解析——dev 与生产（deploy.sh）cwd 不同也落同一目录。
+const WORKS_SERVER_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
+/** 作品数据根：DATA_DIR/works（绝对基准，供 messages.ts 复用，杜绝相对 cwd 的第二份解析） */
+export function worksDir(): string {
+  return resolve(WORKS_SERVER_ROOT, process.env.DATA_DIR ?? '../data', 'works');
 }
 function workFile(id: string): string {
   return join(worksDir(), id, 'work.json');

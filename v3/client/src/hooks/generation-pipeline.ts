@@ -46,8 +46,30 @@ export interface AssembleAssets {
   regexScripts: TavernRegexScript[];
 }
 
-/** 预设缺失兜底：空 prompt_order → 只装历史 + 指令 + 深度注入，生成仍可用 */
-const EMPTY_PRESET: TavernPreset = { prompts: [], prompt_order: [] };
+/**
+ * 预设缺失兜底：标准酒馆 marker 骨架（Default 预设的 marker 顺序，无内容提示词）。
+ * 关键：worldInfoBefore/After 必须在列——否则只绑世界书不绑预设时，扫描命中的条目
+ * 内容会因 prompt_order 无处装填而被静默丢弃（M3 验收发现并修复）。
+ * main/jailbreak 无预设时 blocks 取空串自然跳过；卡字段由 marker 位置装填。
+ */
+export const EMPTY_PRESET: TavernPreset = {
+  prompts: [],
+  prompt_order: [
+    {
+      character_id: 100001,
+      order: [
+        { identifier: 'main', enabled: true },
+        { identifier: 'worldInfoBefore', enabled: true },
+        { identifier: 'charDescription', enabled: true },
+        { identifier: 'charPersonality', enabled: true },
+        { identifier: 'scenario', enabled: true },
+        { identifier: 'worldInfoAfter', enabled: true },
+        { identifier: 'chatHistory', enabled: true },
+        { identifier: 'jailbreak', enabled: true },
+      ],
+    },
+  ],
+};
 
 /** 世界书扫描全局设置（scanDepth 固定 10；条目级 scanDepth 可更深） */
 const SCAN_SETTINGS: ScanSettings = {
@@ -129,7 +151,8 @@ export async function scanAndAssemble(
 ): Promise<FittedPrompt> {
   const scan = scanWorldInfo({
     books: assets.worldbooks,
-    chatTexts: [...messages].reverse().map((m) => m.content),
+    // 扫描池 = 本轮指令（最新文本，必扫）+ 历史消息（最近的在前，与酒馆扫描深度语义一致）
+    chatTexts: [directive, ...[...messages].reverse().map((m) => m.content)].filter(Boolean),
     settings: SCAN_SETTINGS,
     macroEnv: env,
   });

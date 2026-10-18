@@ -13,7 +13,7 @@
  *   会误剥 chat 正文首行的「#」文本）
  */
 import type { Message, MessageExtra } from '@shared/message';
-import type { TavernCardV2, TavernPreset } from '@shared/tavern';
+import type { TavernCardV2 } from '@shared/tavern';
 import type { Work } from '@shared/work';
 
 import { tokenizeMessages, type GenerateMessage } from '../../api/llm';
@@ -32,6 +32,7 @@ import {
 } from '../../hooks/generation-flow';
 import {
   buildMacroEnv,
+  EMPTY_PRESET as pipelineEmptyPreset,
   persistMessage,
   persistVariables,
   type AssembleAssets,
@@ -39,8 +40,8 @@ import {
   type PendingVars,
 } from '../../hooks/generation-pipeline';
 
-/** 预设缺失兜底（与 generation-pipeline 同值；其未导出故本地声明） */
-const EMPTY_PRESET: TavernPreset = { prompts: [], prompt_order: [] };
+// 预设缺失兜底（标准 marker 骨架）收敛到 generation-pipeline，chat 与 novel 共用
+const EMPTY_PRESET = pipelineEmptyPreset;
 
 /** 世界书扫描全局设置（与 generation-pipeline 同值；其未导出故本地声明） */
 const SCAN_SETTINGS: ScanSettings = {
@@ -96,7 +97,8 @@ export async function scanAndAssembleChat(
 ): Promise<FittedPrompt> {
   const scan = scanWorldInfo({
     books: assets.worldbooks,
-    chatTexts: [...messages].reverse().map((m) => m.content),
+    // 扫描池 = 本轮用户发言（最新文本，必扫）+ 历史消息（与 generation-pipeline 同语义）
+    chatTexts: [userMessage, ...[...messages].reverse().map((m) => m.content)].filter(Boolean),
     settings: SCAN_SETTINGS,
     macroEnv: env,
   });

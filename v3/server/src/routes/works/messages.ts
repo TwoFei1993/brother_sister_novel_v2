@@ -10,7 +10,7 @@
  * 每次写后锁内重算 stats 缓存（messageCount/chapterCount/charCount）并落 work.json，
  * 书架读取只看缓存不扫全文件（§4.6）。
  */
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type { RequestHandler } from 'express';
 import { Router } from 'express';
 
@@ -19,11 +19,11 @@ import { withWorkLock } from '../../middleware/writer';
 import { appendLine, readAll, readWindow, rewriteAll } from '../../storage/jsonl';
 import { MessageSchema, type Message } from '@shared/message';
 import type { WorkStats } from '@shared/work';
-import { assertSafeId, readWork, updateWorkStats, wrap } from './works';
+import { assertSafeId, readWork, updateWorkStats, wrap, worksDir } from './works';
 
-/** 作品消息文件（与 works.ts 同一布局：data/works/<id>/messages.jsonl，§4.1） */
+/** 作品消息文件（与 works.ts 同一布局：data/works/<id>/messages.jsonl，§4.1；复用同一解析杜绝 cwd 漂移） */
 function messagesFile(id: string): string {
-  return join(resolve(process.env.DATA_DIR ?? 'data'), 'works', id, 'messages.jsonl');
+  return join(worksDir(), id, 'messages.jsonl');
 }
 
 // ---------- GET /works/:id/messages：三窗口读取 ----------
