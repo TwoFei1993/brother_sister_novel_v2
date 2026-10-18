@@ -9,7 +9,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'rea
 import { apiFetch } from './api/client';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
-const RootPage = lazy(() => import('./pages/Placeholders').then((m) => ({ default: m.RootPage })));
+const RootPage = lazy(() => import('./pages/RootPage'));
 const WorkPage = lazy(() => import('./pages/Placeholders').then((m) => ({ default: m.WorkPage })));
 const LibraryPage = lazy(() =>
   import('./pages/Placeholders').then((m) => ({ default: m.LibraryPage })),

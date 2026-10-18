@@ -1,6 +1,6 @@
 /**
- * 占位页集中导出（避免文件数膨胀）：/ /work/:id /library /settings
- * 后续任务逐个替换为独立实现并改路由 import（Task 10 起书架、Task 20+ 写作台…）
+ * 占位页集中导出（避免文件数膨胀）：/work/:id /library /settings
+ * 后续任务逐个替换为独立实现并改路由 import（书架已于 Task 10 独立为 pages/RootPage.tsx）
  */
 
 interface PlaceholderProps {
@@ -17,11 +17,6 @@ function Placeholder({ title, hint, task }: PlaceholderProps) {
       <p className="text-xs text-[hsl(var(--fg-muted))]">（{task} 中实现）</p>
     </main>
   );
-}
-
-/** / 书架：作品网格（Task 10：Bookshelf + 新建作品） */
-export function RootPage() {
-  return <Placeholder title="书架" hint="你的作品将陈列在这里" task="Task 10" />;
 }
 
 /** /work/:id 写作台：对话流 / 沉漫阅读 / 工作台（Task 20+） */

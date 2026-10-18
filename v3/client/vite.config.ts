@@ -4,10 +4,20 @@
 //  - 构建产物输出到 server/public/，由 Express 同源托管
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // @shared/* 直引 shared TS 源码（与 tsconfig.base paths 语义一致，Task 10 起前端消费共享类型）
+  resolve: {
+    alias: [
+      {
+        find: '@shared',
+        replacement: fileURLToPath(new URL('../shared/src', import.meta.url)),
+      },
+    ],
+  },
   // 内联空 postcss 配置：阻断 vite 向上层目录查到旧站的 Tailwind 3 postcss 配置
   css: {
     postcss: {},
