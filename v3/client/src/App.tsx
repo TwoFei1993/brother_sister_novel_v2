@@ -11,9 +11,7 @@ import { apiFetch } from './api/client';
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RootPage = lazy(() => import('./pages/RootPage'));
 const WorkPage = lazy(() => import('./pages/WorkPage'));
-const LibraryPage = lazy(() =>
-  import('./pages/Placeholders').then((m) => ({ default: m.LibraryPage })),
-);
+const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 function PageLoading() {
