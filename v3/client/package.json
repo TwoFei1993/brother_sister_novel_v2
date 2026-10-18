@@ -12,9 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "dompurify": "^3.4.17",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.9.0",
+    "rehype-sanitize": "^6.0.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

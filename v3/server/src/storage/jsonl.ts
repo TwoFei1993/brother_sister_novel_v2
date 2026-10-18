@@ -64,7 +64,9 @@ export async function readWindow<T extends HasId>(
   if (mode.kind === 'before') {
     const idx = all.findIndex((m) => m.id === mode.beforeId);
     if (idx < 0) return { messages: all.slice(-mode.limit), hasMore: all.length > mode.limit };
-    return { messages: all.slice(Math.max(0, idx - mode.limit), idx), hasMore: idx > 0 };
+    // hasMore = 切片起点之前还有行（锚点前不足 limit 时 sliceStart=0，应报 false 而非 true）
+    const sliceStart = Math.max(0, idx - mode.limit);
+    return { messages: all.slice(sliceStart, idx), hasMore: sliceStart > 0 };
   }
   return { messages: all.slice(-mode.n), hasMore: all.length > mode.n };
 }

@@ -10,7 +10,7 @@ import { apiFetch } from './api/client';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RootPage = lazy(() => import('./pages/RootPage'));
-const WorkPage = lazy(() => import('./pages/Placeholders').then((m) => ({ default: m.WorkPage })));
+const WorkPage = lazy(() => import('./pages/WorkPage'));
 const LibraryPage = lazy(() =>
   import('./pages/Placeholders').then((m) => ({ default: m.LibraryPage })),
 );

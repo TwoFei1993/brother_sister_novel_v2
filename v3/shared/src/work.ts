@@ -169,6 +169,8 @@ export const WorkSchema = z.strictObject({
   presetId: z.string(),
   regexScriptIds: z.array(z.string()),
   settings: NovelSettingsSchema,
+  /** 允许角色卡覆盖预设（§4.4）：缺省视为 true（与酒馆默认一致） */
+  allowCardOverride: z.boolean().optional(),
   /** 角色名 → TTS 声音路由 */
   voiceMap: z.record(z.string(), z.string()),
   /** 书架统计缓存：消息写入方维护（updateWorkStats），未写入前缺省 */

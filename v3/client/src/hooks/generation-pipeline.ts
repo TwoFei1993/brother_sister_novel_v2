@@ -142,7 +142,8 @@ export async function scanAndAssemble(
     const result = assemblePrompt({
       preset: assets.preset ?? EMPTY_PRESET,
       cards: assets.cards,
-      allowCardOverride: true,
+      // §4.4 卡覆盖预设开关：作品级设置，缺省视为开（与酒馆一致）
+      allowCardOverride: work.allowCardOverride !== false,
       worldbookScan: scan,
       workSettings: work.settings,
       history,

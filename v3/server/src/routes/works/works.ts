@@ -65,6 +65,7 @@ export const createWorkSchema = z.strictObject({
   presetId: z.string().default(''),
   regexScriptIds: z.array(z.string()).default([]),
   settings: NovelSettingsSchema.optional(),
+  allowCardOverride: z.boolean().optional(),
   voiceMap: z.record(z.string(), z.string()).default({}),
   viewPreference: ViewPreferenceSchema.optional(),
 });
@@ -80,6 +81,7 @@ export const updateWorkSchema = z.strictObject({
   presetId: z.string().optional(),
   regexScriptIds: z.array(z.string()).optional(),
   settings: NovelSettingsSchema.optional(),
+  allowCardOverride: z.boolean().optional(),
   voiceMap: z.record(z.string(), z.string()).optional(),
   viewPreference: ViewPreferenceSchema.optional(),
 });
@@ -125,6 +127,7 @@ export const createWork: RequestHandler = async (req, res) => {
     presetId: input.presetId,
     regexScriptIds: input.regexScriptIds,
     settings: input.settings ?? defaultNovelSettings,
+    ...(input.allowCardOverride !== undefined ? { allowCardOverride: input.allowCardOverride } : {}),
     voiceMap: input.voiceMap,
     stats: { messageCount: 0, chapterCount: 0, charCount: 0 },
     createdAt: now,
@@ -163,6 +166,7 @@ export const updateWork: RequestHandler = async (req, res) => {
       presetId: input.presetId ?? current.presetId,
       regexScriptIds: input.regexScriptIds ?? current.regexScriptIds,
       settings: input.settings ?? current.settings,
+      allowCardOverride: input.allowCardOverride ?? current.allowCardOverride,
       voiceMap: input.voiceMap ?? current.voiceMap,
       viewPreference: input.viewPreference ?? current.viewPreference,
       revision: current.revision + 1,

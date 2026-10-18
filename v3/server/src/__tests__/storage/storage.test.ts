@@ -13,6 +13,7 @@ import {
   readBefore,
   readSince,
   readTail,
+  readWindow,
   rewriteAll,
 } from '../../storage/jsonl';
 
@@ -120,6 +121,18 @@ describe('jsonl.ts 读写', () => {
   it('readBefore(beforeId, limit) 返回该 id 之前的 limit 条窗口', async () => {
     const before = await readBefore<Line>(join(root, 'flow.jsonl'), 'm4', 2);
     expect(before.map((m) => m.id)).toEqual(['m2', 'm3']);
+  });
+
+  it('readWindow before 模式 hasMore：锚点前还有整页时 true，不足一页时 false（Task 20 回归）', async () => {
+    const file = join(root, 'flow.jsonl');
+    // m3 前有 m1/m2 两行：limit=2 恰好取完 → 更早方向无剩余，hasMore=false
+    const exact = await readWindow<Line>(file, { kind: 'before', beforeId: 'm3', limit: 2 });
+    expect(exact.hasMore).toBe(false);
+    expect(exact.messages.map((m) => m.id)).toEqual(['m1', 'm2']);
+    // limit=1 只取到 m2 → 前面还有 m1，hasMore=true
+    const partial = await readWindow<Line>(file, { kind: 'before', beforeId: 'm3', limit: 1 });
+    expect(partial.hasMore).toBe(true);
+    expect(partial.messages.map((m) => m.id)).toEqual(['m2']);
   });
 
   it('readSince(sinceId) 返回该 id 之后的全部增量', async () => {

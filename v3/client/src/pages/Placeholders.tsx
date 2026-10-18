@@ -1,7 +1,7 @@
 /**
- * 占位页集中导出（避免文件数膨胀）：/work/:id /library
- * 后续任务逐个替换为独立实现并改路由 import
- * （书架 → Task 10 RootPage；设置 → Task 18 pages/SettingsPage）
+ * 占位页集中导出（避免文件数膨胀）：/library
+ * 后续任务替换为独立实现并改路由 import
+ * （书架 → Task 10 RootPage；设置 → Task 18 SettingsPage；写作台 → Task 20 WorkPage）
  */
 
 interface PlaceholderProps {
@@ -18,11 +18,6 @@ function Placeholder({ title, hint, task }: PlaceholderProps) {
       <p className="text-xs text-[hsl(var(--fg-muted))]">（{task} 中实现）</p>
     </main>
   );
-}
-
-/** /work/:id 写作台：对话流 / 沉漫阅读 / 工作台（Task 20+） */
-export function WorkPage() {
-  return <Placeholder title="写作台" hint="对话流 · 沉漫阅读 · 工作台" task="Task 20+" />;
 }
 
 /** /library 资源库：角色卡/世界书/预设/正则 + 资源中心（Task 25） */
