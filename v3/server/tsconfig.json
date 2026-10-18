@@ -1,9 +1,10 @@
 {
-  // 服务端 TS 配置：继承根配置；tsc 产物仅作类型校验（生产经 tsx 直跑源码）
+  // 服务端 TS 配置：继承根配置；tsc 产物仅作类型校验（生产经 tsx 直跑源码，dist 不被运行时消费）
+  // 不设 rootDir：server 跨包直引 @shared/* 源码（tsconfig.base.json paths），
+  // 共同根自动上移到 v3/，产物结构 dist/server/src/... + dist/shared/src/...
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["node"]
   },
   "include": ["src"]

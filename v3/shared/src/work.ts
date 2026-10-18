@@ -142,6 +142,17 @@ export type WorkMode = z.infer<typeof WorkModeSchema>;
 export const ViewPreferenceSchema = z.enum(['a', 'b', 'c']);
 export type ViewPreference = z.infer<typeof ViewPreferenceSchema>;
 
+/** 书架统计缓存（设计 §4.6）：work.json 内的计数，由消息写入方维护（Task 8） */
+export const WorkStatsSchema = z.strictObject({
+  /** 消息总条数 */
+  messageCount: z.number().int().nonnegative(),
+  /** 章节数（novel 模式：带 chapter 元数据的消息数） */
+  chapterCount: z.number().int().nonnegative(),
+  /** 正文总字数 */
+  charCount: z.number().int().nonnegative(),
+});
+export type WorkStats = z.infer<typeof WorkStatsSchema>;
+
 export const WorkSchema = z.strictObject({
   id: z.string().min(1),
   /** 乐观版本号：每次写入 +1，PATCH 不匹配返回 409 */
@@ -158,6 +169,8 @@ export const WorkSchema = z.strictObject({
   settings: NovelSettingsSchema,
   /** 角色名 → TTS 声音路由 */
   voiceMap: z.record(z.string(), z.string()),
+  /** 书架统计缓存：消息写入方维护（updateWorkStats），未写入前缺省 */
+  stats: WorkStatsSchema.optional(),
   viewPreference: ViewPreferenceSchema.optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
