@@ -4,7 +4,7 @@
  * 四类资产 Tab（URL ?tab= 深链同步）+ 每 Tab：资产列表（名/描述摘要/操作）
  * + 导入（multipart → /api/io/<type>/import）+ 导出（角色卡 png/json，其余 json）
  * + 删除 + 内联提示条（未引入 toast 库，会话内轻量提示）。
- * 预设 Tab 选中资产后展开「提示词管理器」。
+ * 预设 Tab 选中资产后展开「提示词管理器」；世界书/角色卡「编辑」打开对应编辑器弹层。
  */
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -14,7 +14,9 @@ import {
   type AssetType, type LibraryAssetRef,
 } from '../api/library';
 import AssetTabs from '../features/library/AssetTabs';
+import CardEditor from '../features/library/CardEditor';
 import PromptManager from '../features/library/PromptManager';
+import WorldbookEditor from '../features/library/WorldbookEditor';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
 
@@ -30,13 +32,13 @@ interface AssetPanelProps {
   label: string;
   accept: string;
   notify: (kind: 'ok' | 'err', text: string) => void;
-  selectedPresetId: string | null;
-  onEditPreset: (id: string) => void;
+  /** 编辑按钮：分派逻辑由页面按类型决定（预设内联 / 世界书·卡弹层） */
+  onEdit: (id: string) => void;
   /** 变更信号：粘贴导入等面板外写入发生后 +1 触发列表重拉 */
   refreshKey: number;
 }
 
-function AssetPanel({ type, label, accept, notify, selectedPresetId, onEditPreset, refreshKey }: AssetPanelProps) {
+function AssetPanel({ type, label, accept, notify, onEdit, refreshKey }: AssetPanelProps) {
   const [items, setItems] = useState<LibraryAssetRef[] | null>(null);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -145,11 +147,7 @@ function AssetPanel({ type, label, accept, notify, selectedPresetId, onEditPrese
               </div>
               <button
                 type="button"
-                onClick={() =>
-                  type === 'presets'
-                    ? onEditPreset(it.id)
-                    : notify('err', '该类资产编辑器将在后续版本提供')
-                }
+                onClick={() => onEdit(it.id)}
                 className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
               >
                 编辑
@@ -192,6 +190,7 @@ export default function LibraryPage() {
   const tab = parseTab(searchParams.get('tab'));
   const [toast, setToast] = useState<Toast>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ type: AssetType; id: string } | null>(null);
   const [listRefresh, setListRefresh] = useState(0);
   const toastTimer = useRef<number | undefined>(undefined);
 
@@ -205,8 +204,25 @@ export default function LibraryPage() {
 
   const setTab = (next: AssetType) => {
     setSelectedPresetId(null);
+    setEditing(null);
     setSearchParams(next === 'characters' ? {} : { tab: next }, { replace: true });
   };
+
+  /** 编辑按钮分派：预设内联管理器，世界书/角色卡全屏编辑器，其余提示后续版本 */
+  const openEditor = (type: AssetType, id: string) => {
+    if (type === 'presets') {
+      setSelectedPresetId(id);
+      return;
+    }
+    if (type === 'characters' || type === 'worldbooks') {
+      setEditing({ type, id });
+      return;
+    }
+    notify('err', '该类资产编辑器将在后续版本提供');
+  };
+
+  /** 编辑器保存成功：刷新列表摘要 */
+  const onEditorSaved = useCallback(() => setListRefresh((k) => k + 1), []);
 
   const meta = ASSET_META.find((m) => m.id === tab)!;
 
@@ -257,10 +273,26 @@ export default function LibraryPage() {
         label={meta.label}
         accept={meta.accept}
         notify={notify}
-        selectedPresetId={selectedPresetId}
-        onEditPreset={setSelectedPresetId}
+        onEdit={(id) => openEditor(tab, id)}
         refreshKey={listRefresh}
       />
+
+      {editing?.type === 'worldbooks' && (
+        <WorldbookEditor
+          worldbookId={editing.id}
+          notify={notify}
+          onClose={() => setEditing(null)}
+          onSaved={onEditorSaved}
+        />
+      )}
+      {editing?.type === 'characters' && (
+        <CardEditor
+          characterId={editing.id}
+          notify={notify}
+          onClose={() => setEditing(null)}
+          onSaved={onEditorSaved}
+        />
+      )}
     </main>
   );
 }
