@@ -6,7 +6,7 @@
  * 尾部元信息剥离 → 提纲分离 → 展示净化组合。
  * postprocess.ts 的 postprocessMessage 总入口仍按原顺序调用本模块。
  */
-import { stripChatPreamble } from './chat-preamble';
+import { stripChatPreamble } from './novel/chat-preamble';
 
 /** 正文中的后续标题行（模型自拟的嵌套小标题，如 `## 卷一`）——连同行尾换行一并移除 */
 const HEADING_LINE_RE = /^#{1,6}[ \t]+\S.*\n?/gm;
@@ -63,7 +63,13 @@ export function sanitizeOutput(raw: string, speakerName?: string): string {
   out = out.replace(/<!--[\s\S]*?-->/g, '');
   out = out.replace(/<!--[\s\S]*$/g, '');
   out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
-  out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*$/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
+  // 未闭合标签（流中断常见）：除自定义标签判定外再加两道收紧（防把大半正文当标签体误清）——
+  // 标签名 ≥2 字符（单字符形态多为正文残片如「<3」「a<b>」误匹配）且剥后剩余 ≥30%，否则保留原文
+  out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*$/g, (m, tag: string, offset: number) => {
+    if (!isCustomTag(tag)) return m;
+    if (tag.length < 2) return m;
+    return offset >= out.length * 0.3 ? '' : m;
+  });
   // 孤立闭合标签开头的复读片段（实测 MiniMax：模型把提示词包裹段复读为「</Aniplex>…指令…</Aniplex>」，
   // 无开标签使上面的成对/未闭合正则都不命中）：仅当文本以孤立闭合标签开头时剥到同名闭合标签；
   // 剥后正文过短则放弃（防误清正常内容）

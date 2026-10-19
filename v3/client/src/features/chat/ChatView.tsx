@@ -11,7 +11,7 @@ import type { ChatReplyLength } from '@shared/work';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { pickSpeaker, type ChatMember } from '../../engine/prompt/activation';
+import { pickSpeaker, type ChatMember } from '../../engine/prompt/chat/activation';
 import { Avatar, MessageBubble, UserBubble } from './ChatBubbles';
 import MemberBar from './MemberBar';
 import { isImplicitDirective } from './chat-directives';

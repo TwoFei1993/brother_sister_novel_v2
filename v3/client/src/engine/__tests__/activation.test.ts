@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { pickSpeaker, type ChatMember } from '../prompt/activation';
+import { pickSpeaker, type ChatMember } from '../prompt/chat/activation';
 
 const MEMBERS: ChatMember[] = [
   { id: 'gege', name: '哥哥' },

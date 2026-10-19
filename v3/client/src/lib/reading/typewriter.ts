@@ -80,8 +80,12 @@ export class TypewriterPacer {
     );
     const out = this.buffer.slice(0, n);
     this.buffer = this.buffer.slice(n);
-    this.onEmit(out);
-    if (!this.buffer) this.resolveDrained();
+    try {
+      this.onEmit(out);
+    } finally {
+      // onEmit 抛异常也不得卡死 drained()（切片已完成，重抛交给 interval 语义）
+      if (!this.buffer) this.resolveDrained();
+    }
   }
 
   private resolveDrained() {

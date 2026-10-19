@@ -4,12 +4,15 @@
  * - 粘贴参考文字（建议 ≥200 字）→「分析文风」调 LLM 提炼画像（只提炼写法不复述内容）
  * - 画像预览可手改 →「保存到作品」写入 settings.styleGuide（PATCH，revision 乐观锁）
  * - 当前画像可手编辑 /「清除文风」置空即回默认文风
+ * - 保存超 STYLE_GUIDE_MAX_CHARS 截断并提示（注入侧 settings-block.ts 同常量兜底）
+ * - work.revision 变化（外部保存/换作品）时重置本地编辑态，避免覆盖他人/别处更新
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { updateWork } from '../../../api/works';
 import { MIN_SAMPLE_CHARS, analyzeStyle } from '../../../lib/style';
 import { useSettingsStore } from '../../../stores/settings';
+import { STYLE_GUIDE_MAX_CHARS } from '../../../engine/prompt/settings-block';
 import type { Work } from '@shared/work';
 
 interface StyleClonePanelProps {
@@ -31,19 +34,31 @@ export default function StyleClonePanel({ work, onSaved }: StyleClonePanelProps)
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+
+  // work.revision 变化（保存成功回写 / 外部更新 / 切换作品）→ 本地编辑态与服务端对齐
+  useEffect(() => {
+    setGuide(work.settings.styleGuide ?? '');
+  }, [work.revision, work.id, work.settings.styleGuide]);
 
   const tooShort = sample.trim().length > 0 && sample.trim().length < MIN_SAMPLE_CHARS;
 
-  /** PATCH styleGuide（revision 乐观锁；置空 = 清除文风回默认） */
+  /** PATCH styleGuide（revision 乐观锁；置空 = 清除文风回默认）；超上限截断并提示 */
   async function saveGuide(value: string): Promise<void> {
+    const truncated = value.slice(0, STYLE_GUIDE_MAX_CHARS);
+    setNotice(
+      value.length > STYLE_GUIDE_MAX_CHARS
+        ? `文风画像超 ${STYLE_GUIDE_MAX_CHARS} 字，已截断保存前 ${STYLE_GUIDE_MAX_CHARS} 字`
+        : '',
+    );
     setSaving(true);
     setError(null);
     try {
       const next = await updateWork(work.id, {
         revision: work.revision,
-        settings: { ...work.settings, styleGuide: value },
+        settings: { ...work.settings, styleGuide: truncated },
       });
-      setGuide(value);
+      setGuide(truncated);
       setProfile('');
       onSaved(next);
     } catch (err) {
@@ -169,6 +184,11 @@ export default function StyleClonePanel({ work, onSaved }: StyleClonePanelProps)
       {error && (
         <p data-testid="style-error" className="mt-2 rounded-lg bg-[hsl(var(--danger))]/10 p-2 text-xs text-[hsl(var(--danger))]">
           {error}
+        </p>
+      )}
+      {notice && (
+        <p data-testid="style-notice" className="mt-2 rounded-lg bg-[hsl(var(--accent))]/10 p-2 text-xs text-[hsl(var(--accent))]">
+          {notice}
         </p>
       )}
     </div>

@@ -17,10 +17,10 @@ import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
 import { presentableNovel, splitOutline } from '../../engine/prompt/postprocess';
-import { applyDisplayRegex, MARKDOWN_CLASS } from '../../lib/markdown';
-import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/readingPrefs';
+import { applyDisplayRegex, MARKDOWN_CLASS } from '../../lib/reading/markdown';
+import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/reading/readingPrefs';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
-import { splitParagraphs } from '../../lib/voice-route';
+import { splitParagraphs } from '../../lib/tts/voice-route';
 import { useTtsStore } from '../../stores/tts';
 
 import OutlineBlock from './dialog/OutlineBlock';

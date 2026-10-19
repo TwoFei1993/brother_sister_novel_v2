@@ -12,7 +12,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import type { TavernRegexScript } from '@shared/tavern';
 
 import { presentable } from '../../engine/prompt/postprocess';
-import { applyDisplayRegex } from '../../lib/markdown';
+import { applyDisplayRegex } from '../../lib/reading/markdown';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
 
 import { avatarChar } from './MemberBar';

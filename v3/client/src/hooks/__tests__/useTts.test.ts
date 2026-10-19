@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { voiceIdToName } from '../../lib/voice-route';
+import { voiceIdToName } from '../../lib/tts/voice-route';
 import { useSettingsStore } from '../../stores/settings';
 import { useTtsStore } from '../../stores/tts';
 import { createTtsEngine, type TtsChapterInput } from '../useTts';

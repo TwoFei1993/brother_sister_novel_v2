@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_VOICE_ID, VOICES, routeParagraphs, voiceIdToName } from '../voice-route';
+import { DEFAULT_VOICE_ID, VOICES, routeParagraphs, voiceIdToName } from '../tts/voice-route';
 
 describe('routeParagraphs 说话人路由', () => {
   it('角色名前缀段落归该角色声（voiceMap 命中）', () => {

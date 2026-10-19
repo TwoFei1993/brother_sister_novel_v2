@@ -118,6 +118,24 @@ describe('parseCharacterSheet', () => {
     expect(legacy.characters[0]?.name).toBe('林昭');
     expect(legacy.background).toContain('大周王朝');
   });
+
+  it('空值条目跳过（D9）：「反向 prompt：无」不拼入描述；描述整体为「无」的条目不入 entries', () => {
+    const text = [
+      '01. 沈青鸢｜镇国公府嫡长女',
+      '正向 prompt：',
+      '玄色劲装束腰，马尾高束。',
+      '反向 prompt：无',
+      '',
+      '02. 空白甲｜无名之辈',
+      '正向 prompt：无',
+    ].join('\n');
+    const doc = parseSheetDocument(text);
+    expect(doc.entries).toHaveLength(1); // 「空白甲」（描述为「无」）整条跳过
+    expect(doc.entries[0]!.name).toBe('沈青鸢');
+    expect(doc.entries[0]!.description).toContain('玄色劲装束腰');
+    expect(doc.entries[0]!.description).not.toContain('反向');
+    expect(doc.entries[0]!.description).not.toContain('无');
+  });
 });
 
 describe('buildSheetCardDraft / buildSheetWorldbookDraft', () => {

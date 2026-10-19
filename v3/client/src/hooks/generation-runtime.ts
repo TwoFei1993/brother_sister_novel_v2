@@ -9,7 +9,7 @@
  * 不含 React hook；调用方（hook）经 bindController 注册 AbortController 以支持 stop()。
  */
 import { generateStream, type GenerateBody } from '../api/llm';
-import { TypewriterPacer } from '../lib/typewriter';
+import { TypewriterPacer } from '../lib/reading/typewriter';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
 

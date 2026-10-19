@@ -8,7 +8,7 @@
 import { useEffect } from 'react';
 
 import { OPTION_CLS } from '../../components/ui-select';
-import { VOICES } from '../../lib/voice-route';
+import { VOICES } from '../../lib/tts/voice-route';
 
 /** 语速 6 档（对齐旧站 rates） */
 export const TTS_RATES = [0.8, 1, 1.2, 1.5, 1.8, 2.0] as const;

@@ -18,22 +18,22 @@ import type { Work } from '@shared/work';
 
 import { buildGenerateBody } from '../../api/llm';
 import { useGenerationStore } from '../../stores/generation';
-import type { ChatMember } from '../../engine/prompt/activation';
+import type { ChatMember } from '../../engine/prompt/chat/activation';
 import { MAX_SWIPES, historyBeforeTarget, swipeLimitError } from '../../hooks/generation-flow';
 import { runGenerationStream } from '../../hooks/generation-runtime';
 import { loadAssembleAssets, loadRegexScripts, type AssembleAssets, type PendingVars } from '../../hooks/generation-pipeline';
 
-import { buildChatMacroEnv, finalizeChatGeneration, scanAndAssembleChat, type ChatTurn } from './chat-flow';
+import {
+  buildChatMacroEnv,
+  finalizeChatGeneration,
+  runChatWithMetaRetry,
+  scanAndAssembleChat,
+  type ChatRunOptions,
+  type ChatTurn,
+} from './chat-flow';
 
-/** 单次生成编排参数（targetId 预生成 uuid 作入库幂等键） */
-interface RunOptions {
-  targetId: string;
-  initialBuffer: string;
-  /** swipe 重 roll：候选进该消息的 swipes，而非新建消息 */
-  swipeTarget?: Message;
-  /** 隐式引导（括号指令/空引导）：userText 进上下文，但不入库为 user 消息 */
-  implicitUser?: boolean;
-}
+/** 单次生成编排参数（targetId 预生成 uuid 作入库幂等键；重试专用字段见 ChatRunOptions） */
+type RunOptions = ChatRunOptions;
 
 export interface UseChatGenerateResult {
   streaming: boolean;
@@ -89,7 +89,8 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
           const assets: AssembleAssets = await loadAssembleAssets(work);
           const pending: PendingVars = { work: new Map(), global: new Map() };
           const env = buildChatMacroEnv(work, speaker, pending);
-          const fitted = await scanAndAssembleChat(work, history, userText, assets, env, prefs);
+          // 重试后缀只进提示词；入库 user 消息保持干净文本（对齐 novel 的 promptDirective 语义）
+          const fitted = await scanAndAssembleChat(work, history, opts.promptUserText ?? userText, assets, env, prefs);
           const body = buildGenerateBody({
             source: prefs.source,
             model: prefs.model,
@@ -123,7 +124,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
 
   const sendMessage = useCallback(
     (userText: string, speaker: ChatMember, sendOpts?: { implicit?: boolean }) =>
-      run(messagesRef.current, userText, speaker, {
+      runChatWithMetaRetry(run, messagesRef.current, userText, speaker, {
         targetId: crypto.randomUUID(),
         initialBuffer: '',
         ...(sendOpts?.implicit ? { implicitUser: true } : {}),
@@ -134,7 +135,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
   const continueFromPartial = useCallback(
     (partial: string, userText: string, speaker: ChatMember) => {
       const targetId = useGenerationStore.getState().targetMessageId ?? crypto.randomUUID();
-      return run(messagesRef.current, userText, speaker, { targetId, initialBuffer: partial });
+      return runChatWithMetaRetry(run, messagesRef.current, userText, speaker, { targetId, initialBuffer: partial });
     },
     [run],
   );
@@ -146,7 +147,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
         return Promise.resolve(null);
       }
       // 历史 = 目标消息之前的部分（重 roll 不把旧候选装进上下文）
-      return run(historyBeforeTarget(messagesRef.current, target.id), '', speaker, {
+      return runChatWithMetaRetry(run, historyBeforeTarget(messagesRef.current, target.id), '', speaker, {
         targetId: target.id,
         initialBuffer: '',
         swipeTarget: target,

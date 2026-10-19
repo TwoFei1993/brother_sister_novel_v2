@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { applyDisplayRegex } from '../../lib/markdown';
+import { applyDisplayRegex } from '../../lib/reading/markdown';
 import { assemblePrompt } from '../prompt/assemble';
 import { EMPTY_SCAN, makeCtx, makeHistory } from './assemble-fixtures';
 

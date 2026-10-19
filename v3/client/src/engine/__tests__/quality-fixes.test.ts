@@ -57,7 +57,7 @@ describe('兜底预设 buildFallbackPreset', () => {
 
 describe('novel 写作要求注入（requirements）', () => {
   it('buildChapterRequirement 含字数下限与输出纪律', async () => {
-    const { buildChapterRequirement } = await import('../prompt/requirements');
+    const { buildChapterRequirement } = await import('../prompt/novel/requirements');
     const text = buildChapterRequirement(3000);
     expect(text).toContain('【本章写作要求】');
     expect(text).toContain('不少于 3000 字');
@@ -200,12 +200,25 @@ describe('标签化元信息剥离（质检T4 实地检查形态）', () => {
     expect(presentable(raw)).toBe('随着夕阳拉长，我夹起一筷子碱面。');
   });
 
-  it('<reply> 选项块与 <S-summary> 摘要块整体移除（含未闭合）', async () => {
+  it('<reply> 选项块与 <S-summary> 摘要块整体移除（含未闭合；正文主体占比达 30% 门槛）', async () => {
     const { presentable } = await import('../prompt/postprocess');
-    const closed = '正文第一段。\n<reply>\nA. 选项一\nB. 选项二\n</reply>\n<S-summary>兄妹吃完面。</S-summary>';
-    expect(presentable(closed)).toBe('正文第一段。');
-    const unclosed = '正文第一段。\n<reply>\nA. 选项一\nB. 选项二';
-    expect(presentable(unclosed)).toBe('正文第一段。');
+    const closed = '夜色渐深，兄妹俩沿着古道走向城堡大门。\n<reply>\nA. 选项一\nB. 选项二\n</reply>\n<S-summary>兄妹吃完面。</S-summary>';
+    expect(presentable(closed)).toBe('夜色渐深，兄妹俩沿着古道走向城堡大门。');
+    const unclosed = '夜色渐深，兄妹俩沿着古道走向城堡大门。\n<reply>\nA. 选项一\nB. 选项二';
+    expect(presentable(unclosed)).toBe('夜色渐深，兄妹俩沿着古道走向城堡大门。');
+  });
+
+  it('未闭合标签剥离两道收紧（深度测试回归）：单字符标签不剥；剥后剩余 <30% 保留原文', async () => {
+    const { sanitizeOutput } = await import('../prompt/postprocess');
+    // 标签名 1 字符（如「<3」「a<b>」残片误匹配形态）→ 不剥，保留原文
+    const single = '他说这颗心是 <3 级的。后面还有一段完整的叙述文字，不应被标签规则误清。';
+    expect(sanitizeOutput(single)).toBe(single);
+    // 剥后剩余不足全文 30%（标签体吞掉大半正文）→ 视为误判，保留原文
+    const swallow = '<xy>极少正文';
+    expect(sanitizeOutput(swallow)).toBe(swallow);
+    // 剩余充足时照常剥（正常未闭合形态仍生效）
+    const normal = '这是足够长的正文开头，用来满足剩余比例门槛的要求。'.repeat(2) + '<xy>被截断的尾巴';
+    expect(sanitizeOutput(normal)).not.toContain('被截断的尾巴');
   });
 });
 

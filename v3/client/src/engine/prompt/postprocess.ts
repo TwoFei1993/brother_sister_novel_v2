@@ -14,7 +14,7 @@
 import type { TavernRegexScript } from '@shared/tavern';
 
 import type { MacroEnv } from '../types';
-import { stripChatPreamble } from './chat-preamble';
+import { stripChatPreamble } from './novel/chat-preamble';
 import { getRegexedString } from './regex';
 import { sanitizeOutput } from './sanitize';
 
@@ -28,7 +28,7 @@ export {
   stripTailMeta,
   META_ONLY_PLACEHOLDER,
 } from './sanitize';
-export { stripChatPreamble, isChatterLine } from './chat-preamble';
+export { stripChatPreamble, isChatterLine } from './novel/chat-preamble';
 export type { SplitOutline } from './sanitize';
 
 /** 首行标题行：`# 第N章 xxx` 或 `# xxx`（# 后须有内容，防误伤空行） */

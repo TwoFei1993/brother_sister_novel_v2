@@ -40,6 +40,12 @@ export interface CrudOptions<Asset extends { id: string; name: string; createdAt
   schema: z.ZodType<Asset>;
   /** 错误消息中的资源名（如"角色卡"） */
   label: string;
+  /**
+   * POST 按 name 幂等（深度测试报告缺陷「批量导入失败重试产生重复卡」）：
+   * 已存在同名资产时直接返回既有资产（200，无新文件落盘），否则照常 201 新建。
+   * 客户端以 200/201 区分「既有/新建」；仅对 name 天然唯一的资产类（角色卡）开启。
+   */
+  idempotentByName?: boolean;
 }
 
 /**
@@ -109,9 +115,23 @@ export function crudRouter<Asset extends { id: string; name: string; createdAt?:
     }
   });
 
-  // POST /：校验（无 id）→ 服务端生成 uuid + 入库时间 → 原子写 → 201 回全量
+  // POST /：校验（无 id）→ [按 name 幂等：同名回既有资产 200] → 服务端生成 uuid + 入库时间 → 原子写 → 201 回全量
   router.post('/', zodBody(createSchema), async (req, res, next) => {
     try {
+      if (opts.idempotentByName) {
+        const name = String((req.body as { name?: unknown }).name ?? '').trim();
+        if (name) {
+          const dir = dirOf();
+          const files = (await listDir(dir)).filter((f) => f.endsWith('.json'));
+          for (const f of files) {
+            const found = await readJson<Asset>(join(dir, f));
+            if (found && found.name === name) {
+              res.status(200).json(found); // 幂等命中：返回既有资产，不新建
+              return;
+            }
+          }
+        }
+      }
       // body 已过 zod 校验；id/createdAt 为服务端元数据（schema 层 createdAt 可选，故断言安全）
       const asset = { ...(req.body as object), id: randomUUID(), createdAt: Date.now() } as unknown as Asset;
       await writeJsonAtomic(fileOf(asset.id), asset);

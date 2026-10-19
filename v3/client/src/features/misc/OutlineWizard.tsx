@@ -19,11 +19,34 @@ import SheetImportPanel from './wizard/SheetImportPanel';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
 
+/** 向导草稿持久化（深度测试 D9：刷新后粘贴内容丢失）——输入即写、成功导入即清 */
+const WIZARD_DRAFT_KEY = 'v3-wizard-draft';
+
+function loadDraft(): { outline: string; sheet: SheetDocument | null } {
+  try {
+    const outline = localStorage.getItem(WIZARD_DRAFT_KEY) ?? '';
+    if (!outline.trim()) return { outline: '', sheet: null };
+    const doc = parseSheetDocument(outline);
+    return { outline, sheet: doc.entries.length >= 3 ? doc : null };
+  } catch {
+    return { outline: '', sheet: null };
+  }
+}
+
+function clearDraft(): void {
+  try {
+    localStorage.removeItem(WIZARD_DRAFT_KEY);
+  } catch {
+    /* 存储不可用时静默（草稿仅为体验优化） */
+  }
+}
+
 export default function OutlineWizard() {
   const navigate = useNavigate();
-  const [outline, setOutline] = useState('');
+  const initial = useMemo(loadDraft, []);
+  const [outline, setOutline] = useState(initial.outline);
   const [extracted, setExtracted] = useState<ExtractedOutline | null>(null);
-  const [sheet, setSheet] = useState<SheetDocument | null>(null);
+  const [sheet, setSheet] = useState<SheetDocument | null>(initial.sheet);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
@@ -31,12 +54,17 @@ export default function OutlineWizard() {
 
   const notify = (kind: 'ok' | 'err', text: string) => setToast({ kind, text });
 
-  /** 粘贴即探测：编号展板条目 ≥3 → 批量人设导入模式；否则保留旧抽取路径 */
+  /** 粘贴即探测：编号展板条目 ≥3 → 批量人设导入模式；否则保留旧抽取路径（草稿同步 localStorage） */
   const onOutlineChange = (value: string) => {
     setOutline(value);
     setExtracted(null);
     const doc = parseSheetDocument(value);
     setSheet(doc.entries.length >= 3 ? doc : null);
+    try {
+      localStorage.setItem(WIZARD_DRAFT_KEY, value);
+    } catch {
+      /* 超配额/隐私模式静默 */
+    }
   };
 
   const onExtract = () => {
@@ -63,6 +91,7 @@ export default function OutlineWizard() {
         await postJson('/api/characters', { name, card: buildCardDraft(extracted, name) });
       }
       notify('ok', `已生成 ${names.length} 张角色卡草稿，正在跳转资产库…`);
+      clearDraft(); // 成功导入：草稿使命完成
       window.setTimeout(() => navigate('/library'), 800);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : '角色卡生成失败');
@@ -82,6 +111,7 @@ export default function OutlineWizard() {
       }
       await postJson('/api/worldbooks', draft);
       notify('ok', '已生成世界书草稿，正在跳转资产库…');
+      clearDraft(); // 成功导入：草稿使命完成
       window.setTimeout(() => navigate('/library'), 800);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : '世界书生成失败');
@@ -146,7 +176,10 @@ export default function OutlineWizard() {
               failed.length > 0 ? 'err' : 'ok',
               failed.length > 0 ? `成功 ${ok} 张，失败：${failed.join('、')}` : `已生成 ${ok} 张角色卡，正在跳转资产库…`,
             );
-            if (failed.length === 0) window.setTimeout(() => navigate('/library'), 800);
+            if (failed.length === 0) {
+              clearDraft(); // 全部导入成功：草稿使命完成
+              window.setTimeout(() => navigate('/library'), 800);
+            }
           }}
         />
       )}

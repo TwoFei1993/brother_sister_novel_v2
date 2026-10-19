@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-import { TypewriterPacer } from '../typewriter';
+import { TypewriterPacer } from '../reading/typewriter';
 
 describe('TypewriterPacer（打字机匀速器）', () => {
   beforeEach(() => {

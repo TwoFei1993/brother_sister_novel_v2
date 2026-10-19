@@ -38,6 +38,24 @@ describe('POST/GET /api/characters', () => {
     expect(res.status).toBe(400);
   });
 
+  it('POST 同名幂等：第二次 200 返回既有资产（同 id），不新建重复卡', async () => {
+    const app = makeApp();
+    // 独立名字：同文件前序用例已建过「妹妹」，避免跨用例命中幂等
+    const body = {
+      ...characterBody,
+      name: '幂等妹妹',
+      card: { ...characterBody.card, data: { ...characterBody.card.data, name: '幂等妹妹' } },
+    };
+    const first = await request(app).post('/api/characters').set(authed()).send(body);
+    expect(first.status).toBe(201); // 首次：新建
+    const again = await request(app).post('/api/characters').set(authed()).send(body);
+    expect(again.status).toBe(200); // 幂等命中：200（非 201）
+    expect(again.body.id).toBe(first.body.id); // 返回既有资产
+    const list = await request(app).get('/api/characters').set(authed());
+    const mine = (list.body as Array<{ id: string; name: string }>).filter((x) => x.name === '幂等妹妹');
+    expect(mine).toHaveLength(1); // 目录里仍只有一张卡（重试不产生重复）
+  });
+
   it('POST 后 GET :id roundtrip：card 全量原样', async () => {
     const app = makeApp();
     const created = await request(app).post('/api/characters').set(authed()).send(characterBody);

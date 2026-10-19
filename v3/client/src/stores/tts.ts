@@ -9,7 +9,7 @@
  */
 import { create } from 'zustand';
 
-import { DEFAULT_VOICE_ID, type RoutedParagraph } from '../lib/voice-route';
+import { DEFAULT_VOICE_ID, type RoutedParagraph } from '../lib/tts/voice-route';
 
 /** 播放器 UI 可见状态（引擎 patch 的目标子集） */
 export interface TtsView {

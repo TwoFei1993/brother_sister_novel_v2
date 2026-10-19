@@ -42,7 +42,14 @@ const SECTION_LINE = /^第\s*[0-9一二三四五六七八九十百零两]+\s*部
 const ENTRY_LINE = /^\d{1,3}[.、．]\s*([^｜|\n]{1,20})[｜|]\s*(.+)$/;
 const AGE_RE = /(\d{1,3})\s*岁/;
 const POSITIVE_PROMPT_RE = /^(?:正向|正面|positive)\s*prompt\s*[:：]?\s*(.*)$/i;
-const NEGATIVE_PROMPT_RE = /^(?:负向|negative)\s*prompt\s*[:：]/i;
+const NEGATIVE_PROMPT_RE = /^(?:负向|反向|negative)\s*prompt\s*[:：]/i;
+/** 空值占位（深度测试 D9：「反向 prompt：无」这类条目原样拼入卡片描述）——视为无内容 */
+const EMPTY_PLACEHOLDER_RE = /^(?:无|暂无|没有|none|n\/a)?$/i;
+
+/** 描述是否为空值条目：整体为空，或去标点后仅剩「无/暂无」类占位 */
+function isEmptyDescription(description: string): boolean {
+  return EMPTY_PLACEHOLDER_RE.test(description.replace(/[\s\p{P}\p{S}]+/gu, ''));
+}
 
 /** 重复块判定阈值：某行在 ≥60% 条目中原样出现才视为模板 */
 const DUP_RATIO = 0.6;
@@ -137,13 +144,13 @@ interface RawEntry {
   body: string[];
 }
 
-/** 去掉「正向 prompt:」结构行（同行内容保留），负向段之后整体舍弃 */
+/** 去掉「正向 prompt:」结构行（同行内容保留），负向/反向段之后整体舍弃；「：无」占位不进正文 */
 function cleanBodyLines(lines: string[]): string[] {
   const out: string[] = [];
   for (const line of lines) {
     const pos = line.match(POSITIVE_PROMPT_RE);
     if (pos) {
-      if (pos[1]?.trim()) out.push(pos[1].trim());
+      if (pos[1]?.trim() && !isEmptyDescription(pos[1].trim())) out.push(pos[1].trim());
       continue;
     }
     if (NEGATIVE_PROMPT_RE.test(line)) break;
@@ -210,17 +217,20 @@ export function parseSheetDocument(text: string): SheetDocument {
 
   const cleaned = raws.map((r) => cleanBodyLines(r.body));
   const deduped = dedupeBodies(cleaned);
-  const entries = raws.map((r, i): CharacterSheetEntry => {
-    const description = (deduped[i] ?? []).join('\n').trim();
-    const ageM = description.match(AGE_RE);
-    return {
-      name: r.name,
-      identity: r.identity,
-      group: r.group,
-      description,
-      ...(ageM ? { age: Number(ageM[1]) } : {}),
-    };
-  });
+  const entries = raws
+    .map((r, i): CharacterSheetEntry => {
+      const description = (deduped[i] ?? []).join('\n').trim();
+      const ageM = description.match(AGE_RE);
+      return {
+        name: r.name,
+        identity: r.identity,
+        group: r.group,
+        description,
+        ...(ageM ? { age: Number(ageM[1]) } : {}),
+      };
+    })
+    // 空值条目跳过（D9）：description 为空或字面「无」——不进批量导入与卡片描述拼装
+    .filter((e) => !isEmptyDescription(e.description));
   return { entries, meta };
 }
 

@@ -17,7 +17,7 @@ import {
 import { apiFetch } from '../api/client';
 import { countTokensApprox } from '../engine/budget';
 import { buildSummarizePrompt } from '../engine/prompt/memory';
-import { buildNovelMainPrompt } from '../engine/prompt/requirements';
+import { buildNovelMainPrompt } from '../engine/prompt/novel/requirements';
 import type { ScanSettings } from '../engine/worldbook';
 import type { LlmPrefs } from '../stores/settings';
 
@@ -110,6 +110,34 @@ export function withNovelOutputGuard(messages: GenerateMessage[], targetWords: n
         `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`,
     },
   ];
+}
+
+/** novel 守卫的组装侧接入（规范回补自 generation-pipeline 迁出）：预算需预留守卫自身开销，
+ *  否则最紧预算下最终请求会超限约几十 token。allowance=守卫 token 开销；withGuard=组装后追加守卫。 */
+export function novelGuardPlan(targetWords: number): {
+  allowance: number;
+  withGuard: (msgs: GenerateMessage[]) => GenerateMessage[];
+} {
+  const guard = withNovelOutputGuard([], targetWords)[0]!;
+  return {
+    allowance: countTokensApprox(guard.content),
+    withGuard: (msgs) => [...msgs, guard],
+  };
+}
+
+/** 末轮注入通道（自 generation-pipeline 迁出；review #7 参数化，novel/chat 共用同一 scanAndAssemble）：
+ *  novel=剧情指令 directive（「剧情指引：…」包装）/ chat=用户消息 userMessage（§4.3） */
+export type AssembleTail =
+  | { kind: 'directive'; text: string }
+  | { kind: 'userMessage'; text: string };
+
+/** 组装产物（自 generation-pipeline 迁出；预算校验后的上下文规划层结果） */
+export interface FittedPrompt {
+  messages: GenerateMessage[];
+  /** tokenize 实测总 token（超预算多截后） */
+  promptTokens: number;
+  truncated: boolean;
+  activatedIds: string[];
 }
 
 /** 上下文规划（纯函数）：预算装得下则全量保留；装不下时从最旧侧切出 dropped（待摘要区） */

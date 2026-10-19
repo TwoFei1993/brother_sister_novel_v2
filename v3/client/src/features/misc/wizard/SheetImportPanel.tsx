@@ -2,6 +2,8 @@
  * 批量人设导入面板：勾选展板条目（默认全选）→「生成 N 张角色卡」串行 POST
  * /api/characters（进度 x/N，单条失败跳过并汇总）→ 可选把分部/全局设定生成
  * 世界书草稿 → 全部成功时回调父级跳 /library。
+ * 部分失败时保留失败名单，提供「重试失败项（N）」仅对失败条目重发
+ * （服务端同名幂等，已导入的不会因重试产生重复卡）。
  */
 import { useState } from 'react';
 
@@ -9,6 +11,7 @@ import { apiFetch } from '../../../api/client';
 import {
   buildSheetCardDraft,
   buildSheetWorldbookDraft,
+  type CharacterSheetEntry,
   type SheetDocument,
 } from '../../../lib/outline-sheet';
 
@@ -24,6 +27,7 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<{ ok: number; failed: string[] } | null>(null);
+  const [failedEntries, setFailedEntries] = useState<CharacterSheetEntry[]>([]);
   const [note, setNote] = useState('');
 
   const selectedCount = checked.filter(Boolean).length;
@@ -32,8 +36,10 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
   const toggle = (i: number): void => setChecked((prev) => prev.map((v, j) => (j === i ? !v : v)));
   const toggleAll = (): void => setChecked(entries.map(() => !allChecked));
 
-  const importCards = async (): Promise<void> => {
-    const picked = entries.filter((_, i) => checked[i]);
+  /** 串行导入给定条目；list 缺省 = 按勾选（首次导入），显式传入 = 失败项重试 */
+  const importCards = async (list?: CharacterSheetEntry[]): Promise<void> => {
+    const checkedEntries = entries.filter((_, i) => checked[i]);
+    const picked = list ?? checkedEntries;
     if (picked.length === 0) {
       setNote('请至少勾选一位角色');
       return;
@@ -42,7 +48,7 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
     setNote('');
     setReport(null);
     setProgress({ done: 0, total: picked.length });
-    const failed: string[] = [];
+    const failed: CharacterSheetEntry[] = [];
     let ok = 0;
     for (const entry of picked) {
       try {
@@ -52,14 +58,15 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
         });
         ok += 1;
       } catch {
-        failed.push(entry.name);
+        failed.push(entry);
       }
       setProgress({ done: ok + failed.length, total: picked.length });
     }
     setBusy(false);
     setProgress(null);
-    setReport({ ok, failed });
-    if (ok > 0 && failed.length === 0) onFinished(ok, failed);
+    setReport({ ok, failed: failed.map((f) => f.name) });
+    setFailedEntries(failed);
+    if (failed.length === 0) onFinished(ok, []);
     else if (ok > 0) setNote(`已导入 ${ok} 张，失败 ${failed.length} 张（可重试仅导入失败项）`);
     else setNote('全部导入失败，请检查后端服务');
   };
@@ -131,10 +138,21 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
           type="button"
           onClick={() => void importCards()}
           disabled={busy || selectedCount === 0}
+          data-testid="import-cards-btn"
           className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
         >
           {progress ? `导入中 ${progress.done}/${progress.total}…` : `生成 ${selectedCount} 张角色卡`}
         </button>
+        {failedEntries.length > 0 && !busy && (
+          <button
+            type="button"
+            onClick={() => void importCards(failedEntries)}
+            data-testid="retry-failed-btn"
+            className="min-h-[36px] rounded-lg border border-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent))]"
+          >
+            重试失败项（{failedEntries.length}）
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void createWorldbook()}

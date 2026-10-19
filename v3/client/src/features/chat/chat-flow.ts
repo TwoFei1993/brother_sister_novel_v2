@@ -15,9 +15,9 @@ import type { Message, MessageExtra } from '@shared/message';
 import { CHAT_REPLY_LENGTH_RANGE, DEFAULT_CHAT_REPLY_LENGTH, type ChatReplyLength, type Work } from '@shared/work';
 
 import type { MacroEnv } from '../../engine/types';
-import { parseStatusBlock, presentable } from '../../engine/prompt/postprocess';
+import { META_ONLY_PLACEHOLDER, parseStatusBlock, presentable } from '../../engine/prompt/postprocess';
 import { getRegexedString } from '../../engine/prompt/regex';
-import type { ChatMember } from '../../engine/prompt/activation';
+import type { ChatMember } from '../../engine/prompt/chat/activation';
 import type { GenerateMessage } from '../../api/llm';
 import { useGenerationStore } from '../../stores/generation';
 import type { LlmPrefs } from '../../stores/settings';
@@ -111,6 +111,61 @@ export interface ChatTurn {
   /** 新增的用户消息；仅 sendMessage 场景非空（swipe/继续不产生新 user 消息） */
   user: Message | null;
   assistant: Message;
+  /** 元信息残章标记（深度测试 D7）：本轮只有思考/元信息——占位不入库，上层 isMetaOnlyTurn 据此自动重试 */
+  metaOnly?: boolean;
+}
+
+/** 元信息残章自动重试后缀（对齐 novel 侧 META_RETRY_SUFFIX 语义；只进提示词不入库 user 消息） */
+export const CHAT_META_RETRY_HINT =
+  '\n\n（系统重试：上一轮输出只有思考/元信息没有对话正文，视为无效。这次请直接以角色身份输出对话与行动，不要输出思考过程或任何元信息。）';
+
+/** 是否「正常完成但产物为元信息残章」（占位未入库的 turn；null=流中错误/停止，不算残章） */
+export function isMetaOnlyTurn(turn: ChatTurn | null): boolean {
+  return turn !== null && turn.metaOnly === true;
+}
+
+/** 单次生成编排参数（自 useChatGenerate 收口；runChatWithMetaRetry 需要透传） */
+export interface ChatRunOptions {
+  targetId: string;
+  initialBuffer: string;
+  /** swipe 重 roll：候选进该消息的 swipes，而非新建消息 */
+  swipeTarget?: Message;
+  /** 隐式引导（括号指令/空引导）：userText 进上下文，但不入库为 user 消息 */
+  implicitUser?: boolean;
+  /** 残章重试专用：守卫后缀只进提示词，入库的 user 消息保持干净原文本（对齐 novel promptDirective） */
+  promptUserText?: string;
+}
+
+/** 单次生成流编排（chat：sendMessage/continue/swipe 共用的 run 形状） */
+export type ChatRunFn = (
+  history: Message[],
+  userText: string,
+  speaker: ChatMember,
+  opts: ChatRunOptions,
+) => Promise<ChatTurn | null>;
+
+/** 元信息残章自动重试编排（深度测试 D7，对齐 novel useGenerate 语义；run 注入便于单测）：
+ *  首轮产物 meta-only（占位未入库）→ 守卫后缀只进提示词（promptUserText）重发一次；
+ *  重试后仍残章 → 不入库、error 进 store（错误条提示「本轮只生成了思考内容，请重试」）、返回 null。
+ *  run 返回 null（流中错误/用户停止）不算残章，原样透传绝不重试。 */
+export async function runChatWithMetaRetry(
+  run: ChatRunFn,
+  history: Message[],
+  userText: string,
+  speaker: ChatMember,
+  opts: ChatRunOptions,
+): Promise<ChatTurn | null> {
+  let turn = await run(history, userText, speaker, opts);
+  if (!isMetaOnlyTurn(turn)) return turn;
+  turn = await run(history, userText, speaker, {
+    ...opts,
+    promptUserText: userText + CHAT_META_RETRY_HINT,
+  });
+  if (isMetaOnlyTurn(turn)) {
+    useGenerationStore.getState().fail({ code: 'meta_only', message: '本轮只生成了思考内容，请重试' }, false);
+    return null;
+  }
+  return turn;
 }
 
 export interface ChatFinalizeInput {
@@ -128,7 +183,9 @@ export interface ChatFinalizeInput {
   pending: PendingVars;
 }
 
-/** chat 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → user+assistant 成对幂等入库 → 变量回写 */
+/** chat 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → user+assistant 成对幂等入库 → 变量回写。
+ *  元信息残章（深度测试 D7）：净化后只剩思考/元信息 → 不入库、返回 metaOnly 占位 turn，
+ *  交上层（useChatGenerate）带守卫后缀自动重试一次——不再以角色名义入库占位提示。 */
 export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<ChatTurn> {
   const raw = useGenerationStore.getState().buffer;
   // 完整净化链（与 novel/显示层同源）：无标签思维流+尾部元信息+内置卫生层（预设片段 <Aniplex>、
@@ -148,6 +205,17 @@ export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<
     ...(statusSnapshot ? { statusSnapshot } : {}),
     ...(input.activatedIds.length ? { activatedEntries: input.activatedIds } : {}),
   };
+  // 整轮输出只有思考/元信息：不入库（对齐 novel 语义），store 收束后交上层自动重试
+  const metaOnly = !content.trim() || content.startsWith(META_ONLY_PLACEHOLDER);
+  if (metaOnly) {
+    useGenerationStore.getState().finish();
+    useGenerationStore.getState().reset();
+    return {
+      user: null,
+      assistant: buildAssistantTurn({ content, speakerName: input.speaker.name, extra }),
+      metaOnly: true,
+    };
+  }
   const user = input.userText.trim() ? buildUserTurn(input.userText) : null;
   const assistant = input.swipeTarget
     ? appendSwipe(input.swipeTarget, content, extra)

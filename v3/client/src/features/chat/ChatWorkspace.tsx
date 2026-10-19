@@ -16,7 +16,7 @@ import type { ChatReplyLength, Work } from '@shared/work';
 
 import { listCharacters } from '../../api/library';
 import { updateWork } from '../../api/works';
-import { pickSpeaker, type ChatMember } from '../../engine/prompt/activation';
+import { pickSpeaker, type ChatMember } from '../../engine/prompt/chat/activation';
 import { createTtsEngine } from '../../hooks/useTts';
 import { useGenerationStore } from '../../stores/generation';
 import { useWorkStore } from '../../stores/work';

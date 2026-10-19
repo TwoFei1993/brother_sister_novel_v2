@@ -298,4 +298,23 @@ describe('useGenerate（元信息残章自动重试——质检T4「第二次消
     });
     expect(calls.filter((c) => c.path === '/api/llm/generate')).toHaveLength(1);
   });
+
+  it('重试后仍残章（两次流都只回 thinking）→ 返回 null 且不入库（占位章不上架）', async () => {
+    stubFetch((path) => {
+      if (path === '/api/llm/generate') {
+        return sseResponse(['data: {"text":"<thinking>只写了思考</thinking>"}\n\n', 'data: [DONE]\n\n']);
+      }
+      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
+      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
+      throw new Error(`unmocked fetch: ${path}`);
+    });
+    await renderHook();
+    let result: Message | null = null;
+    await act(async () => {
+      result = await latest!.generateChapter(baseWork(), [], '写第一章');
+    });
+    expect(calls.filter((c) => c.path === '/api/llm/generate')).toHaveLength(2); // 重试恰好一次
+    expect(result).toBeNull(); // 重试后仍残章：返回 null（batch 以 null 终止、不 upsert）
+    expect(calls.filter((c) => c.path === '/api/works/w1/messages')).toHaveLength(0); // 占位不入库
+  });
 });

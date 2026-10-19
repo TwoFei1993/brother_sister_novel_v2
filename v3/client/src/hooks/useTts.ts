@@ -19,7 +19,7 @@ import {
   voiceIdToName,
   type RoutedParagraph,
   type SpeakerBinding,
-} from '../lib/voice-route';
+} from '../lib/tts/voice-route';
 import { useSettingsStore } from '../stores/settings';
 import { useTtsStore } from '../stores/tts';
 

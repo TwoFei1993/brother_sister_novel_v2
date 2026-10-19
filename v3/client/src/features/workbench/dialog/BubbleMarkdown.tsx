@@ -8,7 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { applyDisplayRegex, MARKDOWN_CLASS } from '../../../lib/markdown';
+import { applyDisplayRegex, MARKDOWN_CLASS } from '../../../lib/reading/markdown';
 import { sanitizeMarkdownSource } from '../../../lib/sanitize';
 
 export default function BubbleMarkdown({ text, regexScripts }: { text: string; regexScripts?: TavernRegexScript[] }) {

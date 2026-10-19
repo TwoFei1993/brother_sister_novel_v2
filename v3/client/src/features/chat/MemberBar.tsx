@@ -11,7 +11,7 @@
  */
 import type { ChatReplyLength } from '@shared/work';
 
-import type { ChatMember } from '../../engine/prompt/activation';
+import type { ChatMember } from '../../engine/prompt/chat/activation';
 
 /** 长度三档 UI 选项（档位 → 中文标签） */
 const REPLY_LENGTH_OPTIONS: { value: ChatReplyLength; label: string; title: string }[] = [

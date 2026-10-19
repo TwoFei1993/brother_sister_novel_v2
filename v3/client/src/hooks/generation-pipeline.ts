@@ -1,15 +1,9 @@
 /**
  * 生成流编排辅助（novel/chat 共用管线层，设计 §5.1 / §3.2 / §9.2）
- *
- * loadAssembleAssets（绑定资产并行拉取）→ buildMacroEnv（变量读写暂存）
- * → scanAndAssemble（世界书扫描 + 总装 + tokenize 预算校验；末轮注入经 AssembleTail
- *   参数化，novel=directive / chat=userMessage，review #7 去重）
- * → finalizeGeneration（novel：后处理 → 幂等入库 → 变量回写 → store 收束；
- *   chat 的成对收尾在 features/chat/chat-flow.ts，复用本层 persistMessage/persistVariables）
- *
- * 允许依赖 api 层与 store 的非 hook 调用（getState）；不含 React hook。
- * 纯函数见 generation-flow.ts，共享 run 内核见 generation-runtime.ts，
- * 兜底预设与预算规划（EMPTY_PRESET/planContext 等）见 context-plan.ts（本模块 re-export 兼容）。
+ * loadAssembleAssets → buildMacroEnv → scanAndAssemble（总装+预算校验，末轮经 AssembleTail
+ * 参数化）→ finalizeGeneration（novel 入库收束；chat 成对收尾见 features/chat/chat-flow.ts）。
+ * 允许依赖 api 层与 store（getState）；不含 React hook。兜底预设与预算规划（EMPTY_PRESET/
+ * planContext/守卫与 hint 构造/FittedPrompt 等）见 context-plan.ts（本模块 re-export 兼容）。
  */
 import type { Message } from '@shared/message';
 import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tavern';
@@ -26,22 +20,30 @@ import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, postprocessMessage } from '../engine/prompt/postprocess';
-import { buildChapterRequirement } from '../engine/prompt/requirements';
+import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
 import { scanWorldInfo } from '../engine/worldbook';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
 
 import {
   buildFallbackPreset,
+  novelGuardPlan,
   planContext,
   summarizeDropped,
   SCAN_SETTINGS,
-  withNovelOutputGuard,
 } from './context-plan';
 
 // ---- 上下文规划层公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
-export { EMPTY_PRESET, SCAN_SETTINGS, buildChatMainPrompt } from './context-plan';
-export { buildFallbackPreset, planContext, summarizeDropped, withNovelOutputGuard } from './context-plan';
+export {
+  EMPTY_PRESET,
+  SCAN_SETTINGS,
+  buildChatMainPrompt,
+  buildFallbackPreset,
+  novelGuardPlan,
+  planContext,
+  summarizeDropped,
+  withNovelOutputGuard,
+} from './context-plan';
 
 import {
   appendSwipe,
@@ -97,11 +99,7 @@ export interface PendingVars {
 }
 
 /** 宏环境（§5.1③）：user=「作者」、char=主卡名或「小说家」；变量读走 store/参数，写进暂存 */
-export function buildMacroEnv(
-  work: Work,
-  primaryCharName: string | undefined,
-  pending: PendingVars,
-): MacroEnv {
+export function buildMacroEnv(work: Work, primaryCharName: string | undefined, pending: PendingVars): MacroEnv {
   return {
     user: '作者',
     char: primaryCharName || '小说家',
@@ -116,19 +114,9 @@ export function buildMacroEnv(
   };
 }
 
-export interface FittedPrompt {
-  messages: GenerateMessage[];
-  /** tokenize 实测总 token（超预算多截后） */
-  promptTokens: number;
-  truncated: boolean;
-  activatedIds: string[];
-}
-
-/** 末轮注入通道（review #7 参数化，novel/chat 共用同一 scanAndAssemble）：
- *  novel=剧情指令 directive（「剧情指引：…」包装）/ chat=用户消息 userMessage（§4.3） */
-export type AssembleTail =
-  | { kind: 'directive'; text: string }
-  | { kind: 'userMessage'; text: string };
+// 类型公开面（规范回补迁出至 context-plan；re-export 保持调用方兼容）
+export type { AssembleTail, FittedPrompt } from './context-plan';
+import type { AssembleTail, FittedPrompt } from './context-plan';
 
 /** 世界书扫描 + 总装 + tokenize 预算校验（§5.4：超预算按比例多截历史再组装） */
 export async function scanAndAssemble(
@@ -146,14 +134,12 @@ export async function scanAndAssemble(
     settings: SCAN_SETTINGS,
     macroEnv: env,
   });
-  // 预算默认拉满：MiniMax-M3 支持百万级上下文；过小的预算会把前文章节全部截掉，
-  // 导致续写脱离前文（质量测试后用户实测踩中）。用户显式设置仍优先生效。
+  // 预算默认拉满（M3 百万级上下文；过小预算会截掉前文致续写脱节，用户显式设置仍优先）
   const maxContext = prefs.maxContext ?? 1000000;
   const maxTokens = prefs.maxTokens ?? 8192;
   const budget = Math.max(0, maxContext - maxTokens);
 
-  // 防失忆（§5.3 滚动摘要）：历史超出预算的最旧部分不再静默丢弃，
-  // 而是压缩成滚动摘要注入（增量游标 summaryUpTo 避免重复摘要）。
+  // 防失忆（§5.3 滚动摘要）：预算切出的最旧部分压缩成摘要注入（增量游标 summaryUpTo 防重复）
   const plan = planContext(messages, budget);
   let summary = work.settings.rollingSummary;
   if (plan.dropped.length > 0 && (work.settings.summaryUpTo ?? 0) < plan.dropped.length) {
@@ -182,13 +168,11 @@ export async function scanAndAssemble(
   let history = plan.kept;
   // novel 每章目标字数：兜底主提示词与末尾写作要求共用（不进世界书扫描池，避免「字数」误激活条目）
   const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS;
-  // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销，否则最紧预算下最终请求会超限约几十 token
-  const guardAllowance =
+  // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）
+  const guardPlan =
     tail.kind === 'directive'
-      ? countTokensApprox(withNovelOutputGuard([], targetWords)[0]!.content)
-      : 0;
-  const withGuard = (msgs: GenerateMessage[]): GenerateMessage[] =>
-    tail.kind === 'directive' ? withNovelOutputGuard(msgs, targetWords) : msgs;
+      ? novelGuardPlan(targetWords)
+      : { allowance: 0, withGuard: (msgs: GenerateMessage[]): GenerateMessage[] => msgs };
   for (;;) {
     const result = assemblePrompt({
       preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords),
@@ -212,11 +196,11 @@ export async function scanAndAssemble(
       content: m.content,
     }));
     if (history.length === 0) {
-      return { messages: withGuard(assembled), promptTokens: result.usage.promptTokens, truncated: result.usage.truncated, activatedIds: result.activatedIds };
+      return { messages: guardPlan.withGuard(assembled), promptTokens: result.usage.promptTokens, truncated: result.usage.truncated, activatedIds: result.activatedIds };
     }
     const { count } = await tokenizeMessages(prefs.source, prefs.model || undefined, assembled);
-    if (count <= budget - guardAllowance) {
-      return { messages: withGuard(assembled), promptTokens: count, truncated: result.usage.truncated, activatedIds: result.activatedIds };
+    if (count <= budget - guardPlan.allowance) {
+      return { messages: guardPlan.withGuard(assembled), promptTokens: count, truncated: result.usage.truncated, activatedIds: result.activatedIds };
     }
     // 超预算：按超量比例估算截断条数（至少 1 条），截掉最旧后重新组装校验
     const perMsg = count / Math.max(1, assembled.length);
@@ -243,13 +227,8 @@ export async function persistVariables(work: Work, pending: PendingVars): Promis
     }
     if (pending.global.size > 0) {
       const config = await apiFetch<Record<string, unknown>>('/api/config');
-      const merged = {
-        ...config,
-        globalVariables: {
-          ...((config.globalVariables as Record<string, string> | undefined) ?? {}),
-          ...Object.fromEntries(pending.global),
-        },
-      };
+      const globals = (config.globalVariables as Record<string, string> | undefined) ?? {};
+      const merged = { ...config, globalVariables: { ...globals, ...Object.fromEntries(pending.global) } };
       await apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(merged) });
       useSettingsStore.getState().setConfig(merged);
     }

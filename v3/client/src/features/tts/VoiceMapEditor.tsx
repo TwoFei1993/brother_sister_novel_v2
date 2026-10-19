@@ -11,7 +11,7 @@ import { listCharacters, type LibraryAssetRef } from '../../api/library';
 import { updateWork } from '../../api/works';
 import { OPTION_CLS } from '../../components/ui-select';
 import type { Work } from '@shared/work';
-import { NARRATOR_VOICE_KEY, VOICES } from '../../lib/voice-route';
+import { NARRATOR_VOICE_KEY, VOICES } from '../../lib/tts/voice-route';
 
 interface VoiceMapEditorProps {
   work: Work;

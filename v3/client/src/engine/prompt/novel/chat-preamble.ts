@@ -15,6 +15,7 @@ function isNarrativeLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
   if (t.startsWith('#')) return true; // 章节标题/嵌套标题
+  if (/^第\s*\d+\s*章/.test(t)) return true; // 无 # 的纯文本章节标题（防被指令回显规则误删）
   if (/^[-*_]{3,}$/.test(t)) return true; // 分隔线
   if (/^[「『"']/.test(t)) return true; // 引号对白/引语开篇
   if (t.length >= 40 && /[。！？」』]$/.test(t)) return true; // 长叙述段收尾
@@ -35,14 +36,30 @@ function isSystemOffer(line: string): boolean {
   return /(需要我|要我|帮你|你能|写什么|什么类型|什么风格|开始创作|可以开始|请下|随时|指示|为您|为你)/.test(line);
 }
 
-/** 类别 3：确认/反问语（≤80 字、疑问/感叹/波浪号收尾、含启动或询问词；引号行已被 isNarrativeLine 拦下） */
-const CONFIRM_Q_RE = /(可以.{0,4}(?:开始|创作|写)|开始创作|开始写|需要我|要我|想让我|写什么|什么类型|什么风格|准备好了|请下|指示|继续吗|能帮我)/;
+/** 类别 3：确认/反问语（≤80 字、疑问/感叹/波浪号收尾、含**创作语境**启动词；引号行已被 isNarrativeLine 拦下）。
+ *  只收「写/创作」域动词——泛化的「需要我/要我/继续吗」会误删正文开篇的叙述反问（如「需要我陪你去吗？」） */
+const CONFIRM_Q_RE = /(可以.{0,4}(?:开始|创作|写)|开始创作|开始写|动笔|写什么|什么类型|什么风格|准备好了吗|开始吧)/;
 
-/** 类别 6：指令原文回显（整段复述剧情指令） */
+/** 引导词前缀行（「指令：」「剧情指引：」「用户输入：」等标签开头——模型复读指令结构的形态） */
+const DIRECTIVE_LEAD_RE = /^\s*[（(「]?\s*(?:指令|剧情指引|用户输入|要求|本章)\s*[:：]/;
+
+/** 去除空白与标点/符号（指令回显「忽略外壳比较」用：括号包裹、尾标点变体都算裸指令） */
+function stripPunct(s: string): string {
+  return s.replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+/** 类别 6：指令原文回显——仅认两种形态（深度测试「回显剥离误伤正文首行」回归收紧）：
+ *  ① 去标点空白后行内容 **等于** 指令（裸指令 / 括号包裹 / 尾标点变体）；
+ *  ② 行以引导词（指令：/剧情指引：/用户输入：等）开头 **且含指令原文**。
+ *  含标点延展的叙述（「兄妹进入城堡后，夜色渐深。」）是正文开篇，不得误删。
+ *  无可比指令（未传或过短）时退回引导词标签形态判定（「指令：」开头的行总是指令结构）。 */
 function isDirectiveEcho(line: string, directive?: string): boolean {
   const d = directive?.trim();
-  if (!d || d.length < 4) return /^\s*[（(「]?\s*(?:指令|剧情指引|要求|本章)\s*[:：]/.test(line);
-  return (line.length <= 30 && line.includes(d)) || /^\s*[（(「]?\s*(?:指令|剧情指引|要求|本章)\s*[:：]/.test(line);
+  if (d !== undefined && d.length >= 4) {
+    if (stripPunct(line) === stripPunct(d)) return true;
+    return DIRECTIVE_LEAD_RE.test(line) && line.includes(d);
+  }
+  return DIRECTIVE_LEAD_RE.test(line);
 }
 
 /**

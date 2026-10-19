@@ -7,7 +7,7 @@
  */
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { getRegexedString } from '../engine/prompt/regex';
+import { getRegexedString } from '../../engine/prompt/regex';
 
 /** 正文 markdown 基础排版（p/h1-h3/blockquote/ul/ol/a/hr/code 间距与配色） */
 export const MARKDOWN_CLASS =
