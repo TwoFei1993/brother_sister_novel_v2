@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { updateWork } from '../../../api/works';
 import { MIN_SAMPLE_CHARS, analyzeStyle } from '../../../lib/style';
 import { useSettingsStore } from '../../../stores/settings';
-import { STYLE_GUIDE_MAX_CHARS } from '../../../engine/prompt/settings-block';
+import { STYLE_GUIDE_MAX_CHARS } from '../../../engine/prompt/novel/settings-block';
 import type { Work } from '@shared/work';
 
 interface StyleClonePanelProps {

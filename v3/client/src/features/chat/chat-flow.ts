@@ -134,6 +134,8 @@ export interface ChatRunOptions {
   implicitUser?: boolean;
   /** 残章重试专用：守卫后缀只进提示词，入库的 user 消息保持干净原文本（对齐 novel promptDirective） */
   promptUserText?: string;
+  /** 全体成员名（透传 finalize 做「他人名：」前缀剥离） */
+  otherNames?: string[];
 }
 
 /** 单次生成流编排（chat：sendMessage/continue/swipe 共用的 run 形状） */
@@ -181,6 +183,8 @@ export interface ChatFinalizeInput {
   activatedIds: string[];
   startedAt: number;
   pending: PendingVars;
+  /** 全体成员名（chat 串名泄露剥离用） */
+  otherNames?: string[];
 }
 
 /** chat 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → user+assistant 成对幂等入库 → 变量回写。
@@ -190,7 +194,7 @@ export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<
   const raw = useGenerationStore.getState().buffer;
   // 完整净化链（与 novel/显示层同源）：无标签思维流+尾部元信息+内置卫生层（预设片段 <Aniplex>、
   // 思维块、名字前缀等质检T4/对话实测泄露形态全覆盖）
-  const hygiened = presentable(raw, input.speaker.name);
+  const hygiened = presentable(raw, input.speaker.name, input.otherNames);
   const cleaned = getRegexedString(
     hygiened,
     'ai_output',

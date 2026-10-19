@@ -155,8 +155,27 @@ export function stripTailMeta(content: string): string {
 
 /** 展示净化组合：内置卫生层先行（名字/标签/注释清理，让段落启发看干净的文本）
  *  → 思考流剥离 → 尾部元信息剥离（供生成时与显示时共用） */
-export function presentable(content: string, speakerName?: string): string {
-  const cleaned = stripTailMeta(stripLooseThinking(sanitizeOutput(content, speakerName)));
+export function presentable(
+  content: string,
+  speakerName?: string,
+  otherNames?: string[],
+): string {
+  let cleaned = stripTailMeta(stripLooseThinking(sanitizeOutput(content, speakerName)));
+  // chat 串名泄露：回复首行误写「其他角色名：」——须带冒号才剥（避免误伤「哥哥，你快看」式对白称呼）
+  if (otherNames?.length) {
+    const firstBreak = cleaned.indexOf('\n');
+    const head = firstBreak === -1 ? cleaned : cleaned.slice(0, firstBreak);
+    for (const n of otherNames) {
+      if (!n) continue;
+      const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('^[ \t]*' + esc + '[ \t]*[:：][ \t]*');
+      if (re.test(head)) {
+        const rest = head.replace(re, '');
+        cleaned = (rest + (firstBreak === -1 ? '' : cleaned.slice(firstBreak))).trim();
+        break;
+      }
+    }
+  }
   // 剥离后一无所有 = 该章只剩元信息（选项/摘要/思考）——给出重roll引导而非空白
   if (!cleaned.trim() && content.length > 200) {
     return META_ONLY_PLACEHOLDER;

@@ -45,11 +45,15 @@ export interface UseChatGenerateResult {
   regexScripts: TavernRegexScript[];
   /** 发送用户对话并生成激活角色回复；返回成对入库消息（user 先 assistant 后落盘）。
    *  opts.implicit=true：隐式引导——文本进上下文但不入库为 user 消息 */
-  sendMessage: (userText: string, speaker: ChatMember, opts?: { implicit?: boolean }) => Promise<ChatTurn | null>;
+  sendMessage: (
+    userText: string,
+    speaker: ChatMember,
+    opts?: { implicit?: boolean; otherNames?: string[] },
+  ) => Promise<ChatTurn | null>;
   /** 断流后「继续」：半成品作基底，携带原对话文本重组上下文再发起 */
-  continueFromPartial: (partial: string, userText: string, speaker: ChatMember) => Promise<ChatTurn | null>;
+  continueFromPartial: (partial: string, userText: string, speaker: ChatMember, opts?: { otherNames?: string[] }) => Promise<ChatTurn | null>;
   /** 换一支：重 roll 该消息（激活角色 = 传入 speaker），结果 push 进 target.swipes */
-  swipeRegenerate: (target: Message, speaker: ChatMember) => Promise<ChatTurn | null>;
+  swipeRegenerate: (target: Message, speaker: ChatMember, opts?: { otherNames?: string[] }) => Promise<ChatTurn | null>;
   /** 停止当前生成（已产出部分保留在界面） */
   stop: () => void;
   /** 关闭错误提示（保留半成品供继续） */
@@ -115,6 +119,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
                 activatedIds: fitted.activatedIds,
                 startedAt,
                 pending,
+                otherNames: opts.otherNames,
               }),
           };
         },
@@ -123,25 +128,26 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
   );
 
   const sendMessage = useCallback(
-    (userText: string, speaker: ChatMember, sendOpts?: { implicit?: boolean }) =>
+    (userText: string, speaker: ChatMember, sendOpts?: { implicit?: boolean; otherNames?: string[] }) =>
       runChatWithMetaRetry(run, messagesRef.current, userText, speaker, {
         targetId: crypto.randomUUID(),
         initialBuffer: '',
         ...(sendOpts?.implicit ? { implicitUser: true } : {}),
+        otherNames: sendOpts?.otherNames,
       }),
     [run],
   );
 
   const continueFromPartial = useCallback(
-    (partial: string, userText: string, speaker: ChatMember) => {
+    (partial: string, userText: string, speaker: ChatMember, opts?: { otherNames?: string[] }) => {
       const targetId = useGenerationStore.getState().targetMessageId ?? crypto.randomUUID();
-      return runChatWithMetaRetry(run, messagesRef.current, userText, speaker, { targetId, initialBuffer: partial });
+      return runChatWithMetaRetry(run, messagesRef.current, userText, speaker, { targetId, initialBuffer: partial, otherNames: opts?.otherNames });
     },
     [run],
   );
 
   const swipeRegenerate = useCallback(
-    (target: Message, speaker: ChatMember) => {
+    (target: Message, speaker: ChatMember, opts?: { otherNames?: string[] }) => {
       if (target.swipes.length >= MAX_SWIPES) {
         useGenerationStore.getState().fail(swipeLimitError(), false);
         return Promise.resolve(null);
@@ -151,6 +157,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
         targetId: target.id,
         initialBuffer: '',
         swipeTarget: target,
+        otherNames: opts?.otherNames,
       });
     },
     [run],

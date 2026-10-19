@@ -16,7 +16,7 @@ import {
 
 import { apiFetch } from '../api/client';
 import { countTokensApprox } from '../engine/budget';
-import { buildSummarizePrompt } from '../engine/prompt/memory';
+import { buildSummarizePrompt } from '../engine/prompt/novel/memory';
 import { buildNovelMainPrompt } from '../engine/prompt/novel/requirements';
 import type { ScanSettings } from '../engine/worldbook';
 import type { LlmPrefs } from '../stores/settings';
@@ -100,12 +100,14 @@ export function buildFallbackPreset(
 
 /** 输出守卫（novel）：预设自带的思维链框架（如 Sudachi 类）可能让模型把输出耗在思考上——
  *  只回思考没有正文视为无效。追加在消息最末尾（贴近生成点，遵循最强；对齐 chat 侧长度 hint 位置）。
- *  字数与 buildChapterRequirement 同源（targetWords），避免同一末尾出现两个矛盾的字数要求。 */
+ *  字数与 buildChapterRequirement 同源（targetWords），避免同一末尾出现两个矛盾的字数要求。
+ *  role 用 user：部分 OpenAI 兼容桥接要求末条为 user / system 仅可居首，尾部 system 会 400
+ *  （claude 通道本就会把尾部 system 降级为 user，见 server converters/claude.ts——此处直接对齐全通道一致）。 */
 export function withNovelOutputGuard(messages: GenerateMessage[], targetWords: number): GenerateMessage[] {
   return [
     ...messages,
     {
-      role: 'system' as const,
+      role: 'user' as const,
       content:
         `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`,
     },

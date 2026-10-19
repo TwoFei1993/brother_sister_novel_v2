@@ -166,7 +166,10 @@ export default function ChatWorkspace({ work }: { work: Work }) {
     setStreamingSpeakerId(speaker.id);
     if (!opts.fromAuto) setAuto((s) => autoOnManualSend(s, list.length));
     try {
-      const turn = await chat.sendMessage(text, speaker, opts.implicit ? { implicit: true } : undefined);
+      const turn = await chat.sendMessage(text, speaker, {
+        ...(opts.implicit ? { implicit: true } : {}),
+        otherNames: list.map((m) => m.name),
+      });
       if (turn) {
         syncTurn(turn);
         setManualPickId(null); // 发送完成即清除手动指定（四问①）：流式期间保留保证头像正确
@@ -203,7 +206,7 @@ export default function ChatWorkspace({ work }: { work: Work }) {
     const lastUserText = lastSentTextRef.current || fallbackText;
     const list = membersRef.current;
     const speaker = pickSpeaker(list, currentLastSpeakerId(list), lastUserText, manualPickRef.current);
-    void chat.continueFromPartial(partial, lastUserText, speaker).then((turn) => {
+    void chat.continueFromPartial(partial, lastUserText, speaker, { otherNames: list.map((m) => m.name) }).then((turn) => {
       syncTurn(turn);
       scheduleAutoNext(autoRef.current);
     });
@@ -227,7 +230,7 @@ export default function ChatWorkspace({ work }: { work: Work }) {
     const speaker =
       list.find((m) => m.name === target.name) ??
       pickSpeaker(list, currentLastSpeakerId(list), target.content, manualPickRef.current);
-    const turn = await chat.swipeRegenerate(target, speaker);
+    const turn = await chat.swipeRegenerate(target, speaker, { otherNames: list.map((m) => m.name) });
     syncTurn(turn);
   }
 

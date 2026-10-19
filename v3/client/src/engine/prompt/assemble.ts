@@ -24,8 +24,8 @@ import { substituteParams } from './macros';
 import { getRegexedString, type RegexPlacement } from './regex';
 
 // 作品设定块在 settings-block.ts（规范回补迁出；此处 re-export 保持兼容）
-export { buildSettingsBlock, STYLE_GUIDE_MAX_CHARS } from './settings-block';
-import { buildSettingsBlock } from './settings-block';
+export { buildSettingsBlock, STYLE_GUIDE_MAX_CHARS } from './novel/settings-block';
+import { buildSettingsBlock } from './novel/settings-block';
 
 type Role = 'system' | 'user' | 'assistant';
 

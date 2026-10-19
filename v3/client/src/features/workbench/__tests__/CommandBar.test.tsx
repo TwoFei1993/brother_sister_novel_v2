@@ -28,6 +28,7 @@ async function renderBar(props: Partial<Parameters<typeof CommandBar>[0]> = {}):
     onGenerate: () => undefined,
     onBatch: () => undefined,
     onToggleSwipe: () => undefined,
+    onRerollLast: () => undefined,
     onContinue: () => undefined,
     onStop: () => undefined,
     ...props,

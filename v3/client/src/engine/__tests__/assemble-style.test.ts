@@ -26,7 +26,7 @@ describe('buildSettingsBlock 文风画像注入', () => {
   });
 
   it('注入侧兜底：超 STYLE_GUIDE_MAX_CHARS 截断（历史超长数据不挤爆上下文预算）', async () => {
-    const { STYLE_GUIDE_MAX_CHARS } = await import('../prompt/settings-block');
+    const { STYLE_GUIDE_MAX_CHARS } = await import('../prompt/novel/settings-block');
     const long = '长'.repeat(STYLE_GUIDE_MAX_CHARS + 100);
     const block = buildSettingsBlock({ ...defaultNovelSettings, styleGuide: long });
     expect(block).toContain(MARKER);

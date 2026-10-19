@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Message } from '@shared/message';
 
-import { buildSummarizePrompt, shouldSummarize } from '../prompt/memory';
+import { buildSummarizePrompt, shouldSummarize } from '../prompt/novel/memory';
 
 /** 构造 n 条带 chapter 元数据的 assistant 章节消息 */
 function chapters(n: number): Message[] {

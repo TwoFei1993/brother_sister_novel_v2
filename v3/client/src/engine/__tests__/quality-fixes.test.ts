@@ -262,3 +262,16 @@ describe('孤立闭合标签复读段剥离（深度测试 D4 回归）', () => 
     expect(sanitizeOutput(raw)).toContain('</Aniplex>');
   });
 });
+
+describe('chat 串名泄露剥离（深度测试低危反馈）', () => {
+  it('他人名「名：」前缀在首行被剥离（带 otherNames）', async () => {
+    const { presentable } = await import('../prompt/postprocess');
+    const r = presentable('哥哥： 我回来了。', '妹妹', ['哥哥', '妹妹']);
+    expect(r).toBe('我回来了。');
+  });
+
+  it('无冒号的对白称呼不误伤', async () => {
+    const { presentable } = await import('../prompt/postprocess');
+    expect(presentable('哥哥，你快看这个！', '妹妹', ['哥哥', '妹妹'])).toBe('哥哥，你快看这个！');
+  });
+});

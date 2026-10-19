@@ -61,6 +61,7 @@ export function MessageBubble({
   canSwipe,
   canRegenerate,
   regexScripts,
+  memberNames,
   onSwipe,
   onRegenerate,
   onSpeak,
@@ -70,6 +71,7 @@ export function MessageBubble({
   canRegenerate: boolean;
   /** 显示轨正则脚本（markdownOnly，work 绑定资产；与 novel 视图同源） */
   regexScripts?: TavernRegexScript[];
+  memberNames?: string[];
   onSwipe?: (messageId: string, dir: 1 | -1) => void;
   onRegenerate?: (messageId: string) => void;
   onSpeak?: (content: string) => void;
@@ -78,7 +80,11 @@ export function MessageBubble({
     return <UserBubble name={message.name} content={message.content} />;
   }
   // 显示时净化：旧数据的思维流/预设片段/名字前缀等残留（生成时的净化只覆盖新消息）
-  const content = presentable(message.swipes[message.swipeId] ?? message.content, message.name);
+  const content = presentable(
+    message.swipes[message.swipeId] ?? message.content,
+    message.name,
+    memberNames,
+  );
   return (
     <div className="flex justify-start" data-testid="chat-bubble" data-side="left" data-name={message.name}>
       <Avatar name={message.name ?? ''} />

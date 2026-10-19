@@ -99,6 +99,13 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     }
   }
 
+  /** 🎲 恒为重roll：对最后一章同指令追加新候选（多候选时也可用，与 ◀▶ 切换互补） */
+  async function handleRerollLast(): Promise<void> {
+    if (gen.streaming || !lastChapter) return;
+    const msg = await gen.swipeRegenerate(work, useWorkStore.getState().messages, lastChapter);
+    if (msg) upsertLocal(msg);
+  }
+
   // ---------- A 对话流视图（DialogView）动作 ----------
 
   /** A 视图：任意章节 ◀▶ 切候选（updateSwipe 本地 + PATCH，失败回滚在 store 内） */
@@ -253,6 +260,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
         onGenerate={(d) => void handleGenerate(d)}
         onBatch={(d) => void gen.runBatch(work, d)}
         onToggleSwipe={(d) => void handleToggleSwipe(d)}
+        onRerollLast={() => void handleRerollLast()}
         onContinue={() => void handleContinue()}
         onStop={gen.stop}
         seedText={directiveSeed}

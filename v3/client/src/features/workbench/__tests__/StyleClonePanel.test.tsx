@@ -10,7 +10,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { updateWork } from '../../../api/works';
-import { STYLE_GUIDE_MAX_CHARS } from '../../../engine/prompt/settings-block';
+import { STYLE_GUIDE_MAX_CHARS } from '../../../engine/prompt/novel/settings-block';
 import type { Work } from '@shared/work';
 import { defaultNovelSettings } from '@shared/work';
 

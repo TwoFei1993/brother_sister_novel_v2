@@ -29,6 +29,8 @@ interface CommandBarProps {
   /** ⚡连写：携带输入框当前指令作第一章指令（后续章空指令自由发挥） */
   onBatch: (directive: string) => void;
   onToggleSwipe: (delta: 1 | -1) => void;
+  /** 🎲 恒为重roll：同指令追加新候选并切到最新（多候选时也可用，与 ◀▶ 切换互补） */
+  onRerollLast: () => void;
   onContinue: () => void;
   onStop: () => void;
   /** 外部指令复填（C 工作台侧栏点击快速指令/历史）：注入输入框，消费后回调复位 */
@@ -50,6 +52,7 @@ export default function CommandBar({
   onGenerate,
   onBatch,
   onToggleSwipe,
+  onRerollLast,
   onContinue,
   onStop,
   seedText = null,
@@ -158,9 +161,9 @@ export default function CommandBar({
               <>
                 <button
                   type="button"
-                  onClick={() => onToggleSwipe(1)}
+                  onClick={onRerollLast}
                   disabled={disabled || busy}
-                  title="换一支：同指令重新生成本章"
+                  title="换一支：同指令重新生成本章并追加为新候选"
                   data-testid="swipe-btn"
                   className={`${btnBase} border border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]`}
                 >
@@ -168,7 +171,7 @@ export default function CommandBar({
                 </button>
                 <FieldHint
                   tapToExpand
-                  text="换一支：同一章重新生成一个候选版本；已有多支候选时用 ◀▶ 按钮来回切换对比。"
+                  text="换一支：同指令重新生成一个新候选并自动切换过去；想回看旧候选用 ◀▶ 按钮。"
                 />
               </>
             )}
