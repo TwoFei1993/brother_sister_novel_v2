@@ -10,10 +10,16 @@ import { useEffect, useState } from 'react';
 
 import { updateWork } from '../../api/works';
 import { listCharacters, listPresets, listWorldbooks, type LibraryAssetRef } from '../../api/library';
-import type { Work } from '@shared/work';
+import { DEFAULT_TARGET_CHAPTER_WORDS, type Work } from '@shared/work';
 import VoiceMapEditor from '../tts/VoiceMapEditor';
 
 import WorkBindingsEditor from './dialog/WorkBindingsEditor';
+import StyleClonePanel from './dialog/StyleClonePanel';
+
+/** 数字输入兜底：空串/非法值回退 fallback，最小 1（防 PATCH 出非法设置值） */
+function clampInt(value: string, fallback: number): number {
+  return Math.max(1, Math.floor(Number(value) || fallback));
+}
 
 interface WorkSettingsSheetProps {
   work: Work;
@@ -25,6 +31,10 @@ interface WorkSettingsSheetProps {
 export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettingsSheetProps) {
   const [note, setNote] = useState(work.settings.authorNote);
   const [noteDepth, setNoteDepth] = useState(String(work.settings.noteDepth));
+  const [chapterWords, setChapterWords] = useState(
+    String(work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS),
+  );
+  const [chapterCount, setChapterCount] = useState(String(work.settings.desiredChapterCount));
   const [allowOverride, setAllowOverride] = useState(work.allowCardOverride !== false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +64,13 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
     try {
       const next = await updateWork(work.id, {
         revision: work.revision,
-        settings: { ...work.settings, authorNote: note, noteDepth: depth },
+        settings: {
+          ...work.settings,
+          authorNote: note,
+          noteDepth: depth,
+          targetChapterWords: clampInt(chapterWords, DEFAULT_TARGET_CHAPTER_WORDS),
+          desiredChapterCount: clampInt(chapterCount, work.settings.desiredChapterCount),
+        },
         allowCardOverride: allowOverride,
       });
       onSaved(next);
@@ -116,6 +132,49 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
                 className="h-9 w-20 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
               />
               <span className="text-xs text-[hsl(var(--fg-muted))]">条（酒馆默认 4）</span>
+            </div>
+          </section>
+
+          <section className="border-t border-[hsl(var(--border-soft))] pt-4">
+            {/* 文风复刻：参考文字提炼画像 → styleGuide（独立 PATCH，保存后同步 store） */}
+            <StyleClonePanel work={work} onSaved={onSaved} />
+          </section>
+
+          <section className="border-t border-[hsl(var(--border-soft))] pt-4">
+            <p className="mb-1 text-sm font-medium">生成目标</p>
+            <p className="mb-3 text-xs text-[hsl(var(--fg-muted))]">
+              字数注入每章提示词；连写按钮按目标章节数自动续写（改动下一章起生效）
+            </p>
+            <div className="flex items-center gap-3">
+              <label htmlFor="chapter-words" className="w-24 shrink-0 text-sm">
+                每章字数
+              </label>
+              <input
+                id="chapter-words"
+                type="number"
+                min={200}
+                step={100}
+                value={chapterWords}
+                onChange={(e) => setChapterWords(e.target.value)}
+                data-testid="chapter-words"
+                className="h-9 w-24 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              />
+              <span className="text-xs text-[hsl(var(--fg-muted))]">字（默认 3000）</span>
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              <label htmlFor="chapter-count" className="w-24 shrink-0 text-sm">
+                目标章节数
+              </label>
+              <input
+                id="chapter-count"
+                type="number"
+                min={1}
+                value={chapterCount}
+                onChange={(e) => setChapterCount(e.target.value)}
+                data-testid="chapter-count"
+                className="h-9 w-24 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              />
+              <span className="text-xs text-[hsl(var(--fg-muted))]">章（⚡连写到本章数即停）</span>
             </div>
           </section>
 

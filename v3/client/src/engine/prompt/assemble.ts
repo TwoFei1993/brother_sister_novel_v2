@@ -48,6 +48,8 @@ export interface AssembleContext {
   history: Message[];
   /** novel 模式当前指令（追加为末尾 user 消息） */
   directive?: string;
+  /** novel 末尾写作要求（字数 + 输出纪律，与 directive 合并为同一条末尾 user 消息；空指令时独立成条） */
+  chapterRequirement?: string;
   /** chat 模式用户输入（追加为末尾 user 消息） */
   userMessage?: string;
   macroEnv: MacroEnv;
@@ -95,6 +97,9 @@ export function buildSettingsBlock(s: NovelSettings): string {
   if (tones) parts.push(`基调：${tones}`);
   const style = s.customWritingStyle || (s.writingStyle !== 'default' ? s.writingStyle : '');
   if (style) parts.push(`文风：${style}`);
+  // 文风复刻画像：非空时以最高优先级注入（标记词供测试与人工排查锚定）
+  const styleGuide = s.styleGuide?.trim();
+  if (styleGuide) parts.push(`【文风要求（最高优先级，逐条遵循）】\n${styleGuide}`);
   if (s.pastedOutline.trim()) parts.push(`大纲：${s.pastedOutline.trim()}`);
   return parts.length ? `【作品设定】\n${parts.join('\n')}` : '';
 }
@@ -223,8 +228,16 @@ export function assemblePrompt(ctx: AssembleContext): AssembleResult {
 
   // ---------- 模式末尾注入 ----------
   const modeTail: AssembleMessage[] = [];
-  if (ctx.directive?.trim()) {
-    modeTail.push({ role: 'user', content: applyPromptRegex(`剧情指引：${substituteParams(ctx.directive, env)}`, 'ai_output') });
+  // novel：指令与写作要求（字数+输出纪律）合并为同一条末尾 user 消息——
+  // 二者有其一即注入（空指令连写时要求块仍独立成条，保住最末位最强注意力位置）
+  const novelTailText = [
+    ctx.directive?.trim() ? `剧情指引：${substituteParams(ctx.directive, env)}` : '',
+    ctx.chapterRequirement?.trim() ? substituteParams(ctx.chapterRequirement, env) : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  if (novelTailText) {
+    modeTail.push({ role: 'user', content: applyPromptRegex(novelTailText, 'ai_output') });
   }
   if (ctx.userMessage?.trim()) {
     modeTail.push({ role: 'user', content: applyPromptRegex(substituteParams(ctx.userMessage, env), 'ai_output') });

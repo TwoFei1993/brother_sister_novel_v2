@@ -133,6 +133,8 @@ export const NovelSettingsSchema = z.strictObject({
   chatReplyLength: ChatReplyLengthSchema.optional(),
   /** novel 模式每章目标字数（缺省视为 3000；兜底主提示词与末尾写作要求注入共用） */
   targetChapterWords: z.number().int().positive().optional(),
+  /** 文风画像（文风复刻）：参考文字提炼的纯写法指令，非空时以最高优先级注入设定块 */
+  styleGuide: z.string().optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 

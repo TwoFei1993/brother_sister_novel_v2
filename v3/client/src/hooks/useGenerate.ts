@@ -10,20 +10,24 @@
  * 流编排（重试/停止/事务 fail）统一走 generation-runtime 共享内核（与 chat 同构）。
  * 真实 UI 接线属 Task 20（WorkPage/CommandBar）。
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
 import { buildGenerateBody } from '../api/llm';
 import { useGenerationStore } from '../stores/generation';
+import { useWorkStore } from '../stores/work';
 
 import {
   MAX_SWIPES,
   buildContinueDirective,
   historyBeforeTarget,
+  nextChapterIndex,
+  remainingChapters,
   swipeLimitError,
 } from './generation-flow';
 import { runGenerationStream } from './generation-runtime';
+import { META_ONLY_PLACEHOLDER } from '../engine/prompt/postprocess';
 import {
   buildMacroEnv,
   finalizeGeneration,
@@ -42,6 +46,12 @@ interface RunOptions {
   swipeTarget?: Message;
 }
 
+/** 连写批次进度（null = 空闲）：done=已写到的最大章号，total=目标章节数 */
+export interface BatchProgress {
+  done: number;
+  total: number;
+}
+
 export interface UseGenerateResult {
   streaming: boolean;
   buffer: string;
@@ -54,7 +64,11 @@ export interface UseGenerateResult {
   continueFromPartial: (work: Work, messages: Message[], partial: string) => Promise<Message | null>;
   /** 换一支：同 directive 重生成，结果 push 进 target.swipes（幂等 upsert） */
   swipeRegenerate: (work: Work, messages: Message[], target: Message) => Promise<Message | null>;
-  /** 停止当前生成（已产出部分保留在界面，「继续」可用） */
+  /** 一键连写：从下一章自动写到目标章节数（第一章用传入指令、后续空指令自由发挥） */
+  runBatch: (work: Work, firstDirective: string) => Promise<void>;
+  /** 连写进度（null = 空闲；CommandBar 停止按钮进度文案消费） */
+  batch: BatchProgress | null;
+  /** 停止当前生成与连写循环（已产出部分保留在界面，「继续」可用） */
   stop: () => void;
   /** 关闭错误提示（保留半成品供继续） */
   clearError: () => void;
@@ -66,9 +80,19 @@ export interface UseGenerateResult {
 
 export function useGenerate(): UseGenerateResult {
   const abortRef = useRef<AbortController | null>(null);
+  // 连写循环取消标志：stop() 置位（顶栏 + CommandBar 双入口收敛此处），循环轮末检查退出
+  const batchCancelRef = useRef(false);
   // 上下文截断提示（store 收束即清零，generationStore 不留痕，挂 hook 本地态最小改动）
   const [lastTruncated, setLastTruncated] = useState(false);
+  const [batch, setBatch] = useState<BatchProgress | null>(null);
   const clearTruncated = useCallback(() => setLastTruncated(false), []);
+
+  // 卸载即取消连写（离开作品页不再续写后续章；已入库章节保留）
+  useEffect(() => {
+    return () => {
+      batchCancelRef.current = true;
+    };
+  }, []);
 
   const run = useCallback(
     (work: Work, messages: Message[], directive: string, opts: RunOptions): Promise<Message | null> =>
@@ -120,9 +144,30 @@ export function useGenerate(): UseGenerateResult {
     [],
   );
 
+  /** 元信息残章自动重试后缀（Sudachi 类思维链预设偶发：整轮输出只有思考没有正文） */
+  const META_RETRY_SUFFIX =
+    '\n\n（系统重试：上一次输出只有思考没有正文，视为无效。这次请跳过一切思考与提纲，直接输出完整正文。）';
+  /** 是否「正常完成但产物为元信息残章」——仅 finalize 成功返回的消息参与判定；
+   *  run 返回 null（流中错误/用户停止/防重入）不算残章，交由上层终止/提示，绝不重试；
+   *  content 非字符串（异常数据）视为正常消息，不误触发重试 */
+  const isMetaOnly = (m: Message | null): boolean => {
+    if (m === null) return false;
+    const c = m.content;
+    return typeof c === 'string' && (!c.trim() || c.startsWith(META_ONLY_PLACEHOLDER));
+  };
+
   const generateChapter = useCallback(
-    (work: Work, messages: Message[], directive: string) =>
-      run(work, messages, directive, { targetId: crypto.randomUUID(), initialBuffer: '' }),
+    async (work: Work, messages: Message[], directive: string) => {
+      let msg = await run(work, messages, directive, { targetId: crypto.randomUUID(), initialBuffer: '' });
+      if (isMetaOnly(msg)) {
+        msg = await run(work, messages, directive + META_RETRY_SUFFIX, {
+          targetId: crypto.randomUUID(),
+          initialBuffer: '',
+        });
+      }
+      // 重试一次后仍是残章（或本次即失败）：返回 null——占位章不入库、不上架（batch 以 null 终止）
+      return isMetaOnly(msg) ? null : msg;
+    },
     [run],
   );
 
@@ -135,22 +180,62 @@ export function useGenerate(): UseGenerateResult {
   );
 
   const swipeRegenerate = useCallback(
-    (work: Work, messages: Message[], target: Message) => {
+    async (work: Work, messages: Message[], target: Message) => {
       if (target.swipes.length >= MAX_SWIPES) {
         useGenerationStore.getState().fail(swipeLimitError(), false);
         return Promise.resolve(null);
       }
       // 对齐 chat 语义：上下文取 target 之前（被重roll章节的旧候选不进上下文）
-      return run(work, historyBeforeTarget(messages, target.id), target.directive ?? '', {
+      const directive = target.directive ?? '';
+      let msg = await run(work, historyBeforeTarget(messages, target.id), directive, {
         targetId: target.id,
         initialBuffer: '',
         swipeTarget: target,
       });
+      if (isMetaOnly(msg)) {
+        msg = await run(work, historyBeforeTarget(messages, target.id), directive + META_RETRY_SUFFIX, {
+          targetId: target.id,
+          initialBuffer: '',
+          swipeTarget: target,
+        });
+      }
+      // 重试一次后仍是残章（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
+      return isMetaOnly(msg) ? null : msg;
     },
     [run],
   );
 
-  const stop = useCallback(() => abortRef.current?.abort(), []);
+  const stop = useCallback(() => {
+    batchCancelRef.current = true; // 连写循环下一轮检查后退出
+    abortRef.current?.abort();
+  }, []);
+
+  /** 一键连写：循环单章生成直到目标章节数；出错/用户停止即停，已入库章节保留。
+   *  每轮从 work store 读最新 messages（上一章已 upsertLocal），规避闭包陈旧。 */
+  const runBatch = useCallback(
+    async (work: Work, firstDirective: string): Promise<void> => {
+      const total = work.settings.desiredChapterCount;
+      if (useGenerationStore.getState().streaming) return; // 防重入（单章生成中不可发起连写）
+      batchCancelRef.current = false;
+      try {
+        let first = true;
+        for (;;) {
+          const messages = useWorkStore.getState().messages;
+          if (remainingChapters(messages, total) <= 0 || batchCancelRef.current) break;
+          setBatch({ done: nextChapterIndex(messages) - 1, total });
+          const msg = await generateChapter(work, messages, first ? firstDirective : '');
+          first = false;
+          if (msg) useWorkStore.getState().upsertLocal(msg);
+          if (!msg || batchCancelRef.current) break; // 出错/停止即停（error 已进 store 提示）
+        }
+      } finally {
+        setBatch(null);
+        batchCancelRef.current = false;
+      }
+    },
+    [generateChapter],
+  );
+
   const clearError = useCallback(() => useGenerationStore.getState().clearError(), []);
 
   return {
@@ -162,6 +247,8 @@ export function useGenerate(): UseGenerateResult {
     generateChapter,
     continueFromPartial,
     swipeRegenerate,
+    runBatch,
+    batch,
     stop,
     clearError,
     lastTruncated,

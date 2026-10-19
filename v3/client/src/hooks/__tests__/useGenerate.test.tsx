@@ -218,3 +218,84 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
     expect(result!.swipes).toEqual(['旧候选正文XYZ', '新候选']); // 候选追加同 id upsert
   });
 });
+
+describe('useGenerate.swipeRegenerate（连续两次重roll 回归——用户实测「第二次消失」）', () => {
+  it('连续两次重roll：候选累加不丢失（v1→[v1,A]→[v1,A,B]，swipeId 指向最新）', async () => {
+    let n = 0;
+    stubFetch((path, init) => {
+      calls.push({ path, init: init ?? {} });
+      if (path === '/api/llm/generate') {
+        n += 1;
+        return sseResponse([`data: {"text":"重roll候选${n}"}\n\n`, 'data: [DONE]\n\n']);
+      }
+      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
+      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
+      throw new Error(`unmocked fetch: ${path}`);
+    });
+    await renderHook();
+    const prev = userMsg('u1', '前面的剧情');
+    let target = buildChapterMessage({
+      content: 'v1', title: '一', chapterIndex: 1, directive: '写第一章', promptTokens: 1, generationMs: 1,
+    });
+    let all = [prev, target];
+    let r: Message | null = null;
+    await act(async () => {
+      r = await latest!.swipeRegenerate(baseWork(), all, target);
+    });
+    expect(r!.swipes).toEqual(['v1', '重roll候选1']);
+    all = [prev, r!];
+    await act(async () => {
+      r = await latest!.swipeRegenerate(baseWork(), all, r!);
+    });
+    // 第二次重roll：候选累加不覆盖，swipeId 指向最新候选
+    expect(r!.swipes).toEqual(['v1', '重roll候选1', '重roll候选2']);
+    expect(r!.swipeId).toBe(2);
+    expect(r!.content).toBe('重roll候选2');
+  });
+});
+
+describe('useGenerate（元信息残章自动重试——质检T4「第二次消失」根因）', () => {
+  it('首次产物只有思考没有正文 → 自动带重试后缀再生成一次，最终返回有效正文', async () => {
+    // 注意：calls 由 stubFetch wrapper 统一记录，route 回调内不得再 push（否则同一请求双重计数）
+    let genCalls = 0;
+    let retryBody: { messages: { content: string }[] } | null = null;
+    stubFetch((path, init) => {
+      if (path === '/api/llm/generate') {
+        genCalls += 1;
+        if (genCalls === 1) {
+          return sseResponse(['data: {"text":"<thinking>只写了思考</thinking>"}\n\n', 'data: [DONE]\n\n']);
+        }
+        retryBody = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
+        return sseResponse(['data: {"text":"这次是完整正文，剧情推进顺利。"}\n\n', 'data: [DONE]\n\n']);
+      }
+      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
+      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
+      throw new Error(`unmocked fetch: ${path}`);
+    });
+    await renderHook();
+    let result: Message | null = null;
+    await act(async () => {
+      result = await latest!.generateChapter(baseWork(), [], '写第一章');
+    });
+    expect(genCalls).toBe(2); // 自动重试恰好一次
+    // 重试后缀在 directive 消息上；末尾一条是输出守卫 system 消息（novel 组装固定追加）
+    expect(retryBody!.messages.at(-2)!.content).toContain('系统重试');
+    expect(retryBody!.messages.at(-1)!.content).toContain('输出守卫');
+    expect(result!.content).toBe('这次是完整正文，剧情推进顺利。'); // 最终为有效正文
+  });
+
+  it('首次即有效正文 → 不触发重试（单次调用）', async () => {
+    // 注意：calls 由 stubFetch wrapper 统一记录，route 回调内不得再 push（否则同一请求双重计数）
+    stubFetch((path) => {
+      if (path === '/api/llm/generate') return sseResponse(['data: {"text":"正常正文"}\n\n', 'data: [DONE]\n\n']);
+      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
+      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
+      throw new Error(`unmocked fetch: ${path}`);
+    });
+    await renderHook();
+    await act(async () => {
+      await latest!.generateChapter(baseWork(), [], '写第一章');
+    });
+    expect(calls.filter((c) => c.path === '/api/llm/generate')).toHaveLength(1);
+  });
+});
