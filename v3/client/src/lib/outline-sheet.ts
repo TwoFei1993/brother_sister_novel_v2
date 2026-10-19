@@ -38,8 +38,11 @@ export interface SheetDocument {
 
 const GLOBAL_LINE = /^【[^】]*全局[^】]*】\s*(.*)$/;
 const SECTION_LINE = /^第\s*[0-9一二三四五六七八九十百零两]+\s*部分\s*[:：、.．]?\s*(.*)$/;
-/** 条目头要求名字与身份以｜分隔，避免普通编号列表（"1. 天玄宗…"）误判 */
-const ENTRY_LINE = /^\d{1,3}[.、．]\s*([^｜|\n]{1,20})[｜|]\s*(.+)$/;
+/**
+ * 条目头要求名字与身份以｜分隔，避免普通编号列表（"1. 天玄宗…"）误判；
+ * 编号兼容中文数字（B3 回归：「一、墨千秋｜听雨楼楼主」）。
+ */
+const ENTRY_LINE = /^(?:\d{1,3}|[一二三四五六七八九十]{1,3})[.、．]\s*([^｜|\n]{1,20})[｜|]\s*(.+)$/;
 const AGE_RE = /(\d{1,3})\s*岁/;
 const POSITIVE_PROMPT_RE = /^(?:正向|正面|positive)\s*prompt\s*[:：]?\s*(.*)$/i;
 const NEGATIVE_PROMPT_RE = /^(?:负向|反向|negative)\s*prompt\s*[:：]/i;

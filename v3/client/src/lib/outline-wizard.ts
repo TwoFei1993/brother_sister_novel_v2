@@ -27,24 +27,39 @@ export interface ExtractedOutline {
 
 // ---------- 正则基建（对照旧站） ----------
 
-/** 预处理：为行内序号/破折号条目补换行，使行级扫描与切界生效 */
-function normalizeOutline(text: string): string {
+/** markdown 装饰剥离：井号标题、加粗/斜体星号、删除线、行首列表符（A6 回归） */
+function stripMarkdown(text: string): string {
   return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*+/g, '')
+    .replace(/_{2,}/g, '')
+    .replace(/~{2,}/g, '')
+    .replace(/^[-+]\s+/gm, '');
+}
+
+/** 预处理：剥 markdown 装饰，并为行内序号/破折号条目补换行，使行级扫描与切界生效 */
+function normalizeOutline(text: string): string {
+  return stripMarkdown(text)
     .replace(/(?<=[^\n\s])(\s*(?:\d+[.、)）]|[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|[一二三四五六七八九十]+[.、：:])\s)/g, '\n$1')
     .replace(/(?<=[^\n\s])(\s*[-—–─━]\s+(?:[一-鿿]))/g, '\n$1');
 }
 
 /**
- * 小节边界：空行 / 标记符号 / 序号 / 人物行开头，或文本结尾。
- * 在旧站基础上：序号后空白改为可省（"二、主要人物"），新增人物行边界。
+ * 小节边界：空行 / 标记符号（含【开头的分节行）/ 序号 / 人物行 / 字段行开头，或文本结尾。
+ * 在旧站基础上：序号后空白改为可省（"二、主要人物"），新增人物行、【】标记与
+ * 常见字段词（核心矛盾/势力格局等——无空行无序号排版的字段行也是小节边界，A8 回归）。
  */
-const SECTION_END = String.raw`(?:\n\n|\n(?=\s*[#＃●★☆►▶◆■□▪▸·•※]|\s*\d+[.、)）]|\s*[-—–─━]\s|\s*[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|\s*[一二三四五六七八九十]+[.、：:]|\s*(?:主要人物|人物设定|人物简介|角色设定|哥哥|妹妹|兄长|男主|女主))|$)`;
+const SECTION_END = String.raw`(?:\n\n|\n(?=\s*[#＃【●★☆►▶◆■□▪▸·•※]|\s*\d+[.、)）]|\s*[-—–─━]\s|\s*[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|\s*[一二三四五六七八九十]+[.、：:]|\s*(?:主要人物|人物设定|人物简介|角色设定|哥哥|妹妹|兄长|男主|女主|核心矛盾|主线冲突|核心冲突|主要矛盾|中心冲突|主线剧情|势力格局|势力分布|势力设定|主要势力|故事背景|时代背景|世界背景|背景说明))|$)`;
 
-/** 关键字后取一段文本，直到下个小节边界（过短视为未命中） */
-function extract(patterns: RegExp[], src: string): string {
+/**
+ * 关键字后取一段文本，直到下个小节边界（过短视为未命中）。
+ * 长度上限移出正则：先懒惰捕到真实边界，再按 maxLen 截断——否则超长段
+ * （无内嵌边界且超过上限）会整体匹配失败而非截断（A8 回归）。
+ */
+function extract(patterns: RegExp[], src: string, maxLen = 500): string {
   for (const pat of patterns) {
     const m = src.match(new RegExp(pat.source, 'i'));
-    if (m?.[1] && m[1].trim().length >= 3) return m[1].trim();
+    if (m?.[1] && m[1].trim().length >= 3) return m[1].trim().slice(0, maxLen);
   }
   return '';
 }
@@ -74,6 +89,14 @@ const ROLE_LINE = new RegExp(String.raw`^(${ROLES})\s*(?:[（(]\s*([^\s（）()�
 const NAME_ROLE_LINE = new RegExp(String.raw`^([^\s（）()：:，,。]{2,6})\s*[（(]\s*(${ROLES})\s*[）)]\s*[：:]?\s*(.*)$`);
 /** 普通名字描述行：林昭：天赋异禀… */
 const PLAIN_NAME_LINE = /^([^\s（）()：:，,。]{2,4})\s*[：:]\s*(.{4,})$/;
+/**
+ * 散文式人物句（A2 回归）：无冒号段落内嵌「身份+人名+性格类关键词」，
+ * 如「兄长萧北冥性格冷峻寡言」。人名 2-3 字并过黑名单，特质取关键词后至句读。
+ */
+const PROSE_ROLE_LINE = new RegExp(
+  String.raw`(${ROLES})([一-鿿]{2,3})(?:性格|心思|天生|身怀|为人|一手|修炼)([^，,。！？;；\n]{2,20})`,
+  'g',
+);
 
 /** 描述切分为特质短语（2-20 字，最多 6 条） */
 function splitTraits(desc: string): string[] {
@@ -115,6 +138,11 @@ function scanCharacters(normalized: string): ExtractedCharacter[] {
     const plainM = text.match(PLAIN_NAME_LINE);
     if (plainM && !NAME_BLACKLIST.test(plainM[1])) {
       push(plainM[1], plainM[1], plainM[2]);
+      continue;
+    }
+    for (const proseM of text.matchAll(PROSE_ROLE_LINE)) {
+      const name = proseM[2] ?? '';
+      if (name && !NAME_BLACKLIST.test(name)) push(name, proseM[1] ?? name, proseM[3] ?? '');
     }
   }
   return [...byName.values()].slice(0, 6);
@@ -132,8 +160,11 @@ export function extractFromOutline(text: string): ExtractedOutline {
   const background =
     extract(
       [
-        new RegExp(String.raw`(?:故事背景|时代背景|背景说明|背景介绍|世界观设定)[：:、，,]?\s*([\s\S]{3,500}?)${SECTION_END}`),
-        new RegExp(String.raw`(?:^|\n)\s*(?:背景|世界观)[：:、，,]\s*([\s\S]{3,500}?)${SECTION_END}`),
+        new RegExp(String.raw`(?:故事背景|时代背景|背景说明|背景介绍|世界观设定)[：:、，,]?\s*([\s\S]{3,}?)${SECTION_END}`),
+        // 兼容【背景】/「一、背景：」形态：右括号纳入必选分隔（A1 回归）
+        new RegExp(
+          String.raw`(?:^|\n)\s*(?:[（(]?[\d一二三四五六七八九十]{1,3}[）)]?[、.．：:])?\s*[【\[]?\s*(?:背景|世界观)\s*(?:[】\]]|[：:、，,])\s*([\s\S]{3,}?)${SECTION_END}`,
+        ),
       ],
       normalized,
     ) ||
@@ -145,40 +176,45 @@ export function extractFromOutline(text: string): ExtractedOutline {
   const abilities: string[] = [];
   const bAbility = extract(
     [
-      new RegExp(String.raw`(?:哥哥|兄长|男主|兄|哥).{0,20}?(?:能力|金手指|天赋|技能|异能|特殊能力|实力|修为)[：:、，,]?\s*(.{3,200}?)${SECTION_END}`),
-      new RegExp(String.raw`(?:能力|金手指|天赋|技能|异能).{0,10}?(?:哥哥|兄长|男主|兄|哥)[：:、，,]?\s*(.{3,200}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:哥哥|兄长|男主|兄|哥).{0,20}?(?:能力|金手指|天赋|技能|异能|特殊能力|实力|修为)[：:、，,]?\s*(.{3,}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:能力|金手指|天赋|技能|异能).{0,10}?(?:哥哥|兄长|男主|兄|哥)[：:、，,]?\s*(.{3,}?)${SECTION_END}`),
     ],
     normalized,
+    200,
   );
   if (bAbility) abilities.push(bAbility);
   const sAbility = extract(
     [
-      new RegExp(String.raw`(?:妹妹|妹|女主|女二).{0,20}?(?:能力|金手指|天赋|技能|异能|特殊能力|实力|修为)[：:、，,]?\s*(.{3,200}?)${SECTION_END}`),
-      new RegExp(String.raw`(?:能力|金手指|天赋|技能|异能).{0,10}?(?:妹妹|妹|女主)[：:、，,]?\s*(.{3,200}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:妹妹|妹|女主|女二).{0,20}?(?:能力|金手指|天赋|技能|异能|特殊能力|实力|修为)[：:、，,]?\s*(.{3,}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:能力|金手指|天赋|技能|异能).{0,10}?(?:妹妹|妹|女主)[：:、，,]?\s*(.{3,}?)${SECTION_END}`),
     ],
     normalized,
+    200,
   );
   if (sAbility) abilities.push(sAbility);
 
   const factionsText = extract(
     [
-      new RegExp(String.raw`(?:势力分布|势力格局|阵营分布|主要势力|派系|门派分布)[：:、，,]?\s*(.{3,300}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:势力分布|势力格局|阵营分布|主要势力|派系|门派分布)[：:、，,]?\s*(.{3,}?)${SECTION_END}`),
       // 字段名须贴近行首（锚定行首 + 编号类短前缀），防止正文中
       // 「……刺客组织，总部位置成谜」被误当「组织：」字段截取
-      new RegExp(String.raw`(?:^|\n)\s*(?:[（(]?[\d一二三四五六七八九十]{1,3}[）)]?[、.．：:]|\S{0,4}?)\s*(?:势力|阵营|组织|家族|帝国)(?:设定|分布|简介)?[：:、，]\s*(.{3,300}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:^|\n)\s*(?:[（(]?[\d一二三四五六七八九十]{1,3}[）)]?[、.．：:]|\S{0,4}?)\s*(?:势力|阵营|组织|家族|帝国)(?:设定|分布|简介)?(?:[】\]]|[：:、，])\s*(.{3,}?)${SECTION_END}`),
     ],
     normalized,
+    300,
   );
-  const factions = factionsText ? [factionsText.slice(0, 300)] : [];
+  const factions = factionsText ? [factionsText] : [];
 
   // 矛盾：严格要求"矛盾/冲突"字样，避免误吞主线叙述
   const conflict = extract(
     [
-      new RegExp(String.raw`(?:核心矛盾|主线冲突|核心冲突|主要矛盾|中心冲突)[：:、，,]?\s*(.{3,300}?)${SECTION_END}`),
-      new RegExp(String.raw`(?:主线剧情)[：:、，,]\s*(.{3,300}?)${SECTION_END}`),
+      // 捕获用 [\s\S] 允许跨行（无后续边界时吞到文尾由 maxLen 截断，A8 回归）
+      new RegExp(String.raw`(?:核心矛盾|主线冲突|核心冲突|主要矛盾|中心冲突)[：:、，,】]?\s*([\s\S]{3,}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:主线剧情)[：:、，,]\s*([\s\S]{3,}?)${SECTION_END}`),
     ],
     normalized,
-  ).slice(0, 300);
+    300,
+  );
 
   return { characters: scanCharacters(normalized), background, abilities, factions, conflict };
 }
