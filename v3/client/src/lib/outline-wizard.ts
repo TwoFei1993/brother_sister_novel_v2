@@ -215,8 +215,8 @@ export function buildCardDraft(extracted: ExtractedOutline, name: string): Taver
   };
 }
 
-/** 世界书条目骨架（constant 恒注入，酒馆 newWorldInfoEntry 惯例字段） */
-function constantEntry(uid: number, comment: string, content: string, keys: string[]): TavernWorldInfoEntry {
+/** 世界书条目骨架（constant 恒注入，酒馆 newWorldInfoEntry 惯例字段）；outline-sheet 复用 */
+export function constantEntry(uid: number, comment: string, content: string, keys: string[]): TavernWorldInfoEntry {
   return {
     uid,
     key: keys,

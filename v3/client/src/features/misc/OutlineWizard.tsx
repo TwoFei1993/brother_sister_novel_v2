@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { apiFetch } from '../../api/client';
+import { parseSheetDocument, type SheetDocument } from '../../lib/outline-sheet';
 import {
   buildCardDraft,
   buildWorldbookDraft,
@@ -14,6 +15,7 @@ import {
   type ExtractedOutline,
 } from '../../lib/outline-wizard';
 import { suggestBookTitles } from '../../lib/export';
+import SheetImportPanel from './wizard/SheetImportPanel';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
 
@@ -21,12 +23,21 @@ export default function OutlineWizard() {
   const navigate = useNavigate();
   const [outline, setOutline] = useState('');
   const [extracted, setExtracted] = useState<ExtractedOutline | null>(null);
+  const [sheet, setSheet] = useState<SheetDocument | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
   const titles = useMemo(() => (extracted ? suggestBookTitles(outline) : []), [extracted, outline]);
 
   const notify = (kind: 'ok' | 'err', text: string) => setToast({ kind, text });
+
+  /** 粘贴即探测：编号展板条目 ≥3 → 批量人设导入模式；否则保留旧抽取路径 */
+  const onOutlineChange = (value: string) => {
+    setOutline(value);
+    setExtracted(null);
+    const doc = parseSheetDocument(value);
+    setSheet(doc.entries.length >= 3 ? doc : null);
+  };
 
   const onExtract = () => {
     const out = extractFromOutline(outline);
@@ -110,22 +121,37 @@ export default function OutlineWizard() {
         <textarea
           aria-label="大纲文本"
           value={outline}
-          onChange={(e) => setOutline(e.target.value)}
-          placeholder={'粘贴网文大纲，例如：\n一、故事背景：灵气复苏的大周王朝…\n哥哥（林昭）：天赋觉醒古龙血脉，性格沉稳…\n三、势力格局：天玄宗、丹王谷三足鼎立。\n四、核心矛盾：灭门惨案背后的夺舍阴谋。'}
+          onChange={(e) => onOutlineChange(e.target.value)}
+          placeholder={'粘贴网文大纲或「编号人设展板」文档，例如：\n一、故事背景：灵气复苏的大周王朝…\n哥哥（林昭）：天赋觉醒古龙血脉，性格沉稳…\n——或——\n01. 沈清晏｜镇国公府嫡长女（女主）\n正向 prompt：\n…（批量人设将自动识别）'}
           rows={10}
           className="w-full rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-sm leading-relaxed outline-none focus:border-[hsl(var(--accent))]"
         />
-        <button
-          type="button"
-          onClick={onExtract}
-          disabled={!outline.trim()}
-          className="mt-2 min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
-        >
-          智能抽取
-        </button>
+        {!sheet && (
+          <button
+            type="button"
+            onClick={onExtract}
+            disabled={!outline.trim()}
+            className="mt-2 min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
+          >
+            智能抽取
+          </button>
+        )}
       </section>
 
-      {extracted && (
+      {sheet && (
+        <SheetImportPanel
+          sheet={sheet}
+          onFinished={(ok, failed) => {
+            notify(
+              failed.length > 0 ? 'err' : 'ok',
+              failed.length > 0 ? `成功 ${ok} 张，失败：${failed.join('、')}` : `已生成 ${ok} 张角色卡，正在跳转资产库…`,
+            );
+            if (failed.length === 0) window.setTimeout(() => navigate('/library'), 800);
+          }}
+        />
+      )}
+
+      {!sheet && extracted && (
         <section aria-label="抽取预览" className="flex flex-col gap-3">
           {extracted.characters.length > 0 && (
             <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3">
