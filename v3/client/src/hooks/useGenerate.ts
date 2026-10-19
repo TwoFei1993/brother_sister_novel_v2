@@ -44,6 +44,8 @@ interface RunOptions {
   initialBuffer: string;
   /** swipe 重生成：候选进该消息的 swipes，而非新建消息 */
   swipeTarget?: Message;
+  /** 重试等场景：只替换提示词尾的指令文本（wire）；入库的 directive 元数据仍用干净原指令 */
+  promptDirective?: string;
 }
 
 /** 连写批次进度（null = 空闲）：done=已写到的最大章号，total=目标章节数 */
@@ -109,7 +111,8 @@ export function useGenerate(): UseGenerateResult {
           const assets: AssembleAssets = await loadAssembleAssets(work);
           const pending: PendingVars = { work: new Map(), global: new Map() };
           const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
-          const tail: AssembleTail = { kind: 'directive', text: directive };
+          // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）
+          const tail: AssembleTail = { kind: 'directive', text: opts.promptDirective ?? directive };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
           const body = buildGenerateBody({
             source: prefs.source,
@@ -160,9 +163,10 @@ export function useGenerate(): UseGenerateResult {
     async (work: Work, messages: Message[], directive: string) => {
       let msg = await run(work, messages, directive, { targetId: crypto.randomUUID(), initialBuffer: '' });
       if (isMetaOnly(msg)) {
-        msg = await run(work, messages, directive + META_RETRY_SUFFIX, {
+        msg = await run(work, messages, directive, {
           targetId: crypto.randomUUID(),
           initialBuffer: '',
+          promptDirective: directive + META_RETRY_SUFFIX, // 后缀只进提示词，不入库 metadata
         });
       }
       // 重试一次后仍是残章（或本次即失败）：返回 null——占位章不入库、不上架（batch 以 null 终止）
@@ -193,10 +197,11 @@ export function useGenerate(): UseGenerateResult {
         swipeTarget: target,
       });
       if (isMetaOnly(msg)) {
-        msg = await run(work, historyBeforeTarget(messages, target.id), directive + META_RETRY_SUFFIX, {
+        msg = await run(work, historyBeforeTarget(messages, target.id), directive, {
           targetId: target.id,
           initialBuffer: '',
           swipeTarget: target,
+          promptDirective: directive + META_RETRY_SUFFIX, // 后缀只进提示词，不入库 metadata
         });
       }
       // 重试一次后仍是残章（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
