@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import {
-  ASSET_META, describeAsset, deleteAsset, exportAsset, getAsset, importAsset, listAssets,
+  ASSET_META, describeAsset, deleteAsset, duplicatePreset, exportAsset, getAsset, importAsset, listAssets,
+  renamePreset,
   type AssetType, type LibraryAssetRef,
 } from '../../api/library';
 
@@ -91,6 +92,30 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
       await reload();
     } catch (err) {
       notify('err', err instanceof Error ? err.message : '删除失败');
+    }
+  };
+
+  /** 复制预设（仅 presets）：完整带走提示词与排序，新名 = 原名 + 「 副本」 */
+  const onDuplicate = async (id: string, name: string) => {
+    try {
+      const created = await duplicatePreset(id, `${name} 副本`);
+      notify('ok', `已复制为「${created.name}」`);
+      await reload();
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : '复制失败');
+    }
+  };
+
+  /** 重命名预设（仅 presets）：prompt 复用原值，空输入/取消不动 */
+  const onRename = async (id: string, name: string) => {
+    const next = window.prompt('重命名预设', name)?.trim();
+    if (!next || next === name) return;
+    try {
+      await renamePreset(id, next);
+      notify('ok', `已重命名为「${next}」`);
+      await reload();
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : '重命名失败');
     }
   };
 
@@ -187,6 +212,27 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
               >
                 编辑
               </button>
+              {type === 'presets' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void onDuplicate(it.id, it.name)}
+                    data-testid="asset-copy"
+                    title="完整复制一份（含全部提示词与启用排序）"
+                    className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
+                  >
+                    复制
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onRename(it.id, it.name)}
+                    data-testid="asset-rename"
+                    className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
+                  >
+                    重命名
+                  </button>
+                </>
+              )}
               {type === 'characters' && (
                 <button
                   type="button"

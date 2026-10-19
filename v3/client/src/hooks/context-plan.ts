@@ -6,12 +6,18 @@
  * generation-pipeline.ts 的 scanAndAssemble 仍按原流程调用本模块，并 re-export 保持兼容。
  */
 import type { Message } from '@shared/message';
+import type { GenerateMessage } from '../api/llm';
 import type { TavernPreset, TavernPrompt } from '@shared/tavern';
-import { CHAT_REPLY_LENGTH_RANGE, type ChatReplyLength } from '@shared/work';
+import {
+  CHAT_REPLY_LENGTH_RANGE,
+  DEFAULT_TARGET_CHAPTER_WORDS,
+  type ChatReplyLength,
+} from '@shared/work';
 
 import { apiFetch } from '../api/client';
 import { countTokensApprox } from '../engine/budget';
 import { buildSummarizePrompt } from '../engine/prompt/memory';
+import { buildNovelMainPrompt } from '../engine/prompt/requirements';
 import type { ScanSettings } from '../engine/worldbook';
 import type { LlmPrefs } from '../stores/settings';
 
@@ -49,21 +55,6 @@ export const EMPTY_PRESET: TavernPreset = {
   ],
 };
 
-/** novel 兜底主提示词：无预设时让模型以小说作家身份按章续写（质量测试 T5 教训：无主提示词会退化成通用助手） */
-const FALLBACK_NOVEL_MAIN: TavernPrompt = {
-  identifier: 'main',
-  name: '内置作家主提示词',
-  role: 'system',
-  system_prompt: true,
-  content:
-    '你是一位资深中文小说作家。请根据上方的全部设定与剧情指引，续写下一章正文：\n' +
-    '- 以小说笔法叙事，融合场景、动作、对话与心理描写，人物性格与关系保持前后一致\n' +
-    '- 情节必须承接聊天历史中的前文，不得另起炉灶\n' +
-    '- 每章正文约 1500 字；直接输出正文本身\n' +
-    '- 不要输出章节标题、编号、总结、写作说明或任何与正文无关的元信息\n' +
-    '- 绝不以 AI、助手、模型身份说话',
-};
-
 /** chat 兜底主提示词：无预设时强制沉浸式角色扮演（{{char}} 由宏环境解析为当前发言角色）。
  *  回复长度按作品 chatReplyLength 档位生成（用户反馈四问③：200-500 字太短，默认档加长至 400-900） */
 export function buildChatMainPrompt(replyLength: ChatReplyLength): TavernPrompt {
@@ -92,15 +83,35 @@ const FALLBACK_JAILBREAK: TavernPrompt = {
 };
 
 /** 按模式构建兜底预设（marker 骨架 + 中文主提示词；卡覆盖开关仍可替换 main）。
- *  chat 模式的兜底主提示词按回复长度档位生成（novel 主提示词不消费长度档） */
-export function buildFallbackPreset(tailKind: 'directive' | 'userMessage', replyLength: ChatReplyLength = 'medium'): TavernPreset {
+ *  chat 模式的兜底主提示词按回复长度档位生成；novel 主提示词按每章目标字数生成 */
+export function buildFallbackPreset(
+  tailKind: 'directive' | 'userMessage',
+  replyLength: ChatReplyLength = 'medium',
+  targetWords: number = DEFAULT_TARGET_CHAPTER_WORDS,
+): TavernPreset {
   return {
     ...EMPTY_PRESET,
-    prompts: [tailKind === 'directive' ? FALLBACK_NOVEL_MAIN : buildChatMainPrompt(replyLength), FALLBACK_JAILBREAK],
+    prompts: [
+      tailKind === 'directive' ? buildNovelMainPrompt(targetWords) : buildChatMainPrompt(replyLength),
+      FALLBACK_JAILBREAK,
+    ],
   };
 }
 
 /** 上下文规划（纯函数）：预算装得下则全量保留；装不下时从最旧侧切出 dropped（待摘要区） */
+/** 输出守卫（novel）：预设自带的思维链框架（如 Sudachi 类）可能让模型把输出耗在思考上——
+ *  只回思考没有正文视为无效。追加在消息最末尾（贴近生成点，遵循最强；对齐 chat 侧长度 hint 位置）。 */
+export function withNovelOutputGuard(messages: GenerateMessage[]): GenerateMessage[] {
+  return [
+    ...messages,
+    {
+      role: 'system' as const,
+      content:
+        '（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 800 字。）',
+    },
+  ];
+}
+
 export function planContext(history: Message[], budget: number): { kept: Message[]; dropped: Message[] } {
   const tokens = history.map((m) => countTokensApprox(m.content));
   const total = tokens.reduce((a, b) => a + b, 0);

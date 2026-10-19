@@ -94,6 +94,12 @@ const setSelect = (el: HTMLSelectElement, value: string) =>
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
 
+const setInput = (el: HTMLInputElement, value: string) =>
+  act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
 beforeEach(() => {
   listCharactersMock.mockResolvedValue(assets.characters);
   listWorldbooksMock.mockResolvedValue(assets.worldbooks);
@@ -143,5 +149,44 @@ describe('WorkSettingsSheet 绑定编辑', () => {
     expect(q(c, 'binding-error').textContent).toContain('版本冲突');
     expect(c.querySelector('[data-testid="binding-chip-b2"]')).toBeNull(); // 回滚
     expect(onSaved).not.toHaveBeenCalled(); // 失败不上抛
+  });
+});
+
+describe('WorkSettingsSheet 生成目标（每章字数/目标章节数）', () => {
+  it('初值来自作品设置（缺省字数回退 3000），保存 PATCH 携两字段', async () => {
+    const base = workFixture(['b1']);
+    base.settings = { ...base.settings, targetChapterWords: 5000, desiredChapterCount: 12 };
+    const c = await mountSheet(base);
+
+    expect((q(c, 'chapter-words') as HTMLInputElement).value).toBe('5000');
+    expect((q(c, 'chapter-count') as HTMLInputElement).value).toBe('12');
+
+    await setInput(q(c, 'chapter-words') as HTMLInputElement, '2000');
+    await setInput(q(c, 'chapter-count') as HTMLInputElement, '5');
+    await act(async () => {
+      q(c, 'settings-save').click();
+    });
+
+    expect(updateWorkMock).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({
+        settings: expect.objectContaining({ targetChapterWords: 2000, desiredChapterCount: 5 }),
+      }),
+    );
+  });
+
+  it('字数输入空串/非法值保存时兜底回退默认 3000', async () => {
+    const c = await mountSheet(workFixture(['b1']));
+    await setInput(q(c, 'chapter-words') as HTMLInputElement, '');
+    await act(async () => {
+      q(c, 'settings-save').click();
+    });
+
+    expect(updateWorkMock).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({
+        settings: expect.objectContaining({ targetChapterWords: 3000 }),
+      }),
+    );
   });
 });

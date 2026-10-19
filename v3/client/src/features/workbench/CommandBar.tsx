@@ -1,10 +1,11 @@
 /**
- * 底部指挥条（B 视图，设计 §7.1）：指令输入 + ▶续写 + 🎲换一支 +「继续」/ 停止
+ * 底部指挥条（B 视图，设计 §7.1）：指令输入 + ▶续写 + ⚡连写 + 🎲换一支 +「继续」/ 停止
  *
  * - ▶续写：指令可空（空 = 无剧情指令自由续写）
+ * - ⚡连写：从下一章自动写到目标章节数（作品设置可改），第一章用输入框指令、后续自由发挥
  * - 🎲换一支：最后一章多候选时 ◀▶ 切换（PATCH swipeId）；仅一支时 = swipe 重生成（追加候选）
  * -「继续」：断流/停止后 partialKept=true 出现，以半成品重组上下文再发起（§9.2）
- * - 生成中：▶ 变 ⏹ 停止；输入与换一支禁用
+ * - 生成中：▶ 变 ⏹ 停止（连写时附进度 3/50）；输入与换一支禁用
  */
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
@@ -22,7 +23,11 @@ interface CommandBarProps {
   disabled: boolean;
   /** 换一支动作进行中（重生成期间 🎲 禁用） */
   busy: boolean;
+  /** 连写进度（如 "3/50"；null = 非连写） */
+  batchProgress: string | null;
   onGenerate: (directive: string) => void;
+  /** ⚡连写：携带输入框当前指令作第一章指令（后续章空指令自由发挥） */
+  onBatch: (directive: string) => void;
   onToggleSwipe: (delta: 1 | -1) => void;
   onContinue: () => void;
   onStop: () => void;
@@ -41,7 +46,9 @@ export default function CommandBar({
   swipePosition,
   disabled,
   busy,
+  batchProgress,
   onGenerate,
+  onBatch,
   onToggleSwipe,
   onContinue,
   onStop,
@@ -63,6 +70,12 @@ export default function CommandBar({
     setDirective('');
   }
 
+  function submitBatch(): void {
+    if (disabled || streaming) return;
+    onBatch(directive.trim());
+    setDirective('');
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
   }
@@ -77,7 +90,7 @@ export default function CommandBar({
             data-testid="stop-btn"
             className={`${btnBase} flex-1 bg-[hsl(var(--danger))] text-white sm:flex-none sm:px-6`}
           >
-            ⏹ 停止
+            ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
           </button>
         ) : (
           <>
@@ -102,9 +115,19 @@ export default function CommandBar({
             >
               ▶ 续写
             </button>
+            <button
+              type="button"
+              onClick={submitBatch}
+              disabled={disabled || busy}
+              data-testid="batch-btn"
+              title="一键连写：从下一章自动写到目标章节数（作品设置中可改），第一章用当前指令、后续 AI 自由发挥；随时可停止"
+              className={`${btnBase} border border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10`}
+            >
+              ⚡ 连写
+            </button>
             <FieldHint
               tapToExpand
-              text="续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。"
+              text="续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。连写：点一次自动连写到目标章节数，中途点停止即停。"
             />
             {canToggleSwipe ? (
               <div className="flex h-10 shrink-0 items-center rounded-lg border border-[hsl(var(--border-soft))]">

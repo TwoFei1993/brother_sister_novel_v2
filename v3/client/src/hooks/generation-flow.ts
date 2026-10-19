@@ -68,6 +68,11 @@ export function nextChapterIndex(messages: Message[]): number {
   return messages.reduce((mx, m) => Math.max(mx, m.chapter?.index ?? 0), 0) + 1;
 }
 
+/** 连写剩余章数：目标章数 − 已写到的最大章号（负数归零；断号章节由下一轮补齐语义自然衔接） */
+export function remainingChapters(messages: Message[], targetCount: number): number {
+  return Math.max(0, targetCount - (nextChapterIndex(messages) - 1));
+}
+
 /** 错误统一转义：SSE error 帧对象 / ApiError / AbortError / 未知 Error */
 export function toGenerationError(err: unknown): GenerationError {
   if (err instanceof ApiError) return { code: err.code, message: err.message };

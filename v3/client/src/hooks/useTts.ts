@@ -26,6 +26,8 @@ import { useTtsStore } from '../stores/tts';
 /** 连播队列的章输入：text 全章正文；绑定与旁白声缺省走全局 */
 export interface TtsChapterInput {
   text: string;
+  /** 本章剧情指令（novel 闲聊前导剥离的回显判定用；chat 队列不传） */
+  directive?: string;
   /** 作品级角色绑定（角色名 → 声音 id） */
   voiceMap?: Record<string, string>;
   /** 运行时补充说话人（如 chat 激活成员）；voiceMap 同名优先 */

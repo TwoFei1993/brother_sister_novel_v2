@@ -37,14 +37,16 @@ describe('回复长度（四问③）', () => {
     expect(appendReplyLengthHint([], 'long').at(-1)!.content).toContain('800-1500');
   });
 
-  it('chat 兜底主提示词按档位映射（medium 取代旧 200-500）；novel 主提示词不消费长度档', () => {
+  it('chat 兜底主提示词按档位映射（medium 取代旧 200-500）；novel 主提示词按每章字数设置生成', () => {
     expect(buildChatMainPrompt('short').content).toContain('150-300');
     expect(buildChatMainPrompt('medium').content).toContain('400-900');
     expect(buildChatMainPrompt('medium').content).not.toContain('200-500');
     expect(buildFallbackPreset('userMessage', 'long').prompts[0]!.content).toContain('800-1500');
     const novel = buildFallbackPreset('directive', 'long').prompts[0]!;
     expect(novel.content).not.toContain('800-1500');
-    expect(novel.content).toContain('1500 字'); // novel 固定章长文案保持不变
+    expect(novel.content).toContain('不少于 3000 字'); // novel 缺省每章字数（不再硬编码 1500）
+    // 用户设置的每章字数透传兜底主提示词
+    expect(buildFallbackPreset('directive', 'long', 5000).prompts[0]!.content).toContain('不少于 5000 字');
   });
 });
 

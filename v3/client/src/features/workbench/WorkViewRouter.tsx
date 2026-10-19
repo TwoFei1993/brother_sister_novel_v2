@@ -69,7 +69,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     () =>
       [...chapters]
         .sort((a, b) => a.chapter.index - b.chapter.index)
-        .map((m) => ({ text: m.content, voiceMap: work.voiceMap })),
+        .map((m) => ({ text: m.content, directive: m.directive, voiceMap: work.voiceMap })),
     [chapters, work.voiceMap],
   );
 
@@ -232,8 +232,8 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
         <EmptyGuide work={work} onCreated={upsertLocal} />
       )}
 
-      {/* novel TTS 听书条（引擎常驻；仅 B 视图显示控制条，高亮由 ReadingView 读 tts store） */}
-      {work.mode === 'novel' && <WorkTtsBar work={work} chapters={ttsChapters} visible={currentView === 'b'} />}
+      {/* novel TTS 听书条（引擎常驻；A/B/C 三视图均显示，写作时也能随时听书；高亮由 ReadingView 读 tts store） */}
+      {work.mode === 'novel' && <WorkTtsBar work={work} chapters={ttsChapters} />}
 
       <CommandBar
         streaming={gen.streaming}
@@ -242,7 +242,9 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
         swipePosition={lastChapter ? `${lastChapter.swipeId + 1}/${lastChapter.swipes.length}` : null}
         disabled={false}
         busy={gen.streaming}
+        batchProgress={gen.batch ? `${gen.batch.done}/${gen.batch.total}` : null}
         onGenerate={(d) => void handleGenerate(d)}
+        onBatch={(d) => void gen.runBatch(work, d)}
         onToggleSwipe={(d) => void handleToggleSwipe(d)}
         onContinue={() => void handleContinue()}
         onStop={gen.stop}

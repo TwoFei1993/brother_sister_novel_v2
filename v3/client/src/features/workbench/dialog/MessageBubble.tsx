@@ -14,7 +14,7 @@ import { useState } from 'react';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { presentable, splitOutline } from '../../../engine/prompt/postprocess';
+import { presentableNovel, splitOutline } from '../../../engine/prompt/postprocess';
 
 import BubbleMarkdown from './BubbleMarkdown';
 import OutlineBlock from './OutlineBlock';
@@ -130,7 +130,7 @@ function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe,
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState(false);
   // 显示分离：头部要点提纲折叠展示（默认收起），气泡正文只渲染 body（编辑/复制仍取全文）
-  const { outline, body } = splitOutline(presentable(message.content));
+  const { outline, body } = splitOutline(presentableNovel(message.content, message.directive));
 
   function startEdit(): void {
     setDraft(message.content);

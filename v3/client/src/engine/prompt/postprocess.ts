@@ -14,17 +14,21 @@
 import type { TavernRegexScript } from '@shared/tavern';
 
 import type { MacroEnv } from '../types';
+import { stripChatPreamble } from './chat-preamble';
 import { getRegexedString } from './regex';
 import { sanitizeOutput } from './sanitize';
 
 // ---- 净化器公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
 export {
   presentable,
+  presentableNovel,
   splitOutline,
   sanitizeOutput,
   stripLooseThinking,
   stripTailMeta,
+  META_ONLY_PLACEHOLDER,
 } from './sanitize';
+export { stripChatPreamble, isChatterLine } from './chat-preamble';
 export type { SplitOutline } from './sanitize';
 
 /** 首行标题行：`# 第N章 xxx` 或 `# xxx`（# 后须有内容，防误伤空行） */
@@ -101,7 +105,7 @@ export function parseStatusBlock(raw: string): ParsedStatus {
 }
 
 export interface PostprocessOpts {
-  /** novel 模式当前指令（标题兜底用） */
+  /** novel 模式当前指令（标题兜底 + 闲聊回显剥离用） */
   directive?: string;
   /** 章节下标（0 起，兜底 `第N章` 用） */
   chapterIndex?: number;
@@ -111,6 +115,8 @@ export interface PostprocessOpts {
   macroEnv?: MacroEnv;
   /** 发言者名（chat 模式为激活角色；用于内置卫生层的名字前缀剥离） */
   speakerName?: string;
+  /** novel 入库轨开启闲聊前导剥离（对 System 寒暄/思考结束标记/指令回显等，仅 novel 生成路径置 true） */
+  stripChatter?: boolean;
 }
 
 export interface PostprocessResult {
@@ -125,7 +131,9 @@ export interface PostprocessResult {
  */
 export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): PostprocessResult {
   // 内置卫生层：与用户正则无关，所有生成共用（质量测试 T3/T4 发现的思考块与名字前缀残留）
-  const hygiened = sanitizeOutput(raw, opts.speakerName);
+  const sanitized = sanitizeOutput(raw, opts.speakerName);
+  // novel 入库轨闲聊前导剥离（对 System 寒暄/思考结束标记/指令回显等，见 chat-preamble.ts）
+  const hygiened = opts.stripChatter ? stripChatPreamble(sanitized, opts.directive) : sanitized;
   // 显示轨清理：ai_output + 双 false 轨道（promptOnly/markdownOnly 脚本均不参与）
   const cleaned = getRegexedString(
     hygiened,

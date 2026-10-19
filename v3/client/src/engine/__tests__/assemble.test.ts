@@ -256,6 +256,29 @@ describe('assemblePrompt 模式末尾注入', () => {
     expect(last.content).toBe('你好呀');
   });
 
+  it('novel 模式 directive 与写作要求合并为同一条末尾 user 消息', () => {
+    const result = assemblePrompt(
+      makeCtx({ directive: '主角进入遗迹探险', chapterRequirement: '【本章写作要求】\n- 本章正文不少于 3000 字' }),
+    );
+    const last = result.messages[result.messages.length - 1];
+    expect(last.role).toBe('user');
+    expect(last.content).toContain('剧情指引：主角进入遗迹探险');
+    expect(last.content).toContain('【本章写作要求】');
+    expect(last.content).toContain('不少于 3000 字');
+    // 全局只有一条注入消息同时承载两者（合并不拆分）
+    expect(result.messages.filter((m) => m.content.includes('剧情指引'))).toHaveLength(1);
+  });
+
+  it('空指令连写时写作要求仍独立产出末尾 user 消息（连写后续章的关键回归）', () => {
+    const result = assemblePrompt(
+      makeCtx({ chapterRequirement: '【本章写作要求】\n- 本章正文不少于 3000 字' }),
+    );
+    const last = result.messages[result.messages.length - 1];
+    expect(last.role).toBe('user');
+    expect(last.content).toContain('【本章写作要求】');
+    expect(last.content).not.toContain('剧情指引');
+  });
+
   it('宏全局替换：世界书内容中的 {{char}}/{{user}} 被替换', () => {
     const result = assemblePrompt(
       makeCtx({

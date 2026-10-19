@@ -17,13 +17,15 @@ import type { CharacterAsset } from '@shared/card';
 import type { PresetAsset } from '@shared/preset';
 import type { WorldbookAsset } from '@shared/worldbook';
 import type { Work } from '@shared/work';
+import { DEFAULT_TARGET_CHAPTER_WORDS } from '@shared/work';
 
 import { apiFetch } from '../api/client';
 import type { RegexAsset } from '../api/library';
 import { tokenizeMessages, type GenerateMessage } from '../api/llm';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
-import { postprocessMessage } from '../engine/prompt/postprocess';
+import { META_ONLY_PLACEHOLDER, postprocessMessage } from '../engine/prompt/postprocess';
+import { buildChapterRequirement } from '../engine/prompt/requirements';
 import { scanWorldInfo } from '../engine/worldbook';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
@@ -33,11 +35,12 @@ import {
   planContext,
   summarizeDropped,
   SCAN_SETTINGS,
+  withNovelOutputGuard,
 } from './context-plan';
 
 // ---- 上下文规划层公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
 export { EMPTY_PRESET, SCAN_SETTINGS, buildChatMainPrompt } from './context-plan';
-export { buildFallbackPreset, planContext, summarizeDropped } from './context-plan';
+export { buildFallbackPreset, planContext, summarizeDropped, withNovelOutputGuard } from './context-plan';
 
 import {
   appendSwipe,
@@ -176,9 +179,11 @@ export async function scanAndAssemble(
   }
 
   let history = plan.kept;
+  // novel 每章目标字数：兜底主提示词与末尾写作要求共用（不进世界书扫描池，避免「字数」误激活条目）
+  const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS;
   for (;;) {
     const result = assemblePrompt({
-      preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium'),
+      preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords),
       cards: assets.cards,
       // §4.4 卡覆盖预设开关：作品级设置，缺省视为开（与酒馆一致）
       allowCardOverride: work.allowCardOverride !== false,
@@ -186,7 +191,9 @@ export async function scanAndAssemble(
       workSettings: work.settings,
       ...(summary ? { summary } : {}),
       history,
-      ...(tail.kind === 'directive' ? { directive: tail.text } : { userMessage: tail.text }),
+      ...(tail.kind === 'directive'
+        ? { directive: tail.text, chapterRequirement: buildChapterRequirement(targetWords) }
+        : { userMessage: tail.text }),
       macroEnv: env,
       budgetTokens: budget,
       regexScripts: assets.regexScripts, // promptOnly 生成轨（静态块进上下文前应用）
@@ -197,11 +204,13 @@ export async function scanAndAssemble(
       content: m.content,
     }));
     if (history.length === 0) {
-      return { messages: assembled, promptTokens: result.usage.promptTokens, truncated: result.usage.truncated, activatedIds: result.activatedIds };
+      const finalMessages = tail.kind === 'directive' ? withNovelOutputGuard(assembled) : assembled;
+      return { messages: finalMessages, promptTokens: result.usage.promptTokens, truncated: result.usage.truncated, activatedIds: result.activatedIds };
     }
     const { count } = await tokenizeMessages(prefs.source, prefs.model || undefined, assembled);
     if (count <= budget) {
-      return { messages: assembled, promptTokens: count, truncated: result.usage.truncated, activatedIds: result.activatedIds };
+      const finalMessages = tail.kind === 'directive' ? withNovelOutputGuard(assembled) : assembled;
+      return { messages: finalMessages, promptTokens: count, truncated: result.usage.truncated, activatedIds: result.activatedIds };
     }
     // 超预算：按超量比例估算截断条数（至少 1 条），截掉最旧后重新组装校验
     const perMsg = count / Math.max(1, assembled.length);
@@ -268,6 +277,7 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
     regexScripts: assets.regexScripts,
     macroEnv: env,
     speakerName: '小说家',
+    stripChatter: true, // novel 入库轨闲聊前导剥离（对 System 寒暄等，见 chat-preamble.ts）
   });
   const generationMs = Date.now() - startedAt;
   const extra = {
@@ -275,10 +285,12 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
     tokenCount: input.promptTokens,
     generationMs,
   };
+  // 净化后一无所有 = 整轮输出只有思考/元信息：落占位提示（上层 isMetaOnly 据此自动重试一次）
+  const bodyContent = pp.content.trim() ? pp.content : META_ONLY_PLACEHOLDER;
   const message = swipeTarget
-    ? appendSwipe(swipeTarget, pp.content, extra)
+    ? appendSwipe(swipeTarget, bodyContent, extra)
     : buildChapterMessage({
-        content: pp.content,
+        content: bodyContent,
         title: pp.title,
         chapterIndex,
         directive: directive || undefined,
@@ -287,13 +299,16 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
         statusSnapshot: pp.statusSnapshot,
         activatedEntries: input.activatedIds,
       });
-  try {
-    await persistMessage(work.id, message);
-  } catch (err) {
-    const ge = toGenerationError(err);
-    throw new GenerationFlowError({ code: ge.code, message: `正文已生成，但入库失败：${ge.message}` });
+  const metaOnly = !pp.content.trim(); // 整轮输出只有思考/元信息：不入库，交由上层自动重试
+  if (!metaOnly) {
+    try {
+      await persistMessage(work.id, message);
+    } catch (err) {
+      const ge = toGenerationError(err);
+      throw new GenerationFlowError({ code: ge.code, message: `正文已生成，但入库失败：${ge.message}` });
+    }
+    await persistVariables(work, pending);
   }
-  await persistVariables(work, pending);
   useGenerationStore.getState().finish();
   useGenerationStore.getState().reset();
   return message;

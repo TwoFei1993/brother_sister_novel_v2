@@ -46,6 +46,24 @@ describe('兜底预设 buildFallbackPreset', () => {
     expect(main?.content).toContain('{{char}}');
     expect(main?.content).not.toContain('小说作家');
   });
+
+  it('novel 兜底主提示词字数透传设置值（不再硬编码 1500）', () => {
+    const p = buildFallbackPreset('directive', 'medium', 5000);
+    const main = p.prompts.find((x) => x.identifier === 'main');
+    expect(main?.content).toContain('每章正文不少于 5000 字');
+    expect(main?.content).not.toContain('1500');
+  });
+});
+
+describe('novel 写作要求注入（requirements）', () => {
+  it('buildChapterRequirement 含字数下限与输出纪律', async () => {
+    const { buildChapterRequirement } = await import('../prompt/requirements');
+    const text = buildChapterRequirement(3000);
+    expect(text).toContain('【本章写作要求】');
+    expect(text).toContain('不少于 3000 字');
+    expect(text).toContain('System');
+    expect(text).toContain('禁止');
+  });
 });
 
 describe('postprocessMessage 集成卫生层', () => {

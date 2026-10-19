@@ -69,6 +69,21 @@ export async function updatePresetRaw(id: string, raw: TavernPreset): Promise<vo
   await apiFetch(`/api/presets/${id}`, { method: 'PATCH', body: JSON.stringify({ raw }) });
 }
 
+/** 完整复制预设：GET 全量 → POST 新建（去掉服务端元数据，改名副本；提示词与排序原样带走） */
+export async function duplicatePreset(id: string, name: string): Promise<LibraryAssetRef> {
+  const { id: _omitId, createdAt: _omitAt, ...body } = await getPreset(id);
+  const created = await apiFetch<{ id: string; name: string }>('/api/presets', {
+    method: 'POST',
+    body: JSON.stringify({ ...body, name }),
+  });
+  return { id: created.id, name: created.name };
+}
+
+/** 预设重命名：PATCH 顶层 name（列表/绑定显示名取自浅列表的顶层字段） */
+export async function renamePreset(id: string, name: string): Promise<void> {
+  await apiFetch(`/api/presets/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+}
+
 // ---------- 导入 / 导出 ----------
 
 /** multipart 导入：返回新建资产的引用（201） */

@@ -16,7 +16,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { presentable, splitOutline } from '../../engine/prompt/postprocess';
+import { presentableNovel, splitOutline } from '../../engine/prompt/postprocess';
 import { applyDisplayRegex, MARKDOWN_CLASS } from '../../lib/markdown';
 import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/readingPrefs';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
@@ -183,7 +183,7 @@ export default function ReadingView({
           {chapters.map((m, ci) => {
             const highlightThis = ttsActive && ci === tts.chapterIndex;
             // 提纲分离：头部要点提纲折叠展示（默认收起），正文只渲染 body（§5.1⑥ 显示分离）
-            const { outline, body } = splitOutline(presentable(m.content));
+            const { outline, body } = splitOutline(presentableNovel(m.content, m.directive));
             // 朗读高亮段落与 WorkTtsBar 连播队列同源：都从 body 切分，保证段序对齐
             const paras = highlightThis ? splitParagraphs(body) : null;
             return (

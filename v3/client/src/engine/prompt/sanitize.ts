@@ -6,6 +6,7 @@
  * 尾部元信息剥离 → 提纲分离 → 展示净化组合。
  * postprocess.ts 的 postprocessMessage 总入口仍按原顺序调用本模块。
  */
+import { stripChatPreamble } from './chat-preamble';
 
 /** 正文中的后续标题行（模型自拟的嵌套小标题，如 `## 卷一`）——连同行尾换行一并移除 */
 const HEADING_LINE_RE = /^#{1,6}[ \t]+\S.*\n?/gm;
@@ -17,6 +18,9 @@ const OUTLINE_MARKERS = ['要点', '提纲', '大纲', '思路', '剧情走向',
  *  「正文」前允许 ≤6 字前缀（如「最终」），后必须紧跟冒号/星号/空白（前瞻）——叙述行不匹配。 */
 const BODY_MARKER_RE =
   /^[ \t]*(?:[-*_]{3,}[ \t]*|【正文】|\*{0,2}(?:.{0,6})?正文\*{0,2}(?:[：：]|(?=[\s])))[ \t]*\n?/gm;
+
+/** 元信息残章占位提示（presentable 清空后的引导文案；useGenerate 以此前缀判定自动重试） */
+export const META_ONLY_PLACEHOLDER = '（本章只剩元信息，没有正文——建议 🎲 重新生成本章或切换候选。）';
 
 /** 规划段关键词：命中其一即视作思考流段落（对照实测泄露样本归纳） */
 const PLANNING_RE =
@@ -141,7 +145,22 @@ export function presentable(content: string, speakerName?: string): string {
   const cleaned = stripTailMeta(stripLooseThinking(sanitizeOutput(content, speakerName)));
   // 剥离后一无所有 = 该章只剩元信息（选项/摘要/思考）——给出重roll引导而非空白
   if (!cleaned.trim() && content.length > 200) {
-    return '（本章只剩元信息，没有正文——建议 🎲 重新生成本章或切换候选。）';
+    return META_ONLY_PLACEHOLDER;
+  }
+  return cleaned;
+}
+
+/**
+ * novel 模式展示净化组合（在 presentable 基础上多一层闲聊前导剥离）。
+ * chat 模式不可用本函数：星号/括号动作在角色扮演里是合法内容，
+ * 闲聊剥离（stripChatPreamble）只针对 novel 的「与 System 寒暄后写正文」泄露形态。
+ */
+export function presentableNovel(content: string, directive?: string): string {
+  const cleaned = stripTailMeta(
+    stripLooseThinking(stripChatPreamble(sanitizeOutput(content), directive)),
+  );
+  if (!cleaned.trim() && content.length > 200) {
+    return META_ONLY_PLACEHOLDER;
   }
   return cleaned;
 }

@@ -24,7 +24,9 @@ async function renderBar(props: Partial<Parameters<typeof CommandBar>[0]> = {}):
     swipePosition: null,
     disabled: false,
     busy: false,
+    batchProgress: null,
     onGenerate: () => undefined,
+    onBatch: () => undefined,
     onToggleSwipe: () => undefined,
     onContinue: () => undefined,
     onStop: () => undefined,
@@ -86,5 +88,26 @@ describe('CommandBar 状态', () => {
     });
     expect(onGenerate).toHaveBeenCalledWith('兄妹进入遗迹');
     expect(input!.value).toBe('');
+  });
+
+  it('⚡连写：携带指令回调 onBatch 并清空输入', async () => {
+    const onBatch = vi.fn();
+    const c = await renderBar({ onBatch });
+    const input = c.querySelector<HTMLInputElement>('[data-testid="directive-input"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(input, '兄妹进入城堡');
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="batch-btn"]')!.click();
+    });
+    expect(onBatch).toHaveBeenCalledWith('兄妹进入城堡');
+    expect(input!.value).toBe('');
+  });
+
+  it('连写中：停止按钮显示进度（⏹ 停止 3/50）', async () => {
+    const c = await renderBar({ streaming: true, batchProgress: '3/50' });
+    expect(c.querySelector('[data-testid="stop-btn"]')?.textContent).toContain('3/50');
   });
 });
