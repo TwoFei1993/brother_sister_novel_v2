@@ -48,7 +48,7 @@ describe('toClaude', () => {
       [msg('system', 'A'), msg('system', 'B'), msg('user', '问'), msg('system', 'C')],
       {},
     );
-    expect(body.system).toEqual(['A', 'B']);
+    expect(body.system).toBe('A\n\nB');
     // 中部 system 已转为 user 保留在 messages（下一用例细查）
     expect(body.messages.some((m) => m.content.includes('C'))).toBe(true);
   });
@@ -58,7 +58,7 @@ describe('toClaude', () => {
       [msg('system', '头'), msg('user', '问'), msg('system', '中'), msg('system', '尾')],
       {},
     );
-    expect(body.system).toEqual(['头']);
+    expect(body.system).toBe('头');
     // 「问」与降级后的「中」「尾」同为 user，按连续同 role 规则合并为一条（对齐酒馆）
     expect(body.messages).toEqual([{ role: 'user', content: '问\n\n中\n\n尾' }]);
   });

@@ -32,7 +32,9 @@ export function toClaude(messages: ChatMessage[], params: GenParams): ClaudeBody
     messages: mergeConsecutive(rest),
     max_tokens: params.max_tokens ?? 4096,
   };
-  if (system.length > 0) body.system = system;
+  // system 合并为单字符串：官方 Anthropic 同时接受字符串与块数组，
+  // 但部分兼容端点（实测 MiniMax anthropic 端点）会静默丢弃数组——字符串是两边通吃的稳妥形态。
+  if (system.length > 0) body.system = system.join('\n\n');
   if (params.temperature !== undefined) body.temperature = params.temperature;
   if (params.top_p !== undefined) body.top_p = params.top_p;
   return body;

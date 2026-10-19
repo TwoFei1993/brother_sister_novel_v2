@@ -29,7 +29,8 @@ export interface OpenAIBody {
 
 /** Anthropic Messages 请求体（max_tokens 必填） */
 export interface ClaudeBody {
-  system?: string[];
+  /** 合并为单字符串：兼容层（如 MiniMax anthropic 端点）不接受数组，官方两种皆可 */
+  system?: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   max_tokens: number;
   temperature?: number;

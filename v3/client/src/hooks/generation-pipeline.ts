@@ -11,7 +11,7 @@
  * 纯函数见 generation-flow.ts，共享 run 内核见 generation-runtime.ts。
  */
 import type { Message } from '@shared/message';
-import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tavern';
+import type { TavernCardV2, TavernPreset, TavernPrompt, TavernRegexScript } from '@shared/tavern';
 import type { CharacterAsset } from '@shared/card';
 import type { PresetAsset } from '@shared/preset';
 import type { WorldbookAsset } from '@shared/worldbook';
@@ -66,6 +66,52 @@ export const EMPTY_PRESET: TavernPreset = {
     },
   ],
 };
+
+/** novel 兜底主提示词：无预设时让模型以小说作家身份按章续写（质量测试 T5 教训：无主提示词会退化成通用助手） */
+const FALLBACK_NOVEL_MAIN: TavernPrompt = {
+  identifier: 'main',
+  name: '内置作家主提示词',
+  role: 'system',
+  system_prompt: true,
+  content:
+    '你是一位资深中文小说作家。请根据上方的全部设定与剧情指引，续写下一章正文：\n' +
+    '- 以小说笔法叙事，融合场景、动作、对话与心理描写，人物性格与关系保持前后一致\n' +
+    '- 情节必须承接聊天历史中的前文，不得另起炉灶\n' +
+    '- 每章正文约 1500 字；直接输出正文本身\n' +
+    '- 不要输出章节标题、编号、总结、写作说明或任何与正文无关的元信息\n' +
+    '- 绝不以 AI、助手、模型身份说话',
+};
+
+/** chat 兜底主提示词：无预设时强制沉浸式角色扮演（{{char}} 由宏环境解析为当前发言角色） */
+const FALLBACK_CHAT_MAIN: TavernPrompt = {
+  identifier: 'main',
+  name: '内置角色扮演主提示词',
+  role: 'system',
+  system_prompt: true,
+  content:
+    '你将完全扮演{{char}}，进行沉浸式角色扮演对话：\n' +
+    '- 始终以{{char}}的身份、口吻说话与行动，用小说笔法描写（对话、动作、心理、环境）\n' +
+    '- 每轮回复约 200-500 字；严格遵循上方世界观与角色设定，主动推动剧情\n' +
+    '- 绝不跳出角色，绝不承认自己是 AI 或助手；不要在回复开头加角色名前缀',
+};
+
+/** 通用兜底收尾层：禁止元信息与思维过程外泄 */
+const FALLBACK_JAILBREAK: TavernPrompt = {
+  identifier: 'jailbreak',
+  name: '内置收尾要求',
+  role: 'system',
+  system_prompt: true,
+  content:
+    '输出要求（最高优先级）：你的输出就是正文/对话本身——禁止任何旁白解释、写作提纲、思维过程（如 <thinking> 块）或「以下是/本章完」类元信息。',
+};
+
+/** 按模式构建兜底预设（marker 骨架 + 中文主提示词；卡覆盖开关仍可替换 main） */
+export function buildFallbackPreset(tailKind: 'directive' | 'userMessage'): TavernPreset {
+  return {
+    ...EMPTY_PRESET,
+    prompts: [tailKind === 'directive' ? FALLBACK_NOVEL_MAIN : FALLBACK_CHAT_MAIN, FALLBACK_JAILBREAK],
+  };
+}
 
 /** 世界书扫描全局设置（scanDepth 固定 10；条目级 scanDepth 可更深） */
 const SCAN_SETTINGS: ScanSettings = {
@@ -171,7 +217,7 @@ export async function scanAndAssemble(
   let history = messages;
   for (;;) {
     const result = assemblePrompt({
-      preset: assets.preset ?? EMPTY_PRESET,
+      preset: assets.preset ?? buildFallbackPreset(tail.kind),
       cards: assets.cards,
       // §4.4 卡覆盖预设开关：作品级设置，缺省视为开（与酒馆一致）
       allowCardOverride: work.allowCardOverride !== false,
@@ -259,6 +305,7 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
     chapterIndex: chapterIndex - 1,
     regexScripts: assets.regexScripts,
     macroEnv: env,
+    speakerName: '小说家',
   });
   const generationMs = Date.now() - startedAt;
   const extra = {

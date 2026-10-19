@@ -15,7 +15,7 @@ import type { Message, MessageExtra } from '@shared/message';
 import type { Work } from '@shared/work';
 
 import type { MacroEnv } from '../../engine/types';
-import { parseStatusBlock } from '../../engine/prompt/postprocess';
+import { parseStatusBlock, sanitizeOutput } from '../../engine/prompt/postprocess';
 import { getRegexedString } from '../../engine/prompt/regex';
 import type { ChatMember } from '../../engine/prompt/activation';
 import { useGenerationStore } from '../../stores/generation';
@@ -105,8 +105,10 @@ export interface ChatFinalizeInput {
 /** chat 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → user+assistant 成对幂等入库 → 变量回写 */
 export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<ChatTurn> {
   const raw = useGenerationStore.getState().buffer;
+  // 内置卫生层：思考块/角色名前缀剥离（质量测试 T4/T5 发现的残留问题）
+  const hygiened = sanitizeOutput(raw, input.speaker.name);
   const cleaned = getRegexedString(
-    raw,
+    hygiened,
     'ai_output',
     { isMarkdown: false, isPrompt: false, macroEnv: input.env },
     input.assets.regexScripts,

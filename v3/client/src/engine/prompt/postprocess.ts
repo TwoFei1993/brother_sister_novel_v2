@@ -17,11 +17,36 @@ import { getRegexedString } from './regex';
 /** 首行标题行：`# 第N章 xxx` 或 `# xxx`（# 后须有内容，防误伤空行） */
 const TITLE_LINE_RE = /^#[ \t]*(\S[^\n]*)/;
 
+/** 正文中的后续标题行（模型自拟的嵌套小标题，如 `## 卷一`）——连同行尾换行一并移除 */
+const HEADING_LINE_RE = /^#{1,6}[ \t]+\S.*\n?/gm;
+
 /** 尾部状态块：```status 开头、``` 收尾（允许尾部尾随空白） */
 const STATUS_BLOCK_RE = /```status[^\n]*\n([\s\S]*?)```\s*$/;
 
 /** 数值字面量：仅普通整数/小数（防 '0x10'、'1e5' 之类被误转） */
 const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
+
+/**
+ * 内置卫生层（不依赖用户绑定正则，所有生成共用）：
+ * 1. 思考块剥离：成对 `<think>/<thinking>…</…>` 与流中断产生的未闭合尾部思考块；
+ * 2. 名字前缀剥离：模型模仿对话格式在正文开头写「名字：」；
+ * 3. 嵌套标题行清理：首行章节标题之外的 `#` 标题行。
+ */
+export function sanitizeOutput(raw: string, speakerName?: string): string {
+  let out = raw.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
+  out = out.replace(/<think(?:ing)?>[\s\S]*$/i, '');
+  if (speakerName) {
+    const escaped = speakerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`^\\s*${escaped}\\s*[:：]\\s*`), '');
+  }
+  out = out.replace(/^\s*(?:小说家|旁白|系统)\s*[:：]\s*/, '');
+  // 嵌套标题清理：首行若为章节标题（parseChapterTitle 的输入）则豁免，只清理其后的标题行
+  const firstBreak = out.indexOf('\n');
+  const head = firstBreak === -1 ? out : out.slice(0, firstBreak);
+  const rest = firstBreak === -1 ? '' : out.slice(firstBreak + 1).replace(HEADING_LINE_RE, '');
+  out = rest ? `${head}\n${rest}` : head;
+  return out.replace(/^\n+/, '').trim();
+}
 
 export interface ParsedChapter {
   title: string;
@@ -96,6 +121,8 @@ export interface PostprocessOpts {
   regexScripts?: TavernRegexScript[];
   /** 宏环境（脚本 findRegex/replaceString 的宏注入） */
   macroEnv?: MacroEnv;
+  /** 发言者名（chat 模式为激活角色；用于内置卫生层的名字前缀剥离） */
+  speakerName?: string;
 }
 
 export interface PostprocessResult {
@@ -106,12 +133,14 @@ export interface PostprocessResult {
 
 /**
  * 后处理总入口（纯函数）：
- * 正则显示清理 → 状态块解析剥离 → 章节标题解析。
+ * 内置卫生层（思考块/名字前缀/嵌套标题）→ 正则显示清理 → 状态块解析剥离 → 章节标题解析。
  */
 export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): PostprocessResult {
+  // 内置卫生层：与用户正则无关，所有生成共用（质量测试 T3/T4 发现的思考块与名字前缀残留）
+  const hygiened = sanitizeOutput(raw, opts.speakerName);
   // 显示轨清理：ai_output + 双 false 轨道（promptOnly/markdownOnly 脚本均不参与）
   const cleaned = getRegexedString(
-    raw,
+    hygiened,
     'ai_output',
     { isMarkdown: false, isPrompt: false, macroEnv: opts.macroEnv },
     opts.regexScripts ?? [],
