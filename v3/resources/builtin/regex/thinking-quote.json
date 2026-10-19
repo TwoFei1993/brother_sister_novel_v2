@@ -1,0 +1,16 @@
+{
+  "trimStrings": [],
+  "disabled": false,
+  "runOnEdit": false,
+  "substituteRegex": 0,
+  "minDepth": -1,
+  "maxDepth": 0,
+  "scriptName": "思考转引用块",
+  "findRegex": "<think(?:ing)?>([sS]*?)</think(?:ing)?>",
+  "replaceString": "> 💭 **思考过程**\n>\n> $1",
+  "placement": [
+    2
+  ],
+  "markdownOnly": true,
+  "promptOnly": false
+}

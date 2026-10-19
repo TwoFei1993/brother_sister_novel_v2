@@ -1,0 +1,16 @@
+{
+  "trimStrings": [],
+  "disabled": false,
+  "runOnEdit": false,
+  "substituteRegex": 0,
+  "minDepth": -1,
+  "maxDepth": 0,
+  "scriptName": "压缩多余空行",
+  "findRegex": "\n{3,}",
+  "replaceString": "\n\n",
+  "placement": [
+    2
+  ],
+  "markdownOnly": true,
+  "promptOnly": false
+}

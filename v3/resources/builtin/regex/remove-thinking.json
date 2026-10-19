@@ -1,0 +1,16 @@
+{
+  "trimStrings": [],
+  "disabled": false,
+  "runOnEdit": false,
+  "substituteRegex": 0,
+  "minDepth": -1,
+  "maxDepth": 0,
+  "scriptName": "去除思考标签",
+  "findRegex": "<think(?:ing)?>[sS]*?</think(?:ing)?>",
+  "replaceString": "",
+  "placement": [
+    2
+  ],
+  "markdownOnly": false,
+  "promptOnly": false
+}

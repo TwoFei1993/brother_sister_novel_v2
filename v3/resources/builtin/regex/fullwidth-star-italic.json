@@ -1,0 +1,16 @@
+{
+  "trimStrings": [],
+  "disabled": false,
+  "runOnEdit": false,
+  "substituteRegex": 0,
+  "minDepth": -1,
+  "maxDepth": 0,
+  "scriptName": "全角星号转斜体",
+  "findRegex": "＊([^＊\n]{1,80})＊",
+  "replaceString": "*$1*",
+  "placement": [
+    2
+  ],
+  "markdownOnly": true,
+  "promptOnly": false
+}

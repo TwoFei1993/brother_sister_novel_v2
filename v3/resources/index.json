@@ -775,6 +775,127 @@
         "url": "https://raw.githubusercontent.com/ashuotaku/sillytavern/main/ChatCompletionPresets/Gemini/ashu's%20mini%20v4.5.json"
       },
       "license": "未标注"
+    },
+    {
+      "id": "builtin-regex-remove-thinking",
+      "type": "regex",
+      "name": "正则：去除思考标签",
+      "description": "删除 AI 输出中的 <think>/<thinking> 思考段，显示与提示词同步清除。（所有模型通用，MiniMax 等带思考的模型必备）",
+      "tags": [
+        "官方",
+        "正则",
+        "文本处理"
+      ],
+      "source": "本站内置",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/regex/remove-thinking.json"
+      },
+      "license": "随本站分发"
+    },
+    {
+      "id": "builtin-regex-thinking-quote",
+      "type": "regex",
+      "name": "正则：思考转引用块",
+      "description": "把思考过程转为引用块保留可见（仅显示层）。（想看模型思路时用，与「去除思考标签」二选一）",
+      "tags": [
+        "官方",
+        "正则",
+        "文本处理"
+      ],
+      "source": "本站内置",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/regex/thinking-quote.json"
+      },
+      "license": "随本站分发"
+    },
+    {
+      "id": "builtin-regex-fullwidth-star-italic",
+      "type": "regex",
+      "name": "正则：全角星号转斜体",
+      "description": "中文输入法的＊动作＊转为斜体渲染（仅显示）。（中文小说常见动作描写格式）",
+      "tags": [
+        "官方",
+        "正则",
+        "文本处理"
+      ],
+      "source": "本站内置",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/regex/fullwidth-star-italic.json"
+      },
+      "license": "随本站分发"
+    },
+    {
+      "id": "builtin-regex-collapse-blank-lines",
+      "type": "regex",
+      "name": "正则：压缩多余空行",
+      "description": "三个以上连续换行压缩为一个空行（仅显示）。（版面优化，通用）",
+      "tags": [
+        "官方",
+        "正则",
+        "文本处理"
+      ],
+      "source": "本站内置",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/regex/collapse-blank-lines.json"
+      },
+      "license": "随本站分发"
+    },
+    {
+      "id": "builtin-regex-bold-quotes",
+      "type": "regex",
+      "name": "正则：对话引号加粗",
+      "description": "「」对话整体加粗突出台词（仅显示，可停用）。（对话密集的 RP 场景）",
+      "tags": [
+        "官方",
+        "正则",
+        "文本处理"
+      ],
+      "source": "本站内置",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/regex/bold-quotes.json"
+      },
+      "license": "随本站分发"
+    },
+    {
+      "id": "builtin-regex-remove-card-promo",
+      "type": "regex",
+      "name": "正则：去除卡片推广语",
+      "description": "隐藏社区卡开场白里「请结合酒馆专属大模型…」推广语（仅显示）。（导入社区卡后建议开启）",
+      "tags": [
+        "官方",
+        "正则",
+        "文本处理"
+      ],
+      "source": "本站内置",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/regex/remove-card-promo.json"
+      },
+      "license": "随本站分发"
+    },
+    {
+      "id": "builtin-hogwarts",
+      "type": "worldbook",
+      "name": "霍格沃茨世界书（中文）",
+      "description": "哈利·波特世界观中文世界书：四学院/分院帽/魔法部/对角巷/魁地奇/魔咒/魔法生物等 13 条，总设定常驻、其余关键词触发。适合魔法校园题材创作。",
+      "tags": [
+        "官方",
+        "奇幻",
+        "世界观",
+        "哈利波特",
+        "魔法校园"
+      ],
+      "source": "本站内置（基于公开设定知识撰写）",
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/worldbooks/霍格沃茨.json"
+      },
+      "license": "随本站分发"
     }
   ]
 }
