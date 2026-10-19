@@ -103,3 +103,35 @@ describe('防失忆：planContext 上下文规划', () => {
     expect(r.dropped.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
   });
 });
+
+describe('无标签思维流剥离（质检T4 实测泄露形态）', () => {
+  it('标记行优先：取「【正文】」之后的内容', async () => {
+    const { stripLooseThinking } = await import('../prompt/postprocess');
+    const raw = '让我先构思一下。\n\n场景设定：黄昏的学校。\n\n【正文】\n\n黄昏时分，我赶到了学校。「铃奈！」我推开了教导处的门。';
+    expect(stripLooseThinking(raw)).toBe('黄昏时分，我赶到了学校。「铃奈！」我推开了教导处的门。');
+  });
+
+  it('无标记时按规划段落剥离（对照质检T4 用户粘贴样本形态）', async () => {
+    const { stripLooseThinking } = await import('../prompt/postprocess');
+    const raw = [
+      '让我先理解一下当前的情况：',
+      '',
+      '场景回顾：上一轮剧情中，兄妹俩在老城区的面馆吃完饭，正准备去逛夜市。',
+      '',
+      '我需要构思如何自然地衔接这个剧情跳跃。',
+      '',
+      '写作风格：日系轻小说，以对话为主。',
+      '',
+      '黄昏时分，我赶到了学校，教导处的门在我面前显得格外沉重。「铃奈，是谁干的。」我的声音很平静，平静得连我自己都意外。',
+    ].join('\n');
+    const r = stripLooseThinking(raw);
+    expect(r.startsWith('黄昏时分')).toBe(true);
+    expect(r).not.toContain('场景回顾');
+  });
+
+  it('整段都是思考流时不剥离（防清空保护）', async () => {
+    const { stripLooseThinking } = await import('../prompt/postprocess');
+    const raw = '让我开始写正文。\n\n我需要确保对话占比 60%。\n\n字数要求：800-1200 字。\n\n多回复选项设计：4 个选项。';
+    expect(stripLooseThinking(raw)).toBe(raw);
+  });
+});

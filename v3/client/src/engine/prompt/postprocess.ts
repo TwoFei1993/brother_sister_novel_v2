@@ -128,6 +128,57 @@ export interface PostprocessOpts {
 /** 提纲/要点的标记词（标题行或引导行含其一即判定为提纲块开始） */
 const OUTLINE_MARKERS = ['要点', '提纲', '大纲', '思路', '剧情走向', '本章梗概', 'outline'];
 
+/** 正文开始标记行（社区预设 COT 输出约定）：独立成行的 --- 分隔线 / 【正文】 / 正文： 等 */
+const BODY_MARKER_RE = /^[ \t]*(?:[-*_]{3,}[ \t]*|【正文】|\*{0,2}正文\*{0,2}[:：]?)[ \t]*\n?/gm;
+
+/** 规划段关键词：命中其一即视作思考流段落（对照实测泄露样本归纳） */
+const PLANNING_RE =
+  /(让我|我需要|我应该|这意味着|剧情指引|场景回顾|性格分析|场景设定|场景设计|对话设计|写作风格|情感基调|输出格式|字数要求|回复选项|剧情摘要|思维链|构思|梳理|分析一下|正文开始|开始写正文|正式写作)/;
+
+/**
+ * 剥离「无标签思维流」：模型把思考过程以纯文本形式混在正文里（实测 M3+Sudachi 组合）。
+ * 两层策略，均为高置信才动手：
+ * 1. 标记行：取最后一个「正文：/【正文】/---」标记行之后的内容（剩余过短则放弃）；
+ * 2. 段落启发：开头连续含规划关键词的段落逐段剥离（遇叙述段即停，最多剥前 60%）。
+ */
+export function stripLooseThinking(content: string): string {
+  // 1) 标记行优先（高置信）
+  BODY_MARKER_RE.lastIndex = 0;
+  let last: RegExpExecArray | null = null;
+  for (let m = BODY_MARKER_RE.exec(content); m !== null; m = BODY_MARKER_RE.exec(content)) {
+    last = m;
+  }
+  if (last) {
+    const body = content.slice(last.index + last[0].length).replace(/^\n+/, '');
+    if (body.length >= Math.min(200, content.length * 0.15)) return body;
+  }
+  // 2) 段落启发：开头连续规划段逐段剥离；全部都是规划段时保护性放弃（防清空）
+  const paras = content.split(/\n{2,}/);
+  let i = 0;
+  while (i < paras.length) {
+    const p = paras[i].trim();
+    if (!p) {
+      i += 1;
+      continue;
+    }
+    const isPlanning = PLANNING_RE.test(p) && !/[」』]"?$/.test(p);
+    if (isPlanning) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  if (i >= paras.length) return content; // 整篇都是思考流，保留原样
+  const body = paras.slice(i).join('\n\n');
+  // 剥后正文过短视为误判（保守：不动原文）
+  return i > 0 && body.trim().length >= 50 ? body : content;
+}
+
+/** 展示净化组合：无标签思考流剥离 + 内置卫生层（供生成时与显示时共用） */
+export function presentable(content: string, speakerName?: string): string {
+  return sanitizeOutput(stripLooseThinking(content), speakerName);
+}
+
 /** 单行是否为列表项（短横线/星号/圆点/数字编号起始） */
 const LIST_ITEM_RE = /^\s*(?:[-*•·]|\d+[.、)]|[（(]\d+[)])\s+/;
 
