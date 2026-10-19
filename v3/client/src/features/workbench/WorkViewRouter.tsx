@@ -152,6 +152,12 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     if (msg) upsertLocal(msg);
   }
 
+  /** A 视图：🗑 删除本章（D3）——store 乐观移除 + DELETE 持久化 + stats 回拉；失败已在 store 回滚 */
+  async function handleDeleteMessage(target: Message): Promise<boolean> {
+    if (gen.streaming) return false;
+    return useWorkStore.getState().removeMessage(target.id);
+  }
+
   // ---------- 渲染 ----------
 
   if (work.mode === 'chat') return <ChatWorkspace work={work} />;
@@ -208,6 +214,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             onReroll={(m) => void handleReroll(m)}
             onEditContent={(m, content) => handleEditContent(m, content)}
             onReplay={(m, directive) => void handleReplay(m, directive)}
+            onDeleteMessage={(m) => handleDeleteMessage(m)}
           />
         ) : (
           <ReadingView

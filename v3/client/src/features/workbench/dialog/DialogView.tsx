@@ -37,6 +37,8 @@ interface DialogViewProps {
   onEditContent: (message: Message, content: string) => Promise<void>;
   /** 指令重放（PATCH directive + 对目标章节 swipeRegenerate） */
   onReplay: (message: Message, directive: string) => void;
+  /** 删除本章（D3）：DELETE 持久化 + store 移除；resolve(false)=失败（已回滚） */
+  onDeleteMessage?: (message: Message) => Promise<boolean>;
 }
 
 export default function DialogView({
@@ -52,6 +54,7 @@ export default function DialogView({
   onReroll,
   onEditContent,
   onReplay,
+  onDeleteMessage,
 }: DialogViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // 滚动跟随：用户主动上滚（距底 >300px）时暂停，重新滚回底部恢复
@@ -100,6 +103,7 @@ export default function DialogView({
             onReroll={() => onReroll(m)}
             onEditContent={(content) => onEditContent(m, content)}
             onReplayDirective={(directive) => onReplay(m, directive)}
+            onDelete={onDeleteMessage ? () => onDeleteMessage(m) : undefined}
           />
         ))}
 

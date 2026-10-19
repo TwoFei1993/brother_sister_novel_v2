@@ -122,13 +122,27 @@ interface ChapterBubbleProps {
   onSwipe?: (delta: 1 | -1) => void;
   onReroll?: () => void;
   onEditContent?: (content: string) => Promise<void>;
+  /** 删除本章（D3）：确认后父级 DELETE 持久化；resolve(false)=失败（气泡已回滚） */
+  onDelete?: () => Promise<boolean>;
 }
 
-/** 左侧宽气泡：章标题 + markdown 正文 + SwipeBar + 行内编辑 */
-function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe, onReroll, onEditContent }: ChapterBubbleProps) {
+/** 左侧宽气泡：章标题 + markdown 正文 + SwipeBar + 行内编辑 + 删除确认 */
+function ChapterBubble({
+  message,
+  disabled,
+  busy,
+  buffer,
+  regexScripts,
+  onSwipe,
+  onReroll,
+  onEditContent,
+  onDelete,
+}: ChapterBubbleProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(false);
   // 显示分离：头部要点提纲折叠展示（默认收起），气泡正文只渲染 body（编辑/复制仍取全文）
   const { outline, body } = splitOutline(presentableNovel(message.content, message.directive));
 
@@ -154,6 +168,16 @@ function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe,
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
       console.warn('[MessageBubble] 复制失败（剪贴板不可用）');
+    }
+  }
+
+  /** 删除确认 → 父级 DELETE；失败回滚后气泡仍在此处，行内提示 3s */
+  async function confirmDelete(): Promise<void> {
+    setConfirmingDelete(false);
+    const ok = await onDelete?.();
+    if (!ok) {
+      setDeleteFailed(true);
+      window.setTimeout(() => setDeleteFailed(false), 3000);
     }
   }
 
@@ -224,6 +248,46 @@ function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe,
           onEdit={startEdit}
           onCopy={() => void copy()}
         />
+        {/* D3：删除本章入口——内联两段式确认（🗑 → 删除/取消），失败回滚就地提示 */}
+        {onDelete && !confirmingDelete && (
+          <button
+            type="button"
+            title="删除本章（连同该章指令与候选）"
+            aria-label="删除本章"
+            data-testid="delete-btn"
+            disabled={disabled}
+            onClick={() => setConfirmingDelete(true)}
+            className="flex h-9 min-w-9 items-center justify-center rounded px-1.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--danger))] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            🗑
+          </button>
+        )}
+        {confirmingDelete && (
+          <span className="flex items-center gap-1.5" data-testid="delete-confirm">
+            <span className="text-xs text-[hsl(var(--danger))]">删除本章？不可恢复</span>
+            <button
+              type="button"
+              data-testid="delete-confirm-btn"
+              onClick={() => void confirmDelete()}
+              className="flex h-9 items-center rounded-md bg-[hsl(var(--danger))] px-2.5 text-xs text-white hover:opacity-90"
+            >
+              删除
+            </button>
+            <button
+              type="button"
+              data-testid="delete-cancel-btn"
+              onClick={() => setConfirmingDelete(false)}
+              className="flex h-9 items-center rounded-md px-2.5 text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+            >
+              取消
+            </button>
+          </span>
+        )}
+        {deleteFailed && (
+          <span role="alert" data-testid="delete-failed-tip" className="text-xs text-[hsl(var(--danger))]">
+            删除失败，请重试
+          </span>
+        )}
         {copied && (
           <span data-testid="copied-tip" className="text-xs text-[hsl(var(--fg-muted))]">
             已复制
@@ -251,6 +315,8 @@ export interface MessageBubbleProps {
   onEditContent?: (content: string) => Promise<void>;
   /** 指令重放（父级 PATCH directive + swipeRegenerate） */
   onReplayDirective?: (directive: string) => void;
+  /** 删除本章（D3）：父级 DELETE 持久化 + store 回滚；resolve(false)=失败 */
+  onDelete?: (message: Message) => Promise<boolean>;
 }
 
 /** 一条消息 = 指令气泡（若有 directive/user 正文）+ 章节气泡（若有 chapter 元数据） */
@@ -264,6 +330,7 @@ export default function MessageBubble({
   onReroll,
   onEditContent,
   onReplayDirective,
+  onDelete,
 }: MessageBubbleProps) {
   const directiveText = message.role === 'user' ? message.content : message.directive;
   const isChapter = message.role === 'assistant' && message.chapter !== undefined;
@@ -288,6 +355,7 @@ export default function MessageBubble({
           onSwipe={onSwipe}
           onReroll={onReroll}
           onEditContent={onEditContent}
+          onDelete={onDelete ? () => onDelete(message) : undefined}
         />
       )}
     </div>

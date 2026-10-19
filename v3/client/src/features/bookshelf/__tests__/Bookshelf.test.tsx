@@ -106,4 +106,20 @@ describe('Bookshelf', () => {
     expect(text).toContain('星际迷航');
     expect(text).not.toContain('穿越之兄妹');
   });
+
+  it('卡片操作按钮语义可辨（审计 H5）：图标+文字与 aria-label，44px 触控目标', async () => {
+    listWorksMock.mockResolvedValue([workSummary({ id: 'w1', title: '穿越之兄妹' })]);
+    const container = await renderBookshelf();
+    const label = (id: string): string | null =>
+      container.querySelector(`[data-testid="${id}"]`)?.getAttribute('aria-label') ?? null;
+    expect(label('card-continue')).toBe('续写 穿越之兄妹');
+    expect(label('card-rename')).toBe('重命名 穿越之兄妹');
+    expect(label('card-delete')).toBe('删除 穿越之兄妹');
+    for (const id of ['card-continue', 'card-rename', 'card-delete']) {
+      const btn = container.querySelector(`[data-testid="${id}"]`)!;
+      expect(btn.className).toContain('h-11'); // 44px 触控目标
+      expect(btn.textContent).toMatch(/续写|改名|删除/); // 可视短文字（非纯 emoji）
+    }
+    expect(container.querySelector('[data-testid="card-delete"]')!.className).toContain('danger'); // 删除 danger 描边
+  });
 });

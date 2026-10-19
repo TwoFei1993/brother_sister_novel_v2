@@ -3,8 +3,18 @@
  *
  * - UserBubble：用户气泡（右侧；pendingText 待入库气泡复用，testid 可覆盖）
  * - MessageBubble：assistant 气泡（左侧）+ swipe 切换 / 重roll / 朗读操作
- * 展示为纯文本（whitespace-pre-wrap）；markdown+DOMPurify 渲染由视图接线任务统一接入。
+ * - BubbleMarkdown：assistant 正文 markdown 渲染（审计 H1 接线：与 novel 侧同款
+ *   管道——presentable → applyDisplayRegex → DOMPurify → rehype-sanitize；气泡是
+ *   小容器，排版用简化 prose（紧凑段距 + 列表缩进），不套 ReadingView 的长文样式）
  */
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
+import type { TavernRegexScript } from '@shared/tavern';
+
+import { presentable } from '../../engine/prompt/postprocess';
+import { applyDisplayRegex } from '../../lib/markdown';
+import { sanitizeMarkdownSource } from '../../lib/sanitize';
+
 import { avatarChar } from './MemberBar';
 
 export function Avatar({ name }: { name: string }) {
@@ -18,7 +28,20 @@ export function Avatar({ name }: { name: string }) {
   );
 }
 
-import { presentable } from '../../engine/prompt/postprocess';
+/** 气泡简化 markdown 排版：紧凑段距/列表缩进/分隔线淡化，随主题变量换肤 */
+const BUBBLE_MARKDOWN_CLASS =
+  '[&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:ps-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:ps-5 [&_li]:my-0.5 [&_blockquote]:my-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-[hsl(var(--border-soft))] [&_blockquote]:ps-2.5 [&_a]:text-[hsl(var(--accent))] [&_a]:underline [&_hr]:my-2 [&_hr]:border-[hsl(var(--border-soft))] [&_code]:rounded [&_code]:bg-[hsl(var(--bg))] [&_code]:px-1 [&_code]:text-[0.9em]';
+
+/** chat 气泡 markdown（§9.3 双保险净化 + 显示轨正则；仅 assistant 已入库气泡用） */
+export function BubbleMarkdown({ text, regexScripts }: { text: string; regexScripts?: TavernRegexScript[] }) {
+  return (
+    <div className={BUBBLE_MARKDOWN_CLASS}>
+      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+        {sanitizeMarkdownSource(applyDisplayRegex(text, regexScripts))}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 export function UserBubble({ name, content, testid = 'chat-bubble' }: { name?: string; content: string; testid?: string }) {
   return (
@@ -37,6 +60,7 @@ export function MessageBubble({
   message,
   canSwipe,
   canRegenerate,
+  regexScripts,
   onSwipe,
   onRegenerate,
   onSpeak,
@@ -44,6 +68,8 @@ export function MessageBubble({
   message: { role: string; name?: string; content: string; id: string; swipes: string[]; swipeId: number };
   canSwipe: boolean;
   canRegenerate: boolean;
+  /** 显示轨正则脚本（markdownOnly，work 绑定资产；与 novel 视图同源） */
+  regexScripts?: TavernRegexScript[];
   onSwipe?: (messageId: string, dir: 1 | -1) => void;
   onRegenerate?: (messageId: string) => void;
   onSpeak?: (content: string) => void;
@@ -58,7 +84,9 @@ export function MessageBubble({
       <Avatar name={message.name ?? ''} />
       <div className="ml-2 max-w-[80%]">
         <p className="mb-0.5 text-xs text-[hsl(var(--fg-muted))]">{message.name}</p>
-        <div className="rounded-2xl rounded-tl-sm bg-[hsl(var(--surface))] px-3 py-2 text-sm whitespace-pre-wrap">{content}</div>
+        <div className="rounded-2xl rounded-tl-sm bg-[hsl(var(--surface))] px-3 py-2 text-sm">
+          <BubbleMarkdown text={content} regexScripts={regexScripts} />
+        </div>
         {(canSwipe || canRegenerate || onSpeak) && (
           <div className="mt-1 flex items-center gap-1.5 text-xs text-[hsl(var(--fg-muted))]">
             {canSwipe && (

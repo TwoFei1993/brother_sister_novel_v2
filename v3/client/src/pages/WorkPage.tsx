@@ -144,7 +144,8 @@ export default function WorkPage() {
             title="章节目录"
             aria-label="章节目录"
           >
-            📖
+            {/* 审计 M2：与视图 tab 📖 同屏重复致语义混淆，目录改列表符 */}
+            ☰
           </button>
         )}
         <button

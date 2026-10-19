@@ -69,9 +69,11 @@ export default function LoginPage() {
     <main className="safe-top safe-bottom flex min-h-screen flex-col items-center justify-center bg-[hsl(var(--bg))] px-4 text-[hsl(var(--fg))]">
       <form
         onSubmit={(e) => void handleSubmit(e)}
-        className="w-full max-w-sm rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-8 shadow-xl"
+        className="w-full max-w-sm rounded-2xl border border-[hsl(var(--accent))]/35 bg-[hsl(var(--surface))] p-8 shadow-xl"
       >
         <h1 className="mb-1 text-center text-2xl font-semibold tracking-wide">兄妹小说</h1>
+        {/* 审计 L1：accent 短横线做品牌记忆点（纯黑底上 shadow 不可见，描边 + 细节替代） */}
+        <div className="mx-auto mb-4 h-0.5 w-10 rounded-full bg-[hsl(var(--accent))]/60" aria-hidden="true" />
         <p className="mb-8 text-center text-sm text-[hsl(var(--fg-muted))]">请输入访问密码</p>
 
         <input
@@ -81,7 +83,9 @@ export default function LoginPage() {
           placeholder="访问密码"
           autoFocus
           autoComplete="current-password"
-          className="mb-4 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-4 py-3 text-base outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+          className={`mb-4 w-full rounded-lg border bg-[hsl(var(--bg))] px-4 py-3 text-base outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))] ${
+            error ? 'border-[hsl(var(--danger))]' : 'border-[hsl(var(--border-soft))]'
+          }`}
         />
 
         {error && (

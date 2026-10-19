@@ -196,8 +196,11 @@ export default function ReadingView({
             // 朗读高亮段落与 WorkTtsBar 连播队列同源：都从 body 切分，保证段序对齐
             const paras = highlightThis ? splitParagraphs(body) : null;
             return (
-              <article key={m.id} id={chapterAnchorId(m.chapter.index)} className="mb-10 scroll-mt-4">
-                <h2 className="mb-4 text-xl font-bold">{m.chapter.title}</h2>
+              <article key={m.id} id={chapterAnchorId(m.chapter.index)} className="mb-12 scroll-mt-4">
+                {/* 审计 L4：标题 1.6x 正文 + 上方加距 + accent 竖线细节，强化章节分隔 */}
+                <h2 className="mb-5 mt-2 border-l-[3px] border-[hsl(var(--accent))] pl-2.5 text-2xl leading-snug font-bold">
+                  {m.chapter.title}
+                </h2>
                 {outline && <OutlineBlock outline={outline} regexScripts={regexScripts} />}
                 {paras ? (
                   <div className={MARKDOWN_CLASS}>

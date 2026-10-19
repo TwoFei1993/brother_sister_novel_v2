@@ -36,6 +36,16 @@ function toSummary(work: Work): WorkSummary {
   };
 }
 
+/** 相对时间（审计 L8）：同日更新的作品可辨先后；超一天回落日期显示 */
+function relativeTime(ts: number): string {
+  const min = Math.floor((Date.now() - ts) / 60_000);
+  if (min < 1) return '刚刚';
+  if (min < 60) return `${min} 分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} 小时前`;
+  return new Date(ts).toLocaleDateString('zh-CN');
+}
+
 function describeActionError(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     if (err.code === 'conflict') return '版本冲突，请刷新页面后重试';
@@ -140,34 +150,38 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
         <span className="text-[10px] text-white/60">{genreLabel(work.genre)}</span>
       </button>
 
-      {/* 操作条：移动端常显（文档流，避免叠压信息区）；桌面 hover 悬浮浮现。触控目标 ≥36px */}
+      {/* 操作条：移动端常显（文档流，避免叠压信息区）；桌面 hover 悬浮浮现。
+          审计 H5：图标+可视文字（语义可辨）+ 44px 触控目标；删除保持 danger 描边与确认弹层 */}
       <div className="mt-2 flex justify-center gap-2 sm:absolute sm:inset-x-0 sm:bottom-0 sm:translate-y-1 sm:p-1.5 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100">
         <button
           type="button"
           onClick={openWork}
           title="续写"
           aria-label={`续写 ${work.title}`}
-          className="h-9 w-9 rounded-lg bg-black/60 text-base text-white/90 backdrop-blur transition-colors hover:bg-black/80"
+          data-testid="card-continue"
+          className="flex h-11 items-center gap-1 rounded-lg bg-black/60 px-3 text-xs text-white/90 backdrop-blur transition-colors hover:bg-black/80"
         >
-          ✍
+          ✍ 续写
         </button>
         <button
           type="button"
           onClick={startRename}
           title="改名"
           aria-label={`重命名 ${work.title}`}
-          className="h-9 w-9 rounded-lg bg-black/60 text-base text-white/90 backdrop-blur transition-colors hover:bg-black/80"
+          data-testid="card-rename"
+          className="flex h-11 items-center gap-1 rounded-lg bg-black/60 px-3 text-xs text-white/90 backdrop-blur transition-colors hover:bg-black/80"
         >
-          ✎
+          ✎ 改名
         </button>
         <button
           type="button"
           onClick={startDelete}
           title="删除"
           aria-label={`删除 ${work.title}`}
-          className="h-9 w-9 rounded-lg bg-black/60 text-base text-[hsl(var(--danger))] backdrop-blur transition-colors hover:bg-black/80"
+          data-testid="card-delete"
+          className="flex h-11 items-center gap-1 rounded-lg border border-[hsl(var(--danger))]/70 bg-black/60 px-3 text-xs text-[hsl(var(--danger))] backdrop-blur transition-colors hover:bg-black/80"
         >
-          ✕
+          ✕ 删除
         </button>
       </div>
 
@@ -191,9 +205,7 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
             className="w-full rounded-md border border-[hsl(var(--accent))] bg-[hsl(var(--bg))] px-2 py-1.5 text-center text-sm text-[hsl(var(--fg))] outline-none"
           />
         ) : (
-          <p title={new Date(work.updatedAt).toLocaleString('zh-CN')}>
-            {new Date(work.updatedAt).toLocaleDateString('zh-CN')}
-          </p>
+          <p title={new Date(work.updatedAt).toLocaleString('zh-CN')}>{relativeTime(work.updatedAt)}</p>
         )}
       </div>
 

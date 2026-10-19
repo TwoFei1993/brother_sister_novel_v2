@@ -75,8 +75,16 @@ export default function Bookshelf() {
     setWorks((prev) => prev.filter((w) => w.id !== id));
   }
 
+  // 审计 L3：去原生 select 外观，自绘 chevron（muted 灰，随 UI 风格）
+  const selectArrowStyle = {
+    backgroundImage:
+      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+    backgroundPosition: 'right 0.6rem center',
+    backgroundRepeat: 'no-repeat',
+  } as const;
+
   const selectClass =
-    'h-10 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--fg))] outline-none focus:border-[hsl(var(--accent))]';
+    'h-10 appearance-none rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 pr-8 text-sm text-[hsl(var(--fg))] outline-none focus:border-[hsl(var(--accent))]';
 
   return (
     <section className="safe-x mx-auto w-full max-w-6xl pt-6 pb-16">
@@ -99,6 +107,7 @@ export default function Bookshelf() {
             onChange={(e) => setSortBy(e.target.value as SortKey)}
             aria-label="排序方式"
             className={selectClass}
+            style={selectArrowStyle}
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value} className={OPTION_CLS}>

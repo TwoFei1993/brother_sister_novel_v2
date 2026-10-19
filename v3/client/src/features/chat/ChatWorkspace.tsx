@@ -249,7 +249,6 @@ export default function ChatWorkspace({ work }: { work: Work }) {
     }
   }
 
-
   if (members.length === 0) return <EmptyMembers />;
 
   return (
@@ -287,6 +286,7 @@ export default function ChatWorkspace({ work }: { work: Work }) {
         onSwipe={(id, dir) => void handleSwipe(id, dir)}
         onRegenerate={(id) => void handleRegenerate(id)}
         onSpeak={(content) => ttsEngine.speakOne(content, { voiceMap: work.voiceMap })}
+        regexScripts={chat.regexScripts}
         quickDirectives={quickDirectives}
         nextSpeakerName={nextSpeakerName}
         replyLength={work.settings.chatReplyLength ?? 'medium'}

@@ -37,6 +37,7 @@ interface RenderOpts {
   streaming?: boolean;
   buffer?: string;
   targetMessageId?: string | null;
+  onDeleteMessage?: (m: Message) => Promise<boolean>;
 }
 
 async function renderView(opts: RenderOpts = {}): Promise<HTMLElement> {
@@ -59,6 +60,7 @@ async function renderView(opts: RenderOpts = {}): Promise<HTMLElement> {
         onReroll={() => undefined}
         onEditContent={async () => undefined}
         onReplay={() => undefined}
+        onDeleteMessage={opts.onDeleteMessage}
       />,
     );
   });
@@ -187,5 +189,51 @@ describe('DialogView 气泡流', () => {
     });
     expect(inner.querySelector('[data-testid="buffer-preview"]')?.textContent).toContain('重写预览');
     expect(inner.querySelector('[data-testid="tail-stream-bubble"]')).toBeNull();
+  });
+
+  it('删除本章（D3）：🗑 先确认再回调携带该消息；失败回滚后就地提示', async () => {
+    const onDelete = vi.fn().mockResolvedValue(true);
+    const c = await renderView({ messages: [chapterMsg()], onDeleteMessage: onDelete });
+    expect(c.querySelector('[data-testid="delete-btn"]')).not.toBeNull();
+    // 两段式：未确认不触发
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="delete-btn"]')?.click();
+    });
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(c.querySelector('[data-testid="delete-confirm"]')).not.toBeNull();
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="delete-confirm-btn"]')?.click();
+    });
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }));
+
+    // 取消路径：确认条出现后点取消不触发
+    const onCancel = vi.fn().mockResolvedValue(true);
+    const c2 = await renderView({ messages: [chapterMsg()], onDeleteMessage: onCancel });
+    await act(async () => {
+      c2.querySelector<HTMLButtonElement>('[data-testid="delete-btn"]')?.click();
+    });
+    await act(async () => {
+      c2.querySelector<HTMLButtonElement>('[data-testid="delete-cancel-btn"]')?.click();
+    });
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(c2.querySelector('[data-testid="delete-confirm"]')).toBeNull();
+
+    // 失败路径：resolve(false) → 行内 role=alert 提示
+    const onFail = vi.fn().mockResolvedValue(false);
+    const c3 = await renderView({ messages: [chapterMsg()], onDeleteMessage: onFail });
+    await act(async () => {
+      c3.querySelector<HTMLButtonElement>('[data-testid="delete-btn"]')?.click();
+    });
+    await act(async () => {
+      c3.querySelector<HTMLButtonElement>('[data-testid="delete-confirm-btn"]')?.click();
+    });
+    expect(onFail).toHaveBeenCalledTimes(1);
+    expect(c3.querySelector('[data-testid="delete-failed-tip"]')?.getAttribute('role')).toBe('alert');
+  });
+
+  it('未传 onDeleteMessage 时不渲染删除入口', async () => {
+    const c = await renderView({ messages: [chapterMsg()] });
+    expect(c.querySelector('[data-testid="delete-btn"]')).toBeNull();
   });
 });

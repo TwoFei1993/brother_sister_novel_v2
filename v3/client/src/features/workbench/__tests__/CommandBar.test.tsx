@@ -110,4 +110,14 @@ describe('CommandBar 状态', () => {
     const c = await renderBar({ streaming: true, batchProgress: '3/50' });
     expect(c.querySelector('[data-testid="stop-btn"]')?.textContent).toContain('3/50');
   });
+
+  it('移动端折行布局（审计 H2）：容器 flex-wrap，输入框 basis-full 独占一行 / md 起回落同行', async () => {
+    const c = await renderBar();
+    const row = c.querySelector('div.flex-wrap');
+    expect(row).not.toBeNull();
+    const input = c.querySelector('[data-testid="directive-input"]')!;
+    expect(input.className).toContain('basis-full'); // 移动端整行，按钮组换行
+    expect(input.className).toContain('md:basis-0'); // 桌面恢复 flex 同行
+    expect(input.className).toContain('min-w-32'); // 最差情况仍可输入
+  });
 });

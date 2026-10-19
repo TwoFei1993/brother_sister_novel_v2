@@ -147,7 +147,10 @@ function clip(s: string, n: number): string {
 export function describeAsset(asset: AnyAsset): string {
   if ('card' in asset) {
     const d = asRecord(asset.card?.data);
-    return clip(text(d?.description) || text(d?.first_mes), 60);
+    // 审计 L5：展示层把 {{char}} 宏替换为资产名（{{user}} 等其余宏保留原样，不误伤编辑语义）
+    const name = text(d?.name).trim();
+    const desc = (text(d?.description) || text(d?.first_mes)).replaceAll('{{char}}', name || '该角色');
+    return clip(desc, 60);
   }
   const raw = asRecord(asset.raw);
   if (!raw) return '';

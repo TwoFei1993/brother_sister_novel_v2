@@ -76,8 +76,9 @@ export default function TtsBar({
   return (
     <div
       data-testid="tts-bar"
-      className="flex h-14 shrink-0 items-center justify-between gap-2 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 sm:px-4"
+      className="flex shrink-0 flex-col gap-1 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-1.5 sm:px-4 md:h-14 md:flex-row md:items-center md:justify-between md:gap-2 md:py-0"
     >
+      {/* 审计 H3：移动端两行堆叠（章控制 / 声音+速度），6 档速度不再被视口裁切；md 起恢复单行 */}
       {/* 章控制 */}
       <div className="flex items-center gap-1">
         <button
@@ -123,8 +124,8 @@ export default function TtsBar({
         )}
       </div>
 
-      {/* 声音与语速（窄屏横向滑动，隐藏滚动条避免占行视觉） */}
-      <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* 声音与语速（窄屏横向滑动兜底，隐藏滚动条避免占行视觉；overscroll 防滑动冲突） */}
+      <div className="flex min-w-0 items-center gap-2 overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <label className="flex items-center gap-1 text-xs text-[hsl(var(--fg-muted))]">
           <span className="hidden sm:inline">旁白声</span>
           <select
@@ -142,7 +143,7 @@ export default function TtsBar({
           </select>
         </label>
 
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" data-testid="tts-rate-row">
           <span className="mr-0.5 hidden text-xs text-[hsl(var(--fg-muted))] sm:inline">速度</span>
           {TTS_RATES.map((r) => (
             <button

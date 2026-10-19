@@ -125,6 +125,11 @@ export async function patchMessage(workId: string, message: Message): Promise<{ 
   });
 }
 
+/** 删除单条消息（深度测试 D3）：server 幂等删除并重算 stats；404=已不存在 */
+export async function deleteMessage(workId: string, messageId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/works/${workId}/messages/${messageId}`, { method: 'DELETE' });
+}
+
 /** DELETE 幂等（server 删整目录）；204/200 均视为成功 */
 export async function deleteWork(id: string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/api/works/${id}`, { method: 'DELETE' });

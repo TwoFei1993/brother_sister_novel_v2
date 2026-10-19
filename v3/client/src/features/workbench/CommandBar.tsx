@@ -82,7 +82,8 @@ export default function CommandBar({
 
   return (
     <div className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4">
-      <div className="mx-auto flex max-w-3xl items-center gap-2">
+      {/* 审计 H2：移动端折行——输入框 basis-full 独占一行，按钮组换行右接；md 起恢复单行 */}
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
         {streaming ? (
           <button
             type="button"
@@ -103,7 +104,7 @@ export default function CommandBar({
               placeholder="剧情指令（可空，如：兄妹进入遗迹深处…）"
               aria-label="剧情指令"
               data-testid="directive-input"
-              className="h-10 min-w-0 flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))] disabled:opacity-40"
+              className="h-10 min-w-32 flex-1 basis-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))] disabled:opacity-40 md:basis-0"
             />
             <button
               type="button"

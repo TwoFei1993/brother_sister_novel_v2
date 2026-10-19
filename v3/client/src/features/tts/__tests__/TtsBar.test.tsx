@@ -135,4 +135,15 @@ describe('TtsBar', () => {
     const c = await mountBar({ visible: false });
     expect(c.querySelector('[data-testid="tts-bar"]')).toBeNull();
   });
+
+  it('移动端两行堆叠（审计 H3）：容器 flex-col / md 单行，6 档速度全部渲染可达', async () => {
+    const c = await mountBar();
+    const bar = q(c, 'tts-bar');
+    expect(bar.className).toContain('flex-col'); // 移动端：章控制行 + 声音/速度行
+    expect(bar.className).toContain('md:flex-row'); // 桌面恢复单行
+    const rates = c.querySelectorAll('[data-testid="tts-rate-row"] button');
+    expect(rates.length).toBe(6); // 0.8x–2x 全档
+    expect(q(c, 'tts-rate-row').className.length).toBeGreaterThan(0);
+    expect(c.querySelector('[data-testid="tts-rate-2"]')).not.toBeNull(); // 尾档 2x 存在
+  });
 });

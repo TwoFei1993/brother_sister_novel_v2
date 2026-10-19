@@ -9,7 +9,7 @@
  */
 import { create } from 'zustand';
 
-import { getWork, listMessages, patchMessage } from '../api/works';
+import { deleteMessage as deleteMessageApi, getWork, listMessages, patchMessage } from '../api/works';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
@@ -36,6 +36,9 @@ interface WorkState {
   upsertLocal: (message: Message) => void;
   /** 切换某条消息的 swipe 候选：本地即改 + PATCH 持久化（失败回滚） */
   updateSwipe: (messageId: string, swipeId: number) => Promise<void>;
+  /** 删除单条消息（D3）：乐观移除 + DELETE 持久化 + 回拉全量 Work 同步 stats；
+   *  失败按 createdAt 序回插原位并返回 false（调用方提示） */
+  removeMessage: (messageId: string) => Promise<boolean>;
   /** 设置抽屉保存成功后的全量替换 */
   setWork: (work: Work) => void;
   reset: () => void;
@@ -123,4 +126,29 @@ export const useWorkStore = create<WorkState>()((set, get) => ({
 
   setWork: (work) => set({ work }),
   reset: () => set({ ...INITIAL }),
+
+  removeMessage: async (messageId) => {
+    const { work, messages } = get();
+    if (!work) return false;
+    const target = messages.find((m) => m.id === messageId);
+    if (!target) return false;
+    // 乐观移除：章节计数（h1）与气泡流立即反映删除
+    set((s) => ({ messages: s.messages.filter((m) => m.id !== messageId) }));
+    try {
+      await deleteMessageApi(work.id, messageId);
+      // stats 快照随服务端重算（updateWorkStats），回拉全量保持 h1/书架口径一致
+      set({ work: await getWork(work.id) });
+      return true;
+    } catch (err) {
+      console.warn('[workStore] 删除消息持久化失败，已回滚', err);
+      // 按 createdAt 序回插原位（窗口消息即按时间序），不破坏消息流顺序
+      set((s) => {
+        const next = [...s.messages];
+        const idx = next.findIndex((m) => m.createdAt > target.createdAt);
+        next.splice(idx < 0 ? next.length : idx, 0, target);
+        return { messages: next };
+      });
+      return false;
+    }
+  },
 }));

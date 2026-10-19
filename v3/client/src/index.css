@@ -96,7 +96,7 @@
     --ring: 190 90% 50%;
     --theme-glow: 190 90% 50%;
     --theme-font-heading: 'Orbitron', sans-serif;
-    --theme-font-body: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; /* 审计 M7：Inter 无中文字形，显式声明中文回落避免正文落到宋体 */
     --bg: var(--background);
     --surface: var(--card);
     --border-soft: var(--border);
@@ -120,7 +120,8 @@
     --secondary: 0 0% 18%;
     --secondary-foreground: 0 0% 80%;
     --muted: 0 0% 16%;
-    --muted-foreground: 0 0% 50%;
+    /* 次级文字提亮至灰黑底 ≥4.5:1（WCAG AA，审计 H4；原 50% ≈4.4:1 不达标） */
+    --muted-foreground: 0 0% 62%;
     --accent: 0 70% 50%;
     --accent-foreground: 0 0% 95%;
     --destructive: 0 84% 60%;
@@ -130,7 +131,7 @@
     --ring: 0 70% 50%;
     --theme-glow: 0 70% 50%;
     --theme-font-heading: 'Inter', sans-serif;
-    --theme-font-body: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; /* 审计 M7：Inter 无中文字形，显式声明中文回落避免正文落到宋体 */
     --bg: var(--background);
     --surface: var(--card);
     --border-soft: var(--border);
@@ -154,7 +155,8 @@
     --secondary: 260 25% 18%;
     --secondary-foreground: 260 20% 85%;
     --muted: 260 20% 16%;
-    --muted-foreground: 260 15% 50%;
+    /* 次级文字提亮至紫黑底 ≥4.5:1（WCAG AA，审计 H4；原 50% ≈4.3:1 不达标） */
+    --muted-foreground: 260 15% 60%;
     --accent: 220 70% 55%;
     --accent-foreground: 260 30% 95%;
     --destructive: 0 84% 60%;
@@ -164,7 +166,7 @@
     --ring: 270 70% 60%;
     --theme-glow: 270 70% 60%;
     --theme-font-heading: 'Cinzel', serif;
-    --theme-font-body: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; /* 审计 M7：Inter 无中文字形，显式声明中文回落避免正文落到宋体 */
     --bg: var(--background);
     --surface: var(--card);
     --border-soft: var(--border);
@@ -188,7 +190,8 @@
     --secondary: 240 25% 18%;
     --secondary-foreground: 45 40% 90%;
     --muted: 240 20% 16%;
-    --muted-foreground: 240 15% 50%;
+    /* 次级文字提亮至蓝紫底 ≥4.5:1（WCAG AA，审计 H4；原 50% ≈3.6:1 不达标） */
+    --muted-foreground: 240 15% 60%;
     --accent: 45 80% 55%;
     --accent-foreground: 240 35% 10%;
     --destructive: 0 84% 60%;
@@ -232,7 +235,7 @@
     --ring: 45 70% 55%;
     --theme-glow: 280 50% 55%;
     --theme-font-heading: 'Cinzel', serif;
-    --theme-font-body: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; /* 审计 M7：Inter 无中文字形，显式声明中文回落避免正文落到宋体 */
     --bg: var(--background);
     --surface: var(--card);
     --border-soft: var(--border);
@@ -267,7 +270,7 @@
     --radius: 0.5rem;
     --theme-glow: 221 79% 48%;
     --theme-font-heading: 'Inter', sans-serif;
-    --theme-font-body: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; /* 审计 M7：Inter 无中文字形，显式声明中文回落避免正文落到宋体 */
     /* v3 组件变量派生 */
     --bg: var(--background);
     --surface: var(--card);

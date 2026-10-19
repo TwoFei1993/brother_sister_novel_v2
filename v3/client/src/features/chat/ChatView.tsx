@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ChatReplyLength } from '@shared/work';
 import type { Message } from '@shared/message';
+import type { TavernRegexScript } from '@shared/tavern';
 
 import { pickSpeaker, type ChatMember } from '../../engine/prompt/activation';
 import { Avatar, MessageBubble, UserBubble } from './ChatBubbles';
@@ -29,6 +30,8 @@ export interface ChatViewProps {
   onRegenerate?: (messageId: string) => void;
   /** 消息点读（🔊）：宿主接 TTS engine.speakOne */
   onSpeak?: (content: string) => void;
+  /** 显示轨正则脚本（markdownOnly，§5.1②；透传 assistant 气泡渲染管道） */
+  regexScripts?: TavernRegexScript[];
   /** 快速回复 chips（父层按轮次轮换好的一组） */
   quickDirectives?: string[];
   /** 轮换提示 / 长度档 / 自动连播（透传 MemberBar，语义见其文件头） */
@@ -53,6 +56,7 @@ export default function ChatView({
   onSwipe,
   onRegenerate,
   onSpeak,
+  regexScripts,
   quickDirectives = [],
   nextSpeakerName,
   replyLength,
@@ -140,6 +144,7 @@ export default function ChatView({
               message={m}
               canSwipe={Boolean(onSwipe) && m.swipes.length > 1}
               canRegenerate={Boolean(onRegenerate)}
+              regexScripts={regexScripts}
               onSwipe={onSwipe}
               onRegenerate={onRegenerate}
               onSpeak={onSpeak}

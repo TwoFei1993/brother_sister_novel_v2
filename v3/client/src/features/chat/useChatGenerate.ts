@@ -11,8 +11,9 @@
  *
  * 真实 UI 接线（ChatWorkspace）见 features/chat/ChatWorkspace.tsx。
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message } from '@shared/message';
+import type { TavernRegexScript } from '@shared/tavern';
 import type { Work } from '@shared/work';
 
 import { buildGenerateBody } from '../../api/llm';
@@ -20,7 +21,7 @@ import { useGenerationStore } from '../../stores/generation';
 import type { ChatMember } from '../../engine/prompt/activation';
 import { MAX_SWIPES, historyBeforeTarget, swipeLimitError } from '../../hooks/generation-flow';
 import { runGenerationStream } from '../../hooks/generation-runtime';
-import { loadAssembleAssets, type AssembleAssets, type PendingVars } from '../../hooks/generation-pipeline';
+import { loadAssembleAssets, loadRegexScripts, type AssembleAssets, type PendingVars } from '../../hooks/generation-pipeline';
 
 import { buildChatMacroEnv, finalizeChatGeneration, scanAndAssembleChat, type ChatTurn } from './chat-flow';
 
@@ -40,6 +41,8 @@ export interface UseChatGenerateResult {
   error: { code: string; message: string } | null;
   partialKept: boolean;
   targetMessageId: string | null;
+  /** 显示轨正则脚本（markdownOnly，作品绑定资产；气泡渲染前应用，§5.1②） */
+  regexScripts: TavernRegexScript[];
   /** 发送用户对话并生成激活角色回复；返回成对入库消息（user 先 assistant 后落盘）。
    *  opts.implicit=true：隐式引导——文本进上下文但不入库为 user 消息 */
   sendMessage: (userText: string, speaker: ChatMember, opts?: { implicit?: boolean }) => Promise<ChatTurn | null>;
@@ -58,6 +61,19 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
   // 消息流经 ref 转发：方法内始终读最新值，避免长生命周期回调闭包陈旧数组
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  // 显示轨正则脚本：挂载时拉取一次（单项失败静默跳过，不阻塞对话）
+  const [regexScripts, setRegexScripts] = useState<TavernRegexScript[]>([]);
+  useEffect(() => {
+    let alive = true;
+    loadRegexScripts(work)
+      .then((list) => {
+        if (alive) setRegexScripts(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [work]);
 
   const run = useCallback(
     (history: Message[], userText: string, speaker: ChatMember, opts: RunOptions): Promise<ChatTurn | null> =>
@@ -148,6 +164,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
     error: useGenerationStore((s) => s.error),
     partialKept: useGenerationStore((s) => s.partialKept),
     targetMessageId: useGenerationStore((s) => s.targetMessageId),
+    regexScripts,
     sendMessage,
     continueFromPartial,
     swipeRegenerate,
