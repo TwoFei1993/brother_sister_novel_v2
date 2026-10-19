@@ -66,7 +66,14 @@ export class TypewriterPacer {
   }
 
   private tick() {
-    if (!this.buffer) return;
+    if (!this.buffer) {
+      // 空转自愈：吐完即停表（正常流式下大部分 tick 缓冲为空），push 会经 ensureTimer 重新起表
+      if (this.timer !== null) {
+        clearInterval(this.timer);
+        this.timer = null;
+      }
+      return;
+    }
     const n = Math.min(
       this.maxCharsPerTick,
       Math.max(this.baseCharsPerTick, Math.ceil(this.buffer.length / this.catchUpDivisor)),

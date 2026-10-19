@@ -22,6 +22,7 @@ import { DEFAULT_TARGET_CHAPTER_WORDS } from '@shared/work';
 import { apiFetch } from '../api/client';
 import type { RegexAsset } from '../api/library';
 import { tokenizeMessages, type GenerateMessage } from '../api/llm';
+import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, postprocessMessage } from '../engine/prompt/postprocess';
@@ -181,6 +182,13 @@ export async function scanAndAssemble(
   let history = plan.kept;
   // novel 每章目标字数：兜底主提示词与末尾写作要求共用（不进世界书扫描池，避免「字数」误激活条目）
   const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS;
+  // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销，否则最紧预算下最终请求会超限约几十 token
+  const guardAllowance =
+    tail.kind === 'directive'
+      ? countTokensApprox(withNovelOutputGuard([], targetWords)[0]!.content)
+      : 0;
+  const withGuard = (msgs: GenerateMessage[]): GenerateMessage[] =>
+    tail.kind === 'directive' ? withNovelOutputGuard(msgs, targetWords) : msgs;
   for (;;) {
     const result = assemblePrompt({
       preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords),
@@ -204,13 +212,11 @@ export async function scanAndAssemble(
       content: m.content,
     }));
     if (history.length === 0) {
-      const finalMessages = tail.kind === 'directive' ? withNovelOutputGuard(assembled) : assembled;
-      return { messages: finalMessages, promptTokens: result.usage.promptTokens, truncated: result.usage.truncated, activatedIds: result.activatedIds };
+      return { messages: withGuard(assembled), promptTokens: result.usage.promptTokens, truncated: result.usage.truncated, activatedIds: result.activatedIds };
     }
     const { count } = await tokenizeMessages(prefs.source, prefs.model || undefined, assembled);
-    if (count <= budget) {
-      const finalMessages = tail.kind === 'directive' ? withNovelOutputGuard(assembled) : assembled;
-      return { messages: finalMessages, promptTokens: count, truncated: result.usage.truncated, activatedIds: result.activatedIds };
+    if (count <= budget - guardAllowance) {
+      return { messages: withGuard(assembled), promptTokens: count, truncated: result.usage.truncated, activatedIds: result.activatedIds };
     }
     // 超预算：按超量比例估算截断条数（至少 1 条），截掉最旧后重新组装校验
     const perMsg = count / Math.max(1, assembled.length);

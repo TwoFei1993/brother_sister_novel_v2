@@ -98,20 +98,21 @@ export function buildFallbackPreset(
   };
 }
 
-/** 上下文规划（纯函数）：预算装得下则全量保留；装不下时从最旧侧切出 dropped（待摘要区） */
 /** 输出守卫（novel）：预设自带的思维链框架（如 Sudachi 类）可能让模型把输出耗在思考上——
- *  只回思考没有正文视为无效。追加在消息最末尾（贴近生成点，遵循最强；对齐 chat 侧长度 hint 位置）。 */
-export function withNovelOutputGuard(messages: GenerateMessage[]): GenerateMessage[] {
+ *  只回思考没有正文视为无效。追加在消息最末尾（贴近生成点，遵循最强；对齐 chat 侧长度 hint 位置）。
+ *  字数与 buildChapterRequirement 同源（targetWords），避免同一末尾出现两个矛盾的字数要求。 */
+export function withNovelOutputGuard(messages: GenerateMessage[], targetWords: number): GenerateMessage[] {
   return [
     ...messages,
     {
       role: 'system' as const,
       content:
-        '（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 800 字。）',
+        `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`,
     },
   ];
 }
 
+/** 上下文规划（纯函数）：预算装得下则全量保留；装不下时从最旧侧切出 dropped（待摘要区） */
 export function planContext(history: Message[], budget: number): { kept: Message[]; dropped: Message[] } {
   const tokens = history.map((m) => countTokensApprox(m.content));
   const total = tokens.reduce((a, b) => a + b, 0);
