@@ -1,30 +1,27 @@
 /**
  * 酒馆式对话视图（设计 §7.1 chat 模式 / §4.3 激活策略）
  *
- * 纯展示 + 回调组件：生成逻辑不在本组件（父层调 useChatGenerate，Task 23 的
- * useChatGenerate.ts），视图只经 props 回调与外部集成。
- *
- * 集成契约（协调者接线时遵循）：
- * - onSend(text)：父层 pickSpeaker 激活角色 → useChatGenerate.sendMessage(text, speaker)
- * - onPick(id)：父层更新 manualPickId（ChatView 内 MemberBar 已处理「再点取消」语义）
- * - onSwipe(messageId, dir) / onRegenerate(messageId)：父层切换 swipeId（PATCH）/ swipe 重生成
- * - 流式中生成者 = pickSpeaker(members, lastSpeakerId, 刚发送文本, manualPickId)，
- *   刚发送文本由本组件 pendingText 暂存（发送时记录、streaming 结束清除），
- *   无 pendingText 时回退消息流中最后一条 user 消息
- * - 展示为纯文本（whitespace-pre-wrap）；markdown+DOMPurify 渲染由视图接线任务统一接入
+ * 纯展示 + 回调组件：生成逻辑在父层（ChatWorkspace + useChatGenerate），本组件
+ * 只经 props 回调与外部集成。onSend(text, opts) 的 opts.implicit=true 为隐式引导
+ * （括号 chips：发送但不显示待入库气泡、不入库）。流式生成者 = 父层传入的
+ * streamingSpeakerId 优先，未传时回退刚发送文本的提及检测。
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import type { ChatReplyLength } from '@shared/work';
 import type { Message } from '@shared/message';
 
 import { pickSpeaker, type ChatMember } from '../../engine/prompt/activation';
-import MemberBar, { avatarChar } from './MemberBar';
+import { Avatar, MessageBubble, UserBubble } from './ChatBubbles';
+import MemberBar from './MemberBar';
+import { isImplicitDirective } from './chat-directives';
 
 export interface ChatViewProps {
   messages: Message[];
   members: ChatMember[];
   lastSpeakerId: string | null;
   manualPickId: string | null;
-  onSend: (text: string) => void;
+  /** opts.implicit=true：隐式引导（括号指令）——发送但不显示待入库气泡、不入库 */
+  onSend: (text: string, opts?: { implicit?: boolean }) => void;
   onPick: (id: string | null) => void;
   streaming?: boolean;
   buffer?: string;
@@ -32,6 +29,16 @@ export interface ChatViewProps {
   onRegenerate?: (messageId: string) => void;
   /** 消息点读（🔊）：宿主接 TTS engine.speakOne */
   onSpeak?: (content: string) => void;
+  /** 快速回复 chips（父层按轮次轮换好的一组） */
+  quickDirectives?: string[];
+  /** 轮换提示 / 长度档 / 自动连播（透传 MemberBar，语义见其文件头） */
+  nextSpeakerName?: string;
+  replyLength?: ChatReplyLength;
+  onReplyLengthChange?: (len: ChatReplyLength) => void;
+  autoPlay?: boolean;
+  onAutoPlayToggle?: () => void;
+  /** 流式生成中的实际激活角色（父层发送时记录；自动连播空引导时消息流反查会取错提及者） */
+  streamingSpeakerId?: string | null;
 }
 
 export default function ChatView({
@@ -46,6 +53,13 @@ export default function ChatView({
   onSwipe,
   onRegenerate,
   onSpeak,
+  quickDirectives = [],
+  nextSpeakerName,
+  replyLength,
+  onReplyLengthChange,
+  autoPlay,
+  onAutoPlayToggle,
+  streamingSpeakerId = null,
 }: ChatViewProps) {
   const [draft, setDraft] = useState('');
   const [pendingText, setPendingText] = useState('');
@@ -77,12 +91,14 @@ export default function ChatView({
     endRef.current?.scrollIntoView?.({ block: 'end' });
   }, [messages.length, buffer]);
 
-  // 流式生成者（§4.3 激活策略）：优先刚发送文本的提及检测
+  // 流式生成者（§4.3 激活策略）：父层记录的实际激活角色优先；
+  // 未传时回退「刚发送文本提及检测」（手输场景），自动连播空引导时父层必传
   const streamingSpeakerName = useMemo(() => {
     if (!streaming || members.length === 0) return null;
+    if (streamingSpeakerId) return members.find((m) => m.id === streamingSpeakerId)?.name ?? null;
     const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
     return pickSpeaker(members, lastSpeakerId, pendingText || lastUserText, manualPickId).name;
-  }, [streaming, members, messages, lastSpeakerId, manualPickId, pendingText]);
+  }, [streaming, members, messages, lastSpeakerId, manualPickId, pendingText, streamingSpeakerId]);
 
   function submit(): void {
     const text = draft.trim();
@@ -98,7 +114,18 @@ export default function ChatView({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="chat-view">
-      <MemberBar members={members} lastSpeakerId={lastSpeakerId} manualPickId={manualPickId} onPick={onPick} streaming={streaming} />
+      <MemberBar
+        members={members}
+        lastSpeakerId={lastSpeakerId}
+        manualPickId={manualPickId}
+        onPick={onPick}
+        streaming={streaming}
+        nextSpeakerName={nextSpeakerName}
+        replyLength={replyLength}
+        onReplyLengthChange={onReplyLengthChange}
+        autoPlay={autoPlay}
+        onAutoPlayToggle={onAutoPlayToggle}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-testid="chat-list">
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
@@ -133,11 +160,33 @@ export default function ChatView({
           <div ref={endRef} />
         </div>
       </div>
-
       <div
         className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4"
         style={{ marginBottom: keyboardInset }}
       >
+        {quickDirectives.length > 0 && (
+          <div className="mx-auto mb-1.5 flex max-w-3xl flex-wrap gap-1.5" data-testid="quick-directives">
+            {quickDirectives.map((d, i) => {
+              const implicit = isImplicitDirective(d);
+              return (
+                <button
+                  key={`${i}-${d}`}
+                  type="button"
+                  disabled={streaming}
+                  title={implicit ? '隐式引导：推进剧情但不留下你的发言记录' : `发送「${d}」`}
+                  data-testid="quick-directive-chip"
+                  onClick={() => {
+                    onSend(d, { implicit });
+                    if (!implicit) setPendingText(d);
+                  }}
+                  className="rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2.5 py-1 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--fg))] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="mx-auto flex max-w-3xl items-center gap-2">
           <input
             type="text"
@@ -160,114 +209,6 @@ export default function ChatView({
             发送
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------- 气泡子组件（本文件内私有） ----------
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <span
-      data-testid="chat-avatar"
-      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--accent))]/15 text-xs font-semibold text-[hsl(var(--accent))]"
-    >
-      {avatarChar(name)}
-    </span>
-  );
-}
-
-function UserBubble({ name, content, testid = 'chat-bubble' }: { name: string; content: string; testid?: string }) {
-  return (
-    <div className="flex justify-end" data-testid={testid} data-side="right" data-name={name}>
-      <div className="max-w-[80%]">
-        <p className="mb-0.5 text-right text-xs text-[hsl(var(--fg-muted))]">{name}</p>
-        <div className="rounded-2xl rounded-br-sm bg-[hsl(var(--accent))] px-3 py-2 text-sm whitespace-pre-wrap text-[hsl(var(--accent-fg))]">
-          {content}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({
-  message,
-  canSwipe,
-  canRegenerate,
-  onSwipe,
-  onRegenerate,
-  onSpeak,
-}: {
-  message: Message;
-  canSwipe: boolean;
-  canRegenerate: boolean;
-  onSwipe?: (messageId: string, dir: 1 | -1) => void;
-  onRegenerate?: (messageId: string) => void;
-  onSpeak?: (content: string) => void;
-}) {
-  if (message.role === 'user') {
-    return <UserBubble name={message.name} content={message.content} />;
-  }
-  const content = message.swipes[message.swipeId] ?? message.content;
-  return (
-    <div className="flex justify-start" data-testid="chat-bubble" data-side="left" data-name={message.name}>
-      <Avatar name={message.name} />
-      <div className="ml-2 max-w-[80%]">
-        <p className="mb-0.5 text-xs text-[hsl(var(--fg-muted))]">{message.name}</p>
-        <div className="rounded-2xl rounded-tl-sm bg-[hsl(var(--surface))] px-3 py-2 text-sm whitespace-pre-wrap">{content}</div>
-        {(canSwipe || canRegenerate || onSpeak) && (
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-[hsl(var(--fg-muted))]">
-            {canSwipe && (
-              <span className="flex items-center gap-1" data-testid="chat-swipe-controls">
-                <button
-                  type="button"
-                  title="上一支"
-                  data-testid="swipe-left"
-                  onClick={() => onSwipe?.(message.id, -1)}
-                  className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
-                >
-                  ◀
-                </button>
-                <span data-testid="swipe-position">
-                  {message.swipeId + 1}/{message.swipes.length}
-                </span>
-                <button
-                  type="button"
-                  title="下一支"
-                  data-testid="swipe-right"
-                  onClick={() => onSwipe?.(message.id, 1)}
-                  className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
-                >
-                  ▶
-                </button>
-              </span>
-            )}
-            {canRegenerate && (
-              <button
-                type="button"
-                title="重新生成本条"
-                data-testid="regen-btn"
-                onClick={() => onRegenerate?.(message.id)}
-                className="flex h-9 items-center px-1 hover:text-[hsl(var(--fg))]"
-              >
-                ↻ 重roll
-              </button>
-            )}
-            {onSpeak && (
-              <button
-                type="button"
-                title="朗读本条"
-                aria-label={`朗读 ${message.name} 的消息`}
-                data-testid="speak-btn"
-                onClick={() => onSpeak(content)}
-                className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
-              >
-                🔊
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

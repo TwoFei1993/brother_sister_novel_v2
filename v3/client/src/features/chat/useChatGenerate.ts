@@ -30,6 +30,8 @@ interface RunOptions {
   initialBuffer: string;
   /** swipe 重 roll：候选进该消息的 swipes，而非新建消息 */
   swipeTarget?: Message;
+  /** 隐式引导（括号指令/空引导）：userText 进上下文，但不入库为 user 消息 */
+  implicitUser?: boolean;
 }
 
 export interface UseChatGenerateResult {
@@ -38,8 +40,9 @@ export interface UseChatGenerateResult {
   error: { code: string; message: string } | null;
   partialKept: boolean;
   targetMessageId: string | null;
-  /** 发送用户对话并生成激活角色回复；返回成对入库消息（user 先 assistant 后落盘） */
-  sendMessage: (userText: string, speaker: ChatMember) => Promise<ChatTurn | null>;
+  /** 发送用户对话并生成激活角色回复；返回成对入库消息（user 先 assistant 后落盘）。
+   *  opts.implicit=true：隐式引导——文本进上下文但不入库为 user 消息 */
+  sendMessage: (userText: string, speaker: ChatMember, opts?: { implicit?: boolean }) => Promise<ChatTurn | null>;
   /** 断流后「继续」：半成品作基底，携带原对话文本重组上下文再发起 */
   continueFromPartial: (partial: string, userText: string, speaker: ChatMember) => Promise<ChatTurn | null>;
   /** 换一支：重 roll 该消息（激活角色 = 传入 speaker），结果 push 进 target.swipes */
@@ -81,10 +84,11 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
           return {
             body,
             // ---------- 完成收尾：后处理 → user+assistant 成对入库 → 变量回写 ----------
+            // 隐式引导：finalize 的 userText 传空串 → 复用 finalize 对空串跳过入库的语义
             finalize: () =>
               finalizeChatGeneration({
                 work,
-                userText,
+                userText: opts.implicitUser ? '' : userText,
                 speaker,
                 swipeTarget: opts.swipeTarget ?? null,
                 assets,
@@ -102,8 +106,12 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
   );
 
   const sendMessage = useCallback(
-    (userText: string, speaker: ChatMember) =>
-      run(messagesRef.current, userText, speaker, { targetId: crypto.randomUUID(), initialBuffer: '' }),
+    (userText: string, speaker: ChatMember, sendOpts?: { implicit?: boolean }) =>
+      run(messagesRef.current, userText, speaker, {
+        targetId: crypto.randomUUID(),
+        initialBuffer: '',
+        ...(sendOpts?.implicit ? { implicitUser: true } : {}),
+      }),
     [run],
   );
 

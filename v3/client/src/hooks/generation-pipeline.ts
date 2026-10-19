@@ -15,7 +15,7 @@ import type { TavernCardV2, TavernPreset, TavernPrompt, TavernRegexScript } from
 import type { CharacterAsset } from '@shared/card';
 import type { PresetAsset } from '@shared/preset';
 import type { WorldbookAsset } from '@shared/worldbook';
-import type { Work } from '@shared/work';
+import { CHAT_REPLY_LENGTH_RANGE, type ChatReplyLength, type Work } from '@shared/work';
 
 import { apiFetch } from '../api/client';
 import type { RegexAsset } from '../api/library';
@@ -84,18 +84,22 @@ const FALLBACK_NOVEL_MAIN: TavernPrompt = {
     '- 绝不以 AI、助手、模型身份说话',
 };
 
-/** chat 兜底主提示词：无预设时强制沉浸式角色扮演（{{char}} 由宏环境解析为当前发言角色） */
-const FALLBACK_CHAT_MAIN: TavernPrompt = {
-  identifier: 'main',
-  name: '内置角色扮演主提示词',
-  role: 'system',
-  system_prompt: true,
-  content:
-    '你将完全扮演{{char}}，进行沉浸式角色扮演对话：\n' +
-    '- 始终以{{char}}的身份、口吻说话与行动，用小说笔法描写（对话、动作、心理、环境）\n' +
-    '- 每轮回复约 200-500 字；严格遵循上方世界观与角色设定，主动推动剧情\n' +
-    '- 绝不跳出角色，绝不承认自己是 AI 或助手；不要在回复开头加角色名前缀',
-};
+/** chat 兜底主提示词：无预设时强制沉浸式角色扮演（{{char}} 由宏环境解析为当前发言角色）。
+ *  回复长度按作品 chatReplyLength 档位生成（用户反馈四问③：200-500 字太短，默认档加长至 400-900） */
+export function buildChatMainPrompt(replyLength: ChatReplyLength): TavernPrompt {
+  const { min, max } = CHAT_REPLY_LENGTH_RANGE[replyLength];
+  return {
+    identifier: 'main',
+    name: '内置角色扮演主提示词',
+    role: 'system',
+    system_prompt: true,
+    content:
+      '你将完全扮演{{char}}，进行沉浸式角色扮演对话：\n' +
+      '- 始终以{{char}}的身份、口吻说话与行动，用小说笔法描写（对话、动作、心理、环境）\n' +
+      `- 每轮回复约 ${min}-${max} 字；严格遵循上方世界观与角色设定，主动推动剧情\n` +
+      '- 绝不跳出角色，绝不承认自己是 AI 或助手；不要在回复开头加角色名前缀',
+  };
+}
 
 /** 通用兜底收尾层：禁止元信息与思维过程外泄 */
 const FALLBACK_JAILBREAK: TavernPrompt = {
@@ -107,11 +111,12 @@ const FALLBACK_JAILBREAK: TavernPrompt = {
     '输出要求（最高优先级）：你的输出就是正文/对话本身——禁止任何旁白解释、写作提纲、思维过程（如 <thinking> 块）或「以下是/本章完」类元信息。',
 };
 
-/** 按模式构建兜底预设（marker 骨架 + 中文主提示词；卡覆盖开关仍可替换 main） */
-export function buildFallbackPreset(tailKind: 'directive' | 'userMessage'): TavernPreset {
+/** 按模式构建兜底预设（marker 骨架 + 中文主提示词；卡覆盖开关仍可替换 main）。
+ *  chat 模式的兜底主提示词按回复长度档位生成（novel 主提示词不消费长度档） */
+export function buildFallbackPreset(tailKind: 'directive' | 'userMessage', replyLength: ChatReplyLength = 'medium'): TavernPreset {
   return {
     ...EMPTY_PRESET,
-    prompts: [tailKind === 'directive' ? FALLBACK_NOVEL_MAIN : FALLBACK_CHAT_MAIN, FALLBACK_JAILBREAK],
+    prompts: [tailKind === 'directive' ? FALLBACK_NOVEL_MAIN : buildChatMainPrompt(replyLength), FALLBACK_JAILBREAK],
   };
 }
 
@@ -294,7 +299,7 @@ export async function scanAndAssemble(
   let history = plan.kept;
   for (;;) {
     const result = assemblePrompt({
-      preset: assets.preset ?? buildFallbackPreset(tail.kind),
+      preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium'),
       cards: assets.cards,
       // §4.4 卡覆盖预设开关：作品级设置，缺省视为开（与酒馆一致）
       allowCardOverride: work.allowCardOverride !== false,

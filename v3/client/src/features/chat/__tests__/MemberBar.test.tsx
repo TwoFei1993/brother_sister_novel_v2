@@ -1,6 +1,7 @@
 /**
  * MemberBar 渲染测试（jsdom + createRoot，无 testing-library 依赖）
- * 覆盖：当前发言者高亮与「自动轮换/手动指定」标签态 / 点击手动指定与再点取消回调。
+ * 覆盖：轮换提示「下一位/已指定」标签态 / 点击手动指定与再点取消回调 /
+ * 回复长度三档切换 / 自动连播开关 / 生成中禁点。
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -22,6 +23,11 @@ function baseProps(overrides: Partial<MemberBarProps> = {}): MemberBarProps {
     lastSpeakerId: null,
     manualPickId: null,
     onPick: vi.fn(),
+    nextSpeakerName: '哥哥',
+    replyLength: 'medium',
+    onReplyLengthChange: vi.fn(),
+    autoPlay: false,
+    onAutoPlayToggle: vi.fn(),
     ...overrides,
   };
 }
@@ -54,17 +60,17 @@ afterEach(async () => {
 });
 
 describe('MemberBar', () => {
-  it('当前发言者（lastSpeaker）高亮，未手动指定时显示「自动轮换」标签', async () => {
-    const c = await renderBar(baseProps({ lastSpeakerId: 'gege' }));
-    expect(c.querySelector('[data-testid="member-mode-tag"]')?.textContent).toBe('自动轮换');
+  it('当前发言者（lastSpeaker）高亮，未手动指定时显示「下一位：XX」轮换提示', async () => {
+    const c = await renderBar(baseProps({ lastSpeakerId: 'gege', nextSpeakerName: '妹妹' }));
+    expect(c.querySelector('[data-testid="member-mode-tag"]')?.textContent).toBe('下一位：妹妹');
     expect(c.querySelector('[data-id="gege"]')?.getAttribute('data-picked')).toBe('true');
     expect(c.querySelector('[data-id="meimei"]')?.getAttribute('data-picked')).toBe('false');
     expect(c.querySelector('[data-id="gege"] [data-testid="member-avatar"]')?.textContent).toBe('哥'); // 首字占位
   });
 
-  it('手动指定时高亮切换并显示「手动指定」标签', async () => {
-    const c = await renderBar(baseProps({ lastSpeakerId: 'gege', manualPickId: 'peijue' }));
-    expect(c.querySelector('[data-testid="member-mode-tag"]')?.textContent).toBe('手动指定');
+  it('手动指定时显示「已指定：XX」并高亮切换', async () => {
+    const c = await renderBar(baseProps({ lastSpeakerId: 'gege', manualPickId: 'peijue', nextSpeakerName: '配角' }));
+    expect(c.querySelector('[data-testid="member-mode-tag"]')?.textContent).toBe('已指定：配角');
     expect(c.querySelector('[data-id="peijue"]')?.getAttribute('data-picked')).toBe('true');
     expect(c.querySelector('[data-id="gege"]')?.getAttribute('data-picked')).toBe('false');
   });
@@ -82,9 +88,32 @@ describe('MemberBar', () => {
     expect(onPick).toHaveBeenNthCalledWith(2, null);
   });
 
-  it('生成中禁点成员', async () => {
+  it('长度三档：当前档高亮，点击回调对应档位', async () => {
+    const onReplyLengthChange = vi.fn();
+    const c = await renderBar(baseProps({ replyLength: 'medium', onReplyLengthChange }));
+    expect(c.querySelector('[data-testid="reply-length-medium"]')?.getAttribute('data-active')).toBe('true');
+    expect(c.querySelector('[data-testid="reply-length-long"]')?.getAttribute('data-active')).toBe('false');
+    await click(c, '[data-testid="reply-length-long"]');
+    expect(onReplyLengthChange).toHaveBeenCalledWith('long');
+  });
+
+  it('自动连播开关：aria-pressed 反映状态，点击回调切换', async () => {
+    const onAutoPlayToggle = vi.fn();
+    const c = await renderBar(baseProps({ autoPlay: false, onAutoPlayToggle }));
+    const btn = c.querySelector('[data-testid="auto-play-toggle"]')!;
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    await click(c, '[data-testid="auto-play-toggle"]');
+    expect(onAutoPlayToggle).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      roots[0].render(<MemberBar {...baseProps({ autoPlay: true, onAutoPlayToggle })} />);
+    });
+    expect(c.querySelector('[data-testid="auto-play-toggle"]')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('生成中禁点成员、长度档与自动开关', async () => {
     const c = await renderBar(baseProps({ streaming: true }));
-    const item = c.querySelector<HTMLButtonElement>('[data-id="gege"]')!;
-    expect(item.disabled).toBe(true);
+    expect(c.querySelector<HTMLButtonElement>('[data-id="gege"]')!.disabled).toBe(true);
+    expect(c.querySelector<HTMLButtonElement>('[data-testid="reply-length-short"]')!.disabled).toBe(true);
+    expect(c.querySelector<HTMLButtonElement>('[data-testid="auto-play-toggle"]')!.disabled).toBe(true);
   });
 });

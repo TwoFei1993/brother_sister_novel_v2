@@ -66,6 +66,21 @@ export const WritingStyleSchema = z.enum(['default', 'qidian', 'jjwxc', 'fanqie'
 export type WritingStyle = z.infer<typeof WritingStyleSchema>;
 
 // ---------- 小说设定（旧站 NovelSettings 全字段 + authorNote/noteDepth） ----------
+
+/** chat 回复长度档位：short=150-300 字 / medium=400-900 字 / long=800-1500 字 */
+export const ChatReplyLengthSchema = z.enum(['short', 'medium', 'long']);
+export type ChatReplyLength = z.infer<typeof ChatReplyLengthSchema>;
+
+/** 长度档位缺省值（缺省视为 medium） */
+export const DEFAULT_CHAT_REPLY_LENGTH: ChatReplyLength = 'medium';
+
+/** 各档位回复字数区间（单一事实源：兜底主提示词与组装后处理 hint 共用） */
+export const CHAT_REPLY_LENGTH_RANGE: Record<ChatReplyLength, { min: number; max: number }> = {
+  short: { min: 150, max: 300 },
+  medium: { min: 400, max: 900 },
+  long: { min: 800, max: 1500 },
+};
+
 export const NovelSettingsSchema = z.strictObject({
   genre: GenreTypeSchema,
   subGenre: z.string(),
@@ -111,6 +126,8 @@ export const NovelSettingsSchema = z.strictObject({
   rollingSummary: z.string().optional(),
   /** 已摘要覆盖的消息条数（增量摘要游标：历史超过此数才需要再次摘要） */
   summaryUpTo: z.number().int().nonnegative().optional(),
+  /** chat 模式回复长度档位（短/中/长，缺省视为 medium）；novel 模式不消费此字段 */
+  chatReplyLength: ChatReplyLengthSchema.optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 
