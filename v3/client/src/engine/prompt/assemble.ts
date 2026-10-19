@@ -13,7 +13,7 @@
  * marker 顺序由 prompt_order 驱动；摘要块固定挂在 chatHistory 前，
  * 设定块（NovelSettings 概要）拼接在 scenario 块之后，模式指令在最后。
  */
-import type { TavernCardV2, TavernPreset, TavernPrompt } from '@shared/tavern';
+import type { TavernCardV2, TavernPreset, TavernPrompt, TavernRegexScript } from '@shared/tavern';
 import type { Message } from '@shared/message';
 import type { NovelSettings } from '@shared/work';
 
@@ -21,6 +21,7 @@ import { countTokensApprox, fillBudget } from '../budget';
 import type { MacroEnv } from '../types';
 import type { ScanResult } from '../worldbook/types';
 import { substituteParams } from './macros';
+import { getRegexedString, type RegexPlacement } from './regex';
 
 type Role = 'system' | 'user' | 'assistant';
 
@@ -52,6 +53,12 @@ export interface AssembleContext {
   macroEnv: MacroEnv;
   /** 总预算 = max_context − max_tokens */
   budgetTokens: number;
+  /**
+   * 正则脚本（promptOnly 生成轨：静态块/深度注入项进上下文前应用；§5.1②）。
+   * 历史消息不重复应用——全时脚本已在入库时生效，二次应用会双重替换
+   * （酒馆 minDepth/maxDepth 提供的精细控制由脚本自身声明）。
+   */
+  regexScripts?: TavernRegexScript[];
 }
 
 export interface AssembleResult {
@@ -155,6 +162,11 @@ export function assemblePrompt(ctx: AssembleContext): AssembleResult {
   const order = ctx.preset.prompt_order?.[0]?.order ?? [];
   const promptById = new Map<string, TavernPrompt>(ctx.preset.prompts.map((p) => [p.identifier, p]));
 
+  // ---------- 正则生成轨（promptOnly）：宏替换后、进上下文前应用（酒馆 populate → regex 时序） ----------
+  const regexScripts = ctx.regexScripts ?? [];
+  const applyPromptRegex = (text: string, placement: RegexPlacement): string =>
+    regexScripts.length ? getRegexedString(text, placement, { isPrompt: true, macroEnv: env }, regexScripts) : text;
+
   // ---------- 素材块（§4.4：卡覆盖取首张非空，受 Work 开关控制） ----------
   const mainOverride = ctx.allowCardOverride ? firstNonEmpty(ctx.cards, (d) => d.system_prompt) : '';
   const jbOverride = ctx.allowCardOverride ? firstNonEmpty(ctx.cards, (d) => d.post_history_instructions) : '';
@@ -195,34 +207,37 @@ export function assemblePrompt(ctx: AssembleContext): AssembleResult {
       continue; // dialogueExamples 一期略；其余无内容 marker 跳过
     }
     if (!content.trim()) continue;
+    // 世界书内容按酒馆语义走 world_info placement，其余静态块走 ai_output
+    const placement: RegexPlacement =
+      entry.identifier === 'worldInfoBefore' || entry.identifier === 'worldInfoAfter' ? 'world_info' : 'ai_output';
     (afterHistory ? tailBlocks : head).push({
       role,
-      content: substituteParams(content, env),
+      content: applyPromptRegex(substituteParams(content, env), placement),
     });
   }
 
   // 摘要块（固定挂 chatHistory 前，酒馆 summary marker 语义）
   const summaryMessage: AssembleMessage | null = ctx.summary?.trim()
-    ? { role: 'system', content: substituteParams(`【前文摘要】\n${ctx.summary}`, env) }
+    ? { role: 'system', content: applyPromptRegex(substituteParams(`【前文摘要】\n${ctx.summary}`, env), 'ai_output') }
     : null;
 
   // ---------- 模式末尾注入 ----------
   const modeTail: AssembleMessage[] = [];
   if (ctx.directive?.trim()) {
-    modeTail.push({ role: 'user', content: `剧情指引：${substituteParams(ctx.directive, env)}` });
+    modeTail.push({ role: 'user', content: applyPromptRegex(`剧情指引：${substituteParams(ctx.directive, env)}`, 'ai_output') });
   }
   if (ctx.userMessage?.trim()) {
-    modeTail.push({ role: 'user', content: substituteParams(ctx.userMessage, env) });
+    modeTail.push({ role: 'user', content: applyPromptRegex(substituteParams(ctx.userMessage, env), 'ai_output') });
   }
 
-  // ---------- 深度注入项收集：世界书 atDepth + 作者注释 + 卡 depth_prompt ----------
-  const injections: { content: string; depth: number; role: Role; order: number }[] = [
-    ...ctx.worldbookScan.depthEntries,
-  ];
+  // ---------- 深度注入项收集：世界书 atDepth + 作者注释 + 卡 depth_prompt（promptOnly 轨同静态块） ----------
+  const injections: { content: string; depth: number; role: Role; order: number }[] = ctx.worldbookScan.depthEntries.map(
+    (e) => ({ ...e, content: applyPromptRegex(e.content, 'world_info') }),
+  );
   const authorNote = textOf(ctx.workSettings.authorNote).trim();
   if (authorNote) {
     injections.push({
-      content: authorNote,
+      content: applyPromptRegex(authorNote, 'ai_output'),
       depth: ctx.workSettings.noteDepth ?? 4,
       role: 'system',
       order: 100,
@@ -233,7 +248,7 @@ export function assemblePrompt(ctx: AssembleContext): AssembleResult {
     .find((dp) => textOf(dp?.prompt).trim());
   if (depthPrompt?.prompt) {
     injections.push({
-      content: textOf(depthPrompt.prompt),
+      content: applyPromptRegex(textOf(depthPrompt.prompt), 'ai_output'),
       depth: depthPrompt.depth ?? 4,
       role: normalizeDepthRole(depthPrompt.role),
       order: 100,

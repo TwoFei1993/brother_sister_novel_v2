@@ -5,10 +5,11 @@
  * - lastSpeakerId：最后一条 assistant 消息 name 匹配成员（自然轮换基准）
  * - onSend：pickSpeaker（手动指定 > 提及 > 轮换）→ sendMessage → turn.user/assistant 依次 upsertLocal
  * - swipe：store updateSwipe（本地 + PATCH，失败回滚）；重roll：swipeRegenerate 追加候选
- * - 断流「继续」：半成品 + 最后一条用户消息重组上下文（§9.1/§9.2）
+ * - 断流「继续」：半成品 + 本轮发送文本重组上下文（review #2：发送文本自存 ref——
+ *   发送即记录，不依赖消息流反查；发送后断流时 user 消息尚未入库，反查会拿错轮次）
  * - 空成员：引导去作品设置绑定角色卡（不渲染对话视图）
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Work } from '@shared/work';
 
 import { listCharacters } from '../../api/library';
@@ -38,8 +39,13 @@ export default function ChatWorkspace({ work }: { work: Work }) {
   const chat = useChatGenerate(work, messages);
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [manualPickId, setManualPickId] = useState<string | null>(null);
+  /** 本轮发送文本（review #2）：发送即记录，断流「继续」时使用（user 消息可能未入库，反查会拿错轮次） */
+  const lastSentTextRef = useRef('');
   /** 消息点读引擎（chat 与 novel 互斥挂载，独占全局 tts store 无冲突） */
   const ttsEngine = useMemo(() => createTtsEngine(), []);
+
+  // 卸载清理：离开 chat 视图时停止点读并复位 tts store（review #11，防残留播放态跨视图泄漏）
+  useEffect(() => () => ttsEngine.stop(), [ttsEngine]);
 
   // 解析绑定角色为对话成员（按绑定顺序；失败静默 → 空成员引导态）
   useEffect(() => {
@@ -80,15 +86,17 @@ export default function ChatWorkspace({ work }: { work: Work }) {
 
   async function handleSend(text: string): Promise<void> {
     if (members.length === 0) return;
+    lastSentTextRef.current = text; // 本轮发送文本：断流「继续」的上下文取值来源
     const speaker = pickSpeaker(members, lastSpeakerId, text, manualPickId);
     syncTurn(await chat.sendMessage(text, speaker));
   }
 
-  /** 断流继续：半成品 + 最后一条用户消息（轮换基准不变） */
+  /** 断流继续：半成品 + 本轮发送文本（ref 缺失时回退消息流反查；轮换基准不变） */
   async function handleContinue(): Promise<void> {
     if (members.length === 0) return;
     const partial = useGenerationStore.getState().buffer;
-    const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const fallbackText = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const lastUserText = lastSentTextRef.current || fallbackText;
     const speaker = pickSpeaker(members, lastSpeakerId, lastUserText, manualPickId);
     syncTurn(await chat.continueFromPartial(partial, lastUserText, speaker));
   }

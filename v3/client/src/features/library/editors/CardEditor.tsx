@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TavernCardV2 } from '@shared/tavern';
 import type { CharacterAsset } from '@shared/card';
 
-import { apiFetch } from '../../api/client';
+import { apiFetch } from '../../../api/client';
 
 import EditorShell, { NumberField, SelectField, TextField } from './EditorShell';
 

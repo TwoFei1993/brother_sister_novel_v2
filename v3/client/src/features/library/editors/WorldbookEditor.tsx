@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TavernWorldInfoEntry, TavernWorldInfoFile } from '@shared/tavern';
 import type { WorldbookAsset } from '@shared/worldbook';
 
-import { apiFetch } from '../../api/client';
+import { apiFetch } from '../../../api/client';
 
 import EditorShell from './EditorShell';
 import EntryEditor from './EntryEditor';

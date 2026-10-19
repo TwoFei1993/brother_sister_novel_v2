@@ -1,9 +1,13 @@
 /**
  * 后处理管道（设计 §5.1⑥ / §5.3 COT 状态栏）
  *
- * 串联顺序：getRegexedString（ai_output 双 false 轨道，显示清理）→
+ * 串联顺序：getRegexedString（ai_output 双 false 全时轨道，显示清理）→
  * parseStatusBlock（尾部 ```status 块解析 + 剥离）→ parseChapterTitle（首行标题剥离 + 兜底）。
- * promptOnly 轨道已在 assemble.ts 装配时应用；本管道只服务"入库显示"用途。
+ *
+ * 正则三轨分工（§5.1②，review 修复后生效）：
+ * - promptOnly 生成轨：assemble.ts 装配时对静态块/深度注入项应用（isPrompt）
+ * - markdownOnly 渲染轨：渲染管道（lib/markdown.ts applyDisplayRegex）显示前应用（isMarkdown）
+ * - 双 false 全时轨：本管道入库时清理（本文件职责）
  */
 import type { TavernRegexScript } from '@shared/tavern';
 

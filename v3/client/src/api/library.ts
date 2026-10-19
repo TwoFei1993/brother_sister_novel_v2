@@ -8,13 +8,13 @@ import { apiFetch, ApiError } from './client';
 import type { CharacterAsset } from '@shared/card';
 import type { WorldbookAsset } from '@shared/worldbook';
 import type { PresetAsset } from '@shared/preset';
-import type { TavernPreset } from '@shared/tavern';
+import type { TavernPreset, TavernRegexScript } from '@shared/tavern';
 
-/** 正则脚本资产壳（与 server RegexAsset 同构；shared 上移后改为 re-export） */
+/** 正则脚本资产壳（与 server RegexAsset 同构；client 唯一定义，generation-pipeline 复用） */
 export interface RegexAsset {
   id: string;
   name: string;
-  raw: unknown;
+  raw: TavernRegexScript;
 }
 
 /** 四类资产的 URL 段（与 server 挂载路径一致） */

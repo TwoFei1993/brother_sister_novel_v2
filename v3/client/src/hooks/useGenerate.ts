@@ -1,36 +1,36 @@
 /**
- * 生成流 hook（设计 §3.2 数据流 / §9.1 重试 / §9.2 生成事务性）
+ * 生成流 hook（novel 语义，设计 §3.2 数据流 / §9.1 重试 / §9.2 生成事务性）
  *
- * generateChapter：组装（拉绑定资产 → 世界书扫描 → 总装 → tokenize 校验）
+ * generateChapter：组装（directive 通道：拉绑定资产 → 世界书扫描 → 总装 → tokenize 校验）
  *   → POST /api/llm/generate SSE → 逐 chunk 进 generationStore
  *   → 完成后处理（正则/标题/状态块）→ 构造 Message 幂等入库
  * continueFromPartial：断流半成品 +「继续」= 以续写指令重组上下文再发起（非续传）
  * swipeRegenerate：同 directive 重生成，候选 push 进既有消息的 swipes
- * 容错：网络类错误自动重试 ≤2（1s/3s 退避，仅未产出内容时）；停止=AbortController；
- * 入库 409 自动刷新重放。真实 UI 接线属 Task 20（WorkPage/CommandBar）。
+ *   （上下文取 target 之前，旧候选不进上下文；候选达 MAX_SWIPES 上限拒绝）
+ * 流编排（重试/停止/事务 fail）统一走 generation-runtime 共享内核（与 chat 同构）。
+ * 真实 UI 接线属 Task 20（WorkPage/CommandBar）。
  */
 import { useCallback, useRef } from 'react';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
-import { buildGenerateBody, generateStream } from '../api/llm';
+import { buildGenerateBody } from '../api/llm';
 import { useGenerationStore } from '../stores/generation';
-import { useSettingsStore } from '../stores/settings';
+
 import {
+  MAX_SWIPES,
   buildContinueDirective,
-  GenerationFlowError,
-  retryDelayMs,
-  shouldRetry,
-  sleep,
-  toGenerationError,
-  type GenerationError,
+  historyBeforeTarget,
+  swipeLimitError,
 } from './generation-flow';
+import { runGenerationStream } from './generation-runtime';
 import {
   buildMacroEnv,
   finalizeGeneration,
   loadAssembleAssets,
   scanAndAssemble,
   type AssembleAssets,
+  type AssembleTail,
   type PendingVars,
 } from './generation-pipeline';
 
@@ -45,7 +45,7 @@ interface RunOptions {
 export interface UseGenerateResult {
   streaming: boolean;
   buffer: string;
-  error: GenerationError | null;
+  error: { code: string; message: string } | null;
   partialKept: boolean;
   targetMessageId: string | null;
   /** novel 模式：按剧情指令生成一章，返回入库消息（失败返回 null） */
@@ -64,96 +64,48 @@ export function useGenerate(): UseGenerateResult {
   const abortRef = useRef<AbortController | null>(null);
 
   const run = useCallback(
-    async (work: Work, messages: Message[], directive: string, opts: RunOptions): Promise<Message | null> => {
-      if (useGenerationStore.getState().streaming) return null; // 防重入
-      const prefs = useSettingsStore.getState().llmPrefs;
-      if (!prefs.model) {
-        useGenerationStore.getState().fail({ code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
-        return null;
-      }
-
-      useGenerationStore.getState().start(work.id, opts.targetId, opts.initialBuffer);
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const startedAt = Date.now();
-      let chunksReceived = 0;
-      let attempt = 0;
-      let streamError: GenerationError | null = null;
-
-      try {
-        // ---------- 组装阶段（重试不复用之外的流请求） ----------
-        const assets: AssembleAssets = await loadAssembleAssets(work);
-        const pending: PendingVars = { work: new Map(), global: new Map() };
-        const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
-        const fitted = await scanAndAssemble(work, messages, directive, assets, env, prefs);
-        const body = buildGenerateBody({
-          source: prefs.source,
-          model: prefs.model,
-          messages: fitted.messages,
-          temperature: prefs.temperature,
-          maxTokens: prefs.maxTokens,
-        });
-
-        // ---------- 流式阶段（网络类错误 + 0 chunk → 指数退避重试 ≤2） ----------
-        for (;;) {
-          streamError = null;
-          try {
-            await generateStream(
-              body,
-              {
-                onChunk: (text) => {
-                  chunksReceived += 1;
-                  useGenerationStore.getState().appendChunk(text);
-                },
-                onDone: () => undefined,
-                onError: (e) => {
-                  streamError = toGenerationError(e); // 流中错误帧：中止读取，统一走 catch
-                  controller.abort();
-                },
-              },
-              controller.signal,
-            );
-            break;
-          } catch (err) {
-            if (streamError) throw new GenerationFlowError(streamError);
-            if (controller.signal.aborted) throw err; // 用户停止
-            const ge = toGenerationError(err);
-            if (shouldRetry(ge, chunksReceived, attempt)) {
-              attempt += 1;
-              await sleep(retryDelayMs(attempt), controller.signal);
-              continue;
-            }
-            throw err;
-          }
-        }
-
-        // ---------- 完成收尾：后处理 → 幂等入库 → 变量回写 ----------
-        return await finalizeGeneration({
-          work,
-          messages,
-          directive,
-          swipeTarget: opts.swipeTarget ?? null,
-          assets,
-          env,
-          prefs,
-          promptTokens: fitted.promptTokens,
-          activatedIds: fitted.activatedIds,
-          startedAt,
-          pending,
-        });
-      } catch (err) {
-        const ge = err instanceof GenerationFlowError ? err.ge : toGenerationError(err);
-        const partialKept = chunksReceived > 0 || opts.initialBuffer.length > 0;
-        if (ge.code === 'aborted' && streamError === null) {
-          useGenerationStore.getState().fail(null, partialKept); // 用户停止：非错误
-        } else {
-          useGenerationStore.getState().fail(ge, partialKept);
-        }
-        return null;
-      } finally {
-        if (abortRef.current === controller) abortRef.current = null;
-      }
-    },
+    (work: Work, messages: Message[], directive: string, opts: RunOptions): Promise<Message | null> =>
+      runGenerationStream<Message>({
+        workId: work.id,
+        targetId: opts.targetId,
+        initialBuffer: opts.initialBuffer,
+        bindController: (c) => {
+          abortRef.current = c;
+        },
+        prepare: async ({ prefs, startedAt }) => {
+          // ---------- 组装阶段（重试不复用之外的流请求） ----------
+          const assets: AssembleAssets = await loadAssembleAssets(work);
+          const pending: PendingVars = { work: new Map(), global: new Map() };
+          const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
+          const tail: AssembleTail = { kind: 'directive', text: directive };
+          const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
+          const body = buildGenerateBody({
+            source: prefs.source,
+            model: prefs.model,
+            messages: fitted.messages,
+            temperature: prefs.temperature,
+            maxTokens: prefs.maxTokens,
+          });
+          return {
+            body,
+            // ---------- 完成收尾：后处理 → 幂等入库 → 变量回写 ----------
+            finalize: () =>
+              finalizeGeneration({
+                work,
+                messages,
+                directive,
+                swipeTarget: opts.swipeTarget ?? null,
+                assets,
+                env,
+                prefs,
+                promptTokens: fitted.promptTokens,
+                activatedIds: fitted.activatedIds,
+                startedAt,
+                pending,
+              }),
+          };
+        },
+      }),
     [],
   );
 
@@ -172,12 +124,18 @@ export function useGenerate(): UseGenerateResult {
   );
 
   const swipeRegenerate = useCallback(
-    (work: Work, messages: Message[], target: Message) =>
-      run(work, messages, target.directive ?? '', {
+    (work: Work, messages: Message[], target: Message) => {
+      if (target.swipes.length >= MAX_SWIPES) {
+        useGenerationStore.getState().fail(swipeLimitError(), false);
+        return Promise.resolve(null);
+      }
+      // 对齐 chat 语义：上下文取 target 之前（被重roll章节的旧候选不进上下文）
+      return run(work, historyBeforeTarget(messages, target.id), target.directive ?? '', {
         targetId: target.id,
         initialBuffer: '',
         swipeTarget: target,
-      }),
+      });
+    },
     [run],
   );
 

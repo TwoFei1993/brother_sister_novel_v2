@@ -22,12 +22,14 @@ export interface LlmPrefs {
 }
 
 /**
- * GET /api/config 返回体（Task 5 定型后收窄字段，届时迁 shared 类型）。
+ * GET /api/config 返回体（client 唯一定义；features/settings/types.ts 以
+ * AppConfigDto 别名 re-export，review #9 去重后统一为本契约）。
  * 已知字段显式声明，未知字段经索引签名透传不丢失——避免 any，保持结构可演进。
  */
 export interface ConfigDto {
-  tts?: { apiUrl?: string };
-  /** 全局变量（宏 {{getvar}} 全局作用域取值源；实测 Task 5 返回 globalVariables） */
+  /** TTS 引擎地址（server configSchema 契约；TtsPanel 读写字段） */
+  ttsBaseUrl?: string;
+  /** 全局变量（宏 {{getvar}} 全局作用域取值源） */
   globalVariables?: Record<string, string>;
   [key: string]: unknown;
 }

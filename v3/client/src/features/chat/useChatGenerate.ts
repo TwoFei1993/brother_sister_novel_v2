@@ -6,33 +6,23 @@
  *   {{char}} 宏绑定 pickSpeaker 激活角色（由调用方传入 speaker）
  * - continueFromPartial：断流半成品 + 原对话文本重组上下文再发起（非续传）
  * - swipeRegenerate：重 roll 激活角色的回复，候选 push 进既有消息 swipes
- * - 流编排（重试/停止/409 重放）与 useGenerate 同构；错误统一 GenerationError
+ *   （上下文取 target 之前；候选达 MAX_SWIPES 上限拒绝）
+ * - 流编排（重试/停止/事务 fail）统一走 generation-runtime 共享内核；错误统一 GenerationError
  *
- * 真实 UI 接线（WorkPage chat 视图）由协调者后续任务处理。
+ * 真实 UI 接线（ChatWorkspace）见 features/chat/ChatWorkspace.tsx。
  */
 import { useCallback, useRef } from 'react';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
-import { buildGenerateBody, generateStream } from '../../api/llm';
+import { buildGenerateBody } from '../../api/llm';
 import { useGenerationStore } from '../../stores/generation';
-import { useSettingsStore } from '../../stores/settings';
 import type { ChatMember } from '../../engine/prompt/activation';
-import {
-  GenerationFlowError,
-  retryDelayMs,
-  shouldRetry,
-  sleep,
-  toGenerationError,
-} from '../../hooks/generation-flow';
+import { MAX_SWIPES, historyBeforeTarget, swipeLimitError } from '../../hooks/generation-flow';
+import { runGenerationStream } from '../../hooks/generation-runtime';
 import { loadAssembleAssets, type AssembleAssets, type PendingVars } from '../../hooks/generation-pipeline';
 
-import {
-  buildChatMacroEnv,
-  finalizeChatGeneration,
-  scanAndAssembleChat,
-  type ChatTurn,
-} from './chat-flow';
+import { buildChatMacroEnv, finalizeChatGeneration, scanAndAssembleChat, type ChatTurn } from './chat-flow';
 
 /** 单次生成编排参数（targetId 预生成 uuid 作入库幂等键） */
 interface RunOptions {
@@ -67,96 +57,47 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
   messagesRef.current = messages;
 
   const run = useCallback(
-    async (history: Message[], userText: string, speaker: ChatMember, opts: RunOptions): Promise<ChatTurn | null> => {
-      if (useGenerationStore.getState().streaming) return null; // 防重入
-      const prefs = useSettingsStore.getState().llmPrefs;
-      if (!prefs.model) {
-        useGenerationStore.getState().fail({ code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
-        return null;
-      }
-
-      useGenerationStore.getState().start(work.id, opts.targetId, opts.initialBuffer);
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const startedAt = Date.now();
-      let chunksReceived = 0;
-      let attempt = 0;
-      let streamError: { code: string; message: string } | null = null;
-
-      try {
-        // ---------- 组装阶段：资产拉取 → chat 语义宏环境 → 扫描总装（userMessage 通道） ----------
-        const assets: AssembleAssets = await loadAssembleAssets(work);
-        const pending: PendingVars = { work: new Map(), global: new Map() };
-        const env = buildChatMacroEnv(work, speaker, pending);
-        const fitted = await scanAndAssembleChat(work, history, userText, assets, env, prefs);
-        const body = buildGenerateBody({
-          source: prefs.source,
-          model: prefs.model,
-          messages: fitted.messages,
-          temperature: prefs.temperature,
-          maxTokens: prefs.maxTokens,
-        });
-
-        // ---------- 流式阶段（网络类错误 + 0 chunk → 指数退避重试 ≤2） ----------
-        for (;;) {
-          streamError = null;
-          try {
-            await generateStream(
-              body,
-              {
-                onChunk: (text) => {
-                  chunksReceived += 1;
-                  useGenerationStore.getState().appendChunk(text);
-                },
-                onDone: () => undefined,
-                onError: (e) => {
-                  streamError = toGenerationError(e);
-                  controller.abort();
-                },
-              },
-              controller.signal,
-            );
-            break;
-          } catch (err) {
-            if (streamError) throw new GenerationFlowError(streamError);
-            if (controller.signal.aborted) throw err; // 用户停止
-            const ge = toGenerationError(err);
-            if (shouldRetry(ge, chunksReceived, attempt)) {
-              attempt += 1;
-              await sleep(retryDelayMs(attempt), controller.signal);
-              continue;
-            }
-            throw err;
-          }
-        }
-
-        // ---------- 完成收尾：后处理 → user+assistant 成对入库 → 变量回写 ----------
-        return await finalizeChatGeneration({
-          work,
-          userText,
-          speaker,
-          swipeTarget: opts.swipeTarget ?? null,
-          assets,
-          env,
-          prefs,
-          promptTokens: fitted.promptTokens,
-          activatedIds: fitted.activatedIds,
-          startedAt,
-          pending,
-        });
-      } catch (err) {
-        const ge = err instanceof GenerationFlowError ? err.ge : toGenerationError(err);
-        const partialKept = chunksReceived > 0 || opts.initialBuffer.length > 0;
-        if (ge.code === 'aborted' && streamError === null) {
-          useGenerationStore.getState().fail(null, partialKept); // 用户停止：非错误
-        } else {
-          useGenerationStore.getState().fail(ge, partialKept);
-        }
-        return null;
-      } finally {
-        if (abortRef.current === controller) abortRef.current = null;
-      }
-    },
+    (history: Message[], userText: string, speaker: ChatMember, opts: RunOptions): Promise<ChatTurn | null> =>
+      runGenerationStream<ChatTurn>({
+        workId: work.id,
+        targetId: opts.targetId,
+        initialBuffer: opts.initialBuffer,
+        bindController: (c) => {
+          abortRef.current = c;
+        },
+        prepare: async ({ prefs, startedAt }) => {
+          // ---------- 组装阶段：资产拉取 → chat 语义宏环境 → 扫描总装（userMessage 通道） ----------
+          const assets: AssembleAssets = await loadAssembleAssets(work);
+          const pending: PendingVars = { work: new Map(), global: new Map() };
+          const env = buildChatMacroEnv(work, speaker, pending);
+          const fitted = await scanAndAssembleChat(work, history, userText, assets, env, prefs);
+          const body = buildGenerateBody({
+            source: prefs.source,
+            model: prefs.model,
+            messages: fitted.messages,
+            temperature: prefs.temperature,
+            maxTokens: prefs.maxTokens,
+          });
+          return {
+            body,
+            // ---------- 完成收尾：后处理 → user+assistant 成对入库 → 变量回写 ----------
+            finalize: () =>
+              finalizeChatGeneration({
+                work,
+                userText,
+                speaker,
+                swipeTarget: opts.swipeTarget ?? null,
+                assets,
+                env,
+                prefs,
+                promptTokens: fitted.promptTokens,
+                activatedIds: fitted.activatedIds,
+                startedAt,
+                pending,
+              }),
+          };
+        },
+      }),
     [work],
   );
 
@@ -176,11 +117,16 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
 
   const swipeRegenerate = useCallback(
     (target: Message, speaker: ChatMember) => {
+      if (target.swipes.length >= MAX_SWIPES) {
+        useGenerationStore.getState().fail(swipeLimitError(), false);
+        return Promise.resolve(null);
+      }
       // 历史 = 目标消息之前的部分（重 roll 不把旧候选装进上下文）
-      const list = messagesRef.current;
-      const idx = list.findIndex((m) => m.id === target.id);
-      const history = idx === -1 ? list : list.slice(0, idx);
-      return run(history, '', speaker, { targetId: target.id, initialBuffer: '', swipeTarget: target });
+      return run(historyBeforeTarget(messagesRef.current, target.id), '', speaker, {
+        targetId: target.id,
+        initialBuffer: '',
+        swipeTarget: target,
+      });
     },
     [run],
   );

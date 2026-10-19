@@ -129,6 +129,62 @@ describe('generateStream', () => {
     ).rejects.toMatchObject({ status: 502 });
   });
 
+  it('静默断流：流结束但无 [DONE] → 抛 streamIncomplete，不调 onDone（review #1）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse(['data: {"text":"半"}\n\n', 'data: {"text":"成品"}\n\n'])),
+    );
+    const chunks: string[] = [];
+    const onDone = vi.fn();
+    await expect(
+      generateStream(
+        { source: 'openai', model: 'x', messages: [], stream: true },
+        { onChunk: (t) => chunks.push(t), onDone, onError: vi.fn() },
+      ),
+    ).rejects.toMatchObject({ code: 'streamIncomplete' });
+    expect(chunks).toEqual(['半', '成品']); // 已产出内容照常分发（供 partialKept 保留）
+    expect(onDone).not.toHaveBeenCalled(); // 不得被当正常完成
+  });
+
+  it('0 chunk 静默断流同样抛 streamIncomplete（不含任何 data 帧）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([': heartbeat\n\n'])));
+    const onChunk = vi.fn();
+    await expect(
+      generateStream(
+        { source: 'openai', model: 'x', messages: [], stream: true },
+        { onChunk, onDone: vi.fn(), onError: vi.fn() },
+      ),
+    ).rejects.toMatchObject({ code: 'streamIncomplete' });
+    expect(onChunk).not.toHaveBeenCalled();
+  });
+
+  it('读流中途连接异常（未收到 [DONE]）→ streamIncomplete，不误报 unknown', async () => {
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(encoder.encode('data: {"text":"半"}\n\n'));
+                controller.error(new TypeError('network interrupted'));
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+          ),
+      ),
+    );
+    const onDone = vi.fn();
+    await expect(
+      generateStream(
+        { source: 'openai', model: 'x', messages: [], stream: true },
+        { onChunk: vi.fn(), onDone, onError: vi.fn() },
+      ),
+    ).rejects.toMatchObject({ code: 'streamIncomplete' });
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
   it('signal 中止时向上抛 AbortError', async () => {
     // 永不结束的流：abort 后 read 拒绝
     vi.stubGlobal(

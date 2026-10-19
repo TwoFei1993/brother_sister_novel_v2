@@ -6,11 +6,14 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '@shared/message';
 
 import {
+  MAX_SWIPES,
   appendSwipe,
   buildChapterMessage,
   buildContinueDirective,
+  historyBeforeTarget,
   nextChapterIndex,
   shouldRetry,
+  swipeLimitError,
   toGenerationError,
 } from '../generation-flow';
 
@@ -45,6 +48,14 @@ describe('shouldRetry（§9.1 网络类重试 ≤2 次，仅未产出内容时�
 
   it('客户端无法连接服务器（network）→ 重试', () => {
     expect(shouldRetry({ code: 'network', message: 'offline' }, 0, 0)).toBe(true);
+  });
+
+  it('静默断流（streamIncomplete）+ 0 chunk → 重试（review #1）', () => {
+    expect(shouldRetry({ code: 'streamIncomplete', message: '流中断' }, 0, 0)).toBe(true);
+  });
+
+  it('静默断流但已产出半成品 → 不重试（走「继续」路径）', () => {
+    expect(shouldRetry({ code: 'streamIncomplete', message: '流中断' }, 3, 0)).toBe(false);
   });
 });
 
@@ -153,6 +164,32 @@ describe('appendSwipe（swipe 重生成：push 候选并切换）', () => {
     expect(next.content).toBe('新版本');
     expect(next.chapter).toEqual({ index: 2, title: '二' });
     expect(next.directive).toBe('写第二章');
+  });
+});
+
+describe('swipe 上限（review #13）', () => {
+  it('MAX_SWIPES=20；swipeLimitError 携带 code 与含上限的人话消息', () => {
+    expect(MAX_SWIPES).toBe(20);
+    const ge = swipeLimitError();
+    expect(ge.code).toBe('SWIPE_LIMIT');
+    expect(ge.message).toContain('20');
+  });
+});
+
+describe('historyBeforeTarget（review #10：重 roll 上下文取 target 之前）', () => {
+  const list = [
+    baseMessage({ id: 'u1', role: 'user', name: '用户', content: '开头' }),
+    baseMessage({ id: 'a1', content: '旧候选章节', swipes: ['旧候选章节'], swipeId: 0 }),
+    baseMessage({ id: 'u2', role: 'user', name: '用户', content: '后续' }),
+  ];
+
+  it('截取 target 之前的消息（旧候选与其后消息都不进上下文）', () => {
+    const history = historyBeforeTarget(list, 'a1');
+    expect(history.map((m) => m.id)).toEqual(['u1']);
+  });
+
+  it('target 不在列表（窗口外/已刷新）→ 全量兜底', () => {
+    expect(historyBeforeTarget(list, 'missing')).toEqual(list);
   });
 });
 

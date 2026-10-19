@@ -9,11 +9,12 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { Message } from '@shared/message';
+import type { TavernRegexScript } from '@shared/tavern';
 import type { Work, ViewPreference } from '@shared/work';
 
 import { patchMessage, upsertMessage } from '../../api/works';
 import { exportTxt } from '../../lib/export';
-import { loadAssembleAssets } from '../../hooks/generation-pipeline';
+import { loadAssembleAssets, loadRegexScripts } from '../../hooks/generation-pipeline';
 import type { UseGenerateResult } from '../../hooks/useGenerate';
 import { useWorkbenchData } from '../../hooks/useWorkbenchData';
 import { useGenerationStore } from '../../stores/generation';
@@ -108,6 +109,20 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
   const wb = useWorkbenchData(work);
   /** C 侧栏指令复填：非 null 时 CommandBar 注入输入框（消费后复位） */
   const [directiveSeed, setDirectiveSeed] = useState<string | null>(null);
+  /** 显示轨正则脚本（markdownOnly，§5.1②）：work 绑定资产，A/B 视图渲染前应用 */
+  const [regexScripts, setRegexScripts] = useState<TavernRegexScript[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    loadRegexScripts(work)
+      .then((list) => {
+        if (alive) setRegexScripts(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [work]);
 
   const chapters = messages.filter(
     (m): m is Message & { chapter: NonNullable<Message['chapter']> } => m.chapter !== undefined,
@@ -229,6 +244,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             streaming={gen.streaming}
             buffer={gen.buffer}
             targetMessageId={gen.targetMessageId}
+            regexScripts={regexScripts}
             hasMore={hasMore}
             loadingOlder={loadingOlder}
             onNeedOlder={loadOlder}
@@ -242,6 +258,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             messages={messages}
             streaming={gen.streaming}
             buffer={gen.buffer}
+            regexScripts={regexScripts}
             hasMore={hasMore}
             loadingOlder={loadingOlder}
             onNeedOlder={loadOlder}

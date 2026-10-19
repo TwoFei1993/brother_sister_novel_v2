@@ -7,11 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { WorldbookAsset } from '@shared/worldbook';
 
-import { apiFetch } from '../../../api/client';
+import { apiFetch } from '../../../../api/client';
 import WorldbookEditor from '../WorldbookEditor';
 import { clickEl, fieldByLabel, mountPlain, setInputValue, unmountAll, worldbookFixture } from './helpers';
 
-vi.mock('../../../api/client', () => ({ apiFetch: vi.fn() }));
+vi.mock('../../../../api/client', () => ({ apiFetch: vi.fn() }));
 
 const apiFetchMock = apiFetch as unknown as Mock;
 

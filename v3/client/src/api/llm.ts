@@ -3,8 +3,9 @@
  *
  * 帧协议（server routes/llm.ts）：增量 `data: {"text": "..."}`、流中错误
  * `data: {"error": {code, message}}`、收束 `data: [DONE]`。
- * generateStream 负责帧分发（text→onChunk / error→onError），onDone 在流正常
- * 结束（[DONE] 或连接收尾）后恰调用一次。
+ * generateStream 负责帧分发（text→onChunk / error→onError），onDone 仅在流正常
+ * 结束（收到 [DONE]）后恰调用一次；静默断流（流结束/连接中断而未见 [DONE]）
+ * 抛 ApiError{code:'streamIncomplete'}，不触发 onDone（§9.2 半成品不得 finalize）。
  */
 import { apiFetch, apiStream } from './client';
 import type { LlmSource } from '../stores/settings';
@@ -64,7 +65,7 @@ export interface LlmStreamError {
 export interface StreamHandlers {
   /** 收到一段增量文本 */
   onChunk: (text: string) => void;
-  /** 流正常结束（[DONE] 或连接收尾），恰一次 */
+  /** 流正常结束（收到 [DONE]），恰一次；断流（streamIncomplete）不触发 */
   onDone: () => void;
   /** 收到流中错误帧 */
   onError: (error: LlmStreamError) => void;

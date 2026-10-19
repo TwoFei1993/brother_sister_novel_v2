@@ -29,12 +29,8 @@ export interface HealthDto {
   llm: SecretsMask;
 }
 
-/** GET/PUT /api/config 响应体（与 server configSchema 对齐；globalVariables 保存时原样透传） */
-export interface AppConfigDto {
-  ttsBaseUrl?: string;
-  globalVariables?: Record<string, string>;
-  [key: string]: unknown;
-}
+/** GET/PUT /api/config 响应体：唯一定义在 stores/settings.ts（ConfigDto），此处别名 re-export（review #9 去重） */
+export type { ConfigDto as AppConfigDto } from '../../stores/settings';
 
 /** LLM 错误码 → 人话（server LlmErrorCode 全集；未知码兜底展示原码） */
 export const LLM_ERROR_TEXT: Record<string, string> = {

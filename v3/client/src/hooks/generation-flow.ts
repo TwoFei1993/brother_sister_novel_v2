@@ -17,14 +17,15 @@ export interface GenerationError {
   message: string;
 }
 
-/** 网络类错误码（server LLM_NET/LLM_TIMEOUT + 客户端 network）——可自动重试 */
-const RETRYABLE_CODES = new Set(['LLM_NET', 'LLM_TIMEOUT', 'network']);
+/** 网络类错误码（server LLM_NET/LLM_TIMEOUT + 客户端 network/静默断流）——可自动重试 */
+const RETRYABLE_CODES = new Set(['LLM_NET', 'LLM_TIMEOUT', 'network', 'streamIncomplete']);
 /** 额外重试次数上限（首次为 attempt=0，共至多 3 次尝试） */
 export const MAX_RETRIES = 2;
 
 /**
  * 是否应自动重试（§9.1）：网络类错误、尚未产出任何内容、重试额度未用尽。
  * 已产出内容 → 不重试（走 §9.2 partialKept「继续」路径，避免重复前文）。
+ * streamIncomplete（静默断流）按网络类处理：0 chunk 可重试，已有半成品不重试。
  */
 export function shouldRetry(error: GenerationError, chunksReceived: number, attempt: number): boolean {
   if (chunksReceived > 0) return false;
@@ -136,4 +137,21 @@ export function appendSwipe(target: Message, content: string, extra: MessageExtr
     swipeId: target.swipes.length,
     extra: { ...target.extra, ...extra },
   };
+}
+
+/** swipe 候选上限（前端控制；server MessageSchema 保持宽松不设限，review #13） */
+export const MAX_SWIPES = 20;
+
+/** 候选满额错误（swipeRegenerate 追加前检查；上限调整只需改 MAX_SWIPES） */
+export function swipeLimitError(): GenerationError {
+  return { code: 'SWIPE_LIMIT', message: `候选已达上限（${MAX_SWIPES}），请先清理` };
+}
+
+/**
+ * swipe 重 roll 的组装上下文：目标消息之前的部分（review #10）。
+ * 被重 roll 消息的旧候选不进上下文；目标不在列表（已刷新等）→ 全量兜底。
+ */
+export function historyBeforeTarget(messages: Message[], targetId: string): Message[] {
+  const idx = messages.findIndex((m) => m.id === targetId);
+  return idx === -1 ? messages : messages.slice(0, idx);
 }

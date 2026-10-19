@@ -1,12 +1,14 @@
 /**
- * 生成流编排辅助（useGenerate 的管线层，设计 §5.1 / §3.2 / §9.2）
+ * 生成流编排辅助（novel/chat 共用管线层，设计 §5.1 / §3.2 / §9.2）
  *
  * loadAssembleAssets（绑定资产并行拉取）→ buildMacroEnv（变量读写暂存）
- * → scanAndAssemble（世界书扫描 + 总装 + tokenize 预算校验）
- * → finalizeGeneration（后处理 → 幂等入库 → 变量回写 → store 收束）
+ * → scanAndAssemble（世界书扫描 + 总装 + tokenize 预算校验；末轮注入经 AssembleTail
+ *   参数化，novel=directive / chat=userMessage，review #7 去重）
+ * → finalizeGeneration（novel：后处理 → 幂等入库 → 变量回写 → store 收束；
+ *   chat 的成对收尾在 features/chat/chat-flow.ts，复用本层 persistMessage/persistVariables）
  *
  * 允许依赖 api 层与 store 的非 hook 调用（getState）；不含 React hook。
- * 纯函数见 generation-flow.ts。
+ * 纯函数见 generation-flow.ts，共享 run 内核见 generation-runtime.ts。
  */
 import type { Message } from '@shared/message';
 import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tavern';
@@ -15,7 +17,8 @@ import type { PresetAsset } from '@shared/preset';
 import type { WorldbookAsset } from '@shared/worldbook';
 import type { Work } from '@shared/work';
 
-import { apiFetch, ApiError } from '../api/client';
+import { apiFetch } from '../api/client';
+import type { RegexAsset } from '../api/library';
 import { tokenizeMessages, type GenerateMessage } from '../api/llm';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
@@ -31,13 +34,6 @@ import {
   GenerationFlowError,
   toGenerationError,
 } from './generation-flow';
-
-/** 正则脚本资产（与 server RegexAsset 同形；shared 暂无壳类型，Task 25 上移） */
-interface RegexAsset {
-  id: string;
-  name: string;
-  raw: TavernRegexScript;
-}
 
 export interface AssembleAssets {
   preset: TavernPreset | null;
@@ -80,9 +76,19 @@ const SCAN_SETTINGS: ScanSettings = {
   maxRecursionSteps: 10,
 };
 
+/** 拉取作品绑定的正则脚本（生成轨装配 + 显示轨渲染共用；单项失败跳过不阻塞） */
+export async function loadRegexScripts(work: Work): Promise<TavernRegexScript[]> {
+  const list = await Promise.all(
+    work.regexScriptIds.map((id) =>
+      apiFetch<RegexAsset>(`/api/regex-scripts/${id}`).then((a) => a.raw).catch(() => null),
+    ),
+  );
+  return list.filter((s): s is TavernRegexScript => s !== null);
+}
+
 /** 并行拉取作品绑定的四类资产；单项失败跳过不阻塞生成 */
 export async function loadAssembleAssets(work: Work): Promise<AssembleAssets> {
-  const [preset, cards, books, scripts] = await Promise.all([
+  const [preset, cards, books, regexScripts] = await Promise.all([
     work.presetId
       ? apiFetch<PresetAsset>(`/api/presets/${work.presetId}`).then((a) => a.raw).catch(() => null)
       : Promise.resolve(null),
@@ -92,17 +98,13 @@ export async function loadAssembleAssets(work: Work): Promise<AssembleAssets> {
       ),
     ),
     Promise.all(work.worldbookIds.map((id) => apiFetch<WorldbookAsset>(`/api/worldbooks/${id}`).catch(() => null))),
-    Promise.all(
-      work.regexScriptIds.map((id) =>
-        apiFetch<RegexAsset>(`/api/regex-scripts/${id}`).then((a) => a.raw).catch(() => null),
-      ),
-    ),
+    loadRegexScripts(work),
   ]);
   return {
     preset,
     cards: cards.filter((c): c is TavernCardV2 => c !== null),
     worldbooks: books.filter((b): b is WorldbookAsset => b !== null),
-    regexScripts: scripts.filter((s): s is TavernRegexScript => s !== null),
+    regexScripts,
   };
 }
 
@@ -140,19 +142,25 @@ export interface FittedPrompt {
   activatedIds: string[];
 }
 
+/** 末轮注入通道（review #7 参数化，novel/chat 共用同一 scanAndAssemble）：
+ *  novel=剧情指令 directive（「剧情指引：…」包装）/ chat=用户消息 userMessage（§4.3） */
+export type AssembleTail =
+  | { kind: 'directive'; text: string }
+  | { kind: 'userMessage'; text: string };
+
 /** 世界书扫描 + 总装 + tokenize 预算校验（§5.4：超预算按比例多截历史再组装） */
 export async function scanAndAssemble(
   work: Work,
   messages: Message[],
-  directive: string,
+  tail: AssembleTail,
   assets: AssembleAssets,
   env: MacroEnv,
   prefs: LlmPrefs,
 ): Promise<FittedPrompt> {
   const scan = scanWorldInfo({
     books: assets.worldbooks,
-    // 扫描池 = 本轮指令（最新文本，必扫）+ 历史消息（最近的在前，与酒馆扫描深度语义一致）
-    chatTexts: [directive, ...[...messages].reverse().map((m) => m.content)].filter(Boolean),
+    // 扫描池 = 本轮注入文本（最新，必扫）+ 历史消息（最近的在前，与酒馆扫描深度语义一致）
+    chatTexts: [tail.text, ...[...messages].reverse().map((m) => m.content)].filter(Boolean),
     settings: SCAN_SETTINGS,
     macroEnv: env,
   });
@@ -170,9 +178,10 @@ export async function scanAndAssemble(
       worldbookScan: scan,
       workSettings: work.settings,
       history,
-      directive,
+      ...(tail.kind === 'directive' ? { directive: tail.text } : { userMessage: tail.text }),
       macroEnv: env,
       budgetTokens: budget,
+      regexScripts: assets.regexScripts, // promptOnly 生成轨（静态块进上下文前应用）
     });
     const assembled: GenerateMessage[] = result.messages.map((m) => ({
       role: m.role,
@@ -193,20 +202,9 @@ export async function scanAndAssemble(
   }
 }
 
-/** 幂等入库（§9.2）；409 冲突 → 拉最新 work 后重放一次（§4.5 协议） */
+/** 幂等入库（§9.2）：server 按 messageId 幂等 upsert（同 id 整行替换），重发安全、无 409 路径 */
 export async function persistMessage(workId: string, message: Message): Promise<void> {
-  const post = (): Promise<unknown> =>
-    apiFetch(`/api/works/${workId}/messages`, { method: 'POST', body: JSON.stringify(message) });
-  try {
-    await post();
-  } catch (err) {
-    if (err instanceof ApiError && err.code === 'conflict') {
-      await apiFetch(`/api/works/${workId}`); // 拉最新状态后重放一次
-      await post();
-      return;
-    }
-    throw err;
-  }
+  await apiFetch(`/api/works/${workId}/messages`, { method: 'POST', body: JSON.stringify(message) });
 }
 
 /** 变量回写（引擎外持久化，best-effort）：作品级 PATCH work（带 revision），全局级 GET+merge+PUT config */

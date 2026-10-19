@@ -14,8 +14,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
+import type { TavernRegexScript } from '@shared/tavern';
 
-import { MARKDOWN_CLASS } from '../../lib/markdown';
+import { applyDisplayRegex, MARKDOWN_CLASS } from '../../lib/markdown';
 import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/readingPrefs';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
 import { splitParagraphs } from '../../lib/voice-route';
@@ -26,6 +27,8 @@ interface ReadingViewProps {
   streaming: boolean;
   /** 流式缓冲（生成中尾部呼吸块实时内容） */
   buffer: string;
+  /** 显示轨正则脚本（markdownOnly，§5.1②；WorkViewRouter 按 work 绑定拉取传入） */
+  regexScripts?: TavernRegexScript[];
   hasMore: boolean;
   loadingOlder: boolean;
   /** 触底（scrollTop<100）请求更早章节 */
@@ -78,6 +81,7 @@ export default function ReadingView({
   messages,
   streaming,
   buffer,
+  regexScripts,
   hasMore,
   loadingOlder,
   onNeedOlder,
@@ -192,14 +196,16 @@ export default function ReadingView({
                             : 'px-2 py-1'
                         }`}
                       >
-                        <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{sanitizeMarkdownSource(p)}</ReactMarkdown>
+                        <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                          {sanitizeMarkdownSource(applyDisplayRegex(p, regexScripts))}
+                        </ReactMarkdown>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className={MARKDOWN_CLASS}>
                     <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                      {sanitizeMarkdownSource(m.content)}
+                      {sanitizeMarkdownSource(applyDisplayRegex(m.content, regexScripts))}
                     </ReactMarkdown>
                   </div>
                 )}
@@ -210,7 +216,9 @@ export default function ReadingView({
           {streaming && (
             <div className="mb-10 animate-pulse rounded-lg border border-dashed border-[hsl(var(--accent))] p-4 opacity-80">
               <div className={MARKDOWN_CLASS}>
-                <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{sanitizeMarkdownSource(buffer)}</ReactMarkdown>
+                <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                  {sanitizeMarkdownSource(applyDisplayRegex(buffer, regexScripts))}
+                </ReactMarkdown>
               </div>
               <p className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--accent))]">
                 <span className="inline-block h-2 w-2 animate-ping rounded-full bg-[hsl(var(--accent))]" />

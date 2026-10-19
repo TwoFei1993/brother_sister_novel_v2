@@ -3,7 +3,8 @@
  *
  * - apiFetch：JSON 请求包装；credentials:'include'；非 2xx 抛 ApiError{code,message}；
  *   401 自动整页跳 /login（auth 自身请求除外，避免登录失败循环）
- * - apiStream：SSE 流式 POST（fetch + ReadableStream 手写解析，data: 行 JSON.parse，[DONE] 结束）
+ * - apiStream：SSE 流式 POST（fetch + ReadableStream 手写解析，data: 行 JSON.parse，[DONE] 结束；
+ *   断流保护——未见 [DONE] 即抛 streamIncomplete，防半成品被当正常完成）
  */
 
 export type ApiErrorCode =
@@ -13,7 +14,8 @@ export type ApiErrorCode =
   | 'notFound' // 404
   | 'conflict' // 409
   | 'serverError' // 5xx
-  | 'http'; // 其余 4xx
+  | 'http' // 其余 4xx
+  | 'streamIncomplete'; // SSE 流结束但未见 [DONE]（静默断流，半成品不得当正常完成）
 
 export class ApiError extends Error {
   readonly status: number;
@@ -106,6 +108,10 @@ export async function apiFetch<T = unknown>(path: string, opts: ApiFetchOptions 
  * 协议约定：响应体为 text/event-stream，每条事件一行 `data: <json>`，
  * `data: [DONE]` 表示正常结束。解析失败的行静默跳过（与旧站行为一致）。
  *
+ * 断流保护（§9.2 事务性）：流结束（或读流中途连接异常）但从未收到 [DONE] 时，
+ * 抛 ApiError{code:'streamIncomplete'}——调用方不得把它当正常完成（半成品入库）。
+ * AbortError（用户停止）原样上抛，不在此转义。
+ *
  * @param onEvent 收到一条完整事件（JSON.parse 后的对象），由调用方提取业务字段
  */
 export async function apiStream<T = unknown>(
@@ -136,18 +142,30 @@ export async function apiStream<T = unknown>(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let sawDone = false;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      let chunk: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        chunk = await reader.read();
+      } catch (err) {
+        // 读流中途连接异常（重置/超时）：与「结束但无 [DONE]」同为断流语义；
+        // 用户停止（AbortError）原样上抛，由调用方识别
+        if (isAbort(err)) throw err;
+        throw new ApiError(res.status, '流式连接中断', 'streamIncomplete');
+      }
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // 末段可能是半行，留待下一 chunk
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith('data:')) continue;
         const data = trimmed.slice(5).trim();
-        if (data === '[DONE]') return;
+        if (data === '[DONE]') {
+          sawDone = true;
+          return;
+        }
         try {
           onEvent(JSON.parse(data) as T);
         } catch {
@@ -157,5 +175,9 @@ export async function apiStream<T = unknown>(
     }
   } finally {
     await reader.cancel().catch(() => undefined); // 提前 return（[DONE]/异常）时释放连接
+  }
+  // 流已结束但未见 [DONE]：静默断流，不得当正常完成（防半成品被 finalize 入库）
+  if (!sawDone) {
+    throw new ApiError(res.status, '流式响应中断（未收到结束标记）', 'streamIncomplete');
   }
 }

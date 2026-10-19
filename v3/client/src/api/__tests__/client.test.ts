@@ -126,4 +126,13 @@ describe('apiStream', () => {
     await apiStream('/api/llm/generate', {}, (e) => events.push(e));
     expect(events).toEqual([{ ok: true }]);
   });
+
+  it('流结束但未见 [DONE] → 抛 streamIncomplete（防静默断流当正常完成，review #1）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(['data: {"a":1}\n\n'])));
+    const events: unknown[] = [];
+    const err = await apiStream('/api/llm/generate', {}, (e) => events.push(e)).catch((e) => e);
+    expect(events).toEqual([{ a: 1 }]); // 已收到的事件照常分发
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe('streamIncomplete');
+  });
 });

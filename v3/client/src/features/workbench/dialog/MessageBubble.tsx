@@ -8,24 +8,14 @@
  *   （◀▶ 切候选 / ↻ 重roll / ✏️ 行内编辑正文 / 📋 复制）。
  * - 重生成中（busy）：该章节气泡下方实时预览 buffer。
  * 显隐：触屏端操作条常显；桌面端 hover/focus 显示。
+ * markdown 正文渲染（BubbleMarkdown）拆至同目录独立文件（review 规范修复）。
  */
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
+import type { TavernRegexScript } from '@shared/tavern';
 
-import { MARKDOWN_CLASS } from '../../../lib/markdown';
-import { sanitizeMarkdownSource } from '../../../lib/sanitize';
+import BubbleMarkdown from './BubbleMarkdown';
 import SwipeBar from './SwipeBar';
-
-/** 净化 markdown 渲染（sanitizeMarkdownSource 第一层 + rehype-sanitize 第二层，§9.3） */
-export function BubbleMarkdown({ text }: { text: string }) {
-  return (
-    <div className={MARKDOWN_CLASS}>
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{sanitizeMarkdownSource(text)}</ReactMarkdown>
-    </div>
-  );
-}
 
 /** 操作条显隐类：触屏常显，桌面 hover/focus 显示 */
 const ACTIONS_VISIBLE = 'opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100';
@@ -125,13 +115,14 @@ interface ChapterBubbleProps {
   disabled: boolean;
   busy: boolean;
   buffer: string;
+  regexScripts?: TavernRegexScript[];
   onSwipe?: (delta: 1 | -1) => void;
   onReroll?: () => void;
   onEditContent?: (content: string) => Promise<void>;
 }
 
 /** 左侧宽气泡：章标题 + markdown 正文 + SwipeBar + 行内编辑 */
-function ChapterBubble({ message, disabled, busy, buffer, onSwipe, onReroll, onEditContent }: ChapterBubbleProps) {
+function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe, onReroll, onEditContent }: ChapterBubbleProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState(false);
@@ -199,14 +190,14 @@ function ChapterBubble({ message, disabled, busy, buffer, onSwipe, onReroll, onE
             </div>
           </div>
         ) : (
-          <BubbleMarkdown text={message.content} />
+          <BubbleMarkdown text={message.content} regexScripts={regexScripts} />
         )}
         {busy && (
           <div
             data-testid="buffer-preview"
             className="mt-3 animate-pulse rounded-lg border border-dashed border-[hsl(var(--accent))] p-3 opacity-80"
           >
-            <BubbleMarkdown text={buffer} />
+            <BubbleMarkdown text={buffer} regexScripts={regexScripts} />
             <p className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--accent))]">
               <span className="inline-block h-2 w-2 animate-ping rounded-full bg-[hsl(var(--accent))]" />
               正在重写这一章…
@@ -244,6 +235,8 @@ export interface MessageBubbleProps {
   /** 本消息正在重生成：气泡下方实时预览 buffer */
   busy?: boolean;
   buffer?: string;
+  /** 显示轨正则脚本（markdownOnly，WorkViewRouter 按 work 绑定拉取传入） */
+  regexScripts?: TavernRegexScript[];
   onSwipe?: (delta: 1 | -1) => void;
   onReroll?: () => void;
   /** 正文编辑保存（父级 PATCH 持久化） */
@@ -258,6 +251,7 @@ export default function MessageBubble({
   streaming,
   busy = false,
   buffer = '',
+  regexScripts,
   onSwipe,
   onReroll,
   onEditContent,
@@ -282,6 +276,7 @@ export default function MessageBubble({
           disabled={streaming}
           busy={busy}
           buffer={buffer}
+          regexScripts={regexScripts}
           onSwipe={onSwipe}
           onReroll={onReroll}
           onEditContent={onEditContent}

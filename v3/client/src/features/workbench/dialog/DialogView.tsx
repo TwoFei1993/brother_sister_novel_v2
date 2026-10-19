@@ -11,8 +11,10 @@
  */
 import { useEffect, useRef } from 'react';
 import type { Message } from '@shared/message';
+import type { TavernRegexScript } from '@shared/tavern';
 
-import MessageBubble, { BubbleMarkdown } from './MessageBubble';
+import BubbleMarkdown from './BubbleMarkdown';
+import MessageBubble from './MessageBubble';
 
 interface DialogViewProps {
   messages: Message[];
@@ -21,6 +23,8 @@ interface DialogViewProps {
   buffer: string;
   /** 本次生成的目标消息 id：新章节=不在消息流；重生成=既有章节 id */
   targetMessageId: string | null;
+  /** 显示轨正则脚本（markdownOnly，§5.1②；透传 MessageBubble） */
+  regexScripts?: TavernRegexScript[];
   hasMore: boolean;
   loadingOlder: boolean;
   /** scrollTop<100 请求更早消息（§4.6 向上分页） */
@@ -40,6 +44,7 @@ export default function DialogView({
   streaming,
   buffer,
   targetMessageId,
+  regexScripts,
   hasMore,
   loadingOlder,
   onNeedOlder,
@@ -90,6 +95,7 @@ export default function DialogView({
             streaming={streaming}
             busy={streaming && m.id === targetMessageId}
             buffer={buffer}
+            regexScripts={regexScripts}
             onSwipe={(delta) => onSwipe(m.id, delta)}
             onReroll={() => onReroll(m)}
             onEditContent={(content) => onEditContent(m, content)}
@@ -102,7 +108,7 @@ export default function DialogView({
             data-testid="tail-stream-bubble"
             className="animate-pulse rounded-2xl rounded-bl-sm border border-dashed border-[hsl(var(--accent))] bg-[hsl(var(--surface))] px-4 py-3 opacity-80"
           >
-            <BubbleMarkdown text={buffer} />
+            <BubbleMarkdown text={buffer} regexScripts={regexScripts} />
             <p className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--accent))]">
               <span className="inline-block h-2 w-2 animate-ping rounded-full bg-[hsl(var(--accent))]" />
               正在生成…

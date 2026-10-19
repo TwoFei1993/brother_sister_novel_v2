@@ -9,14 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { TavernWorldInfoEntry } from '@shared/tavern';
 
-import { apiFetch } from '../../../api/client';
+import { apiFetch } from '../../../../api/client';
 import CardEditor from '../CardEditor';
 import EntryEditor from '../EntryEditor';
 import {
   cardFixture, clickEl, fieldByLabel, makeEntry, mountPlain, setInputValue, unmountAll,
 } from './helpers';
 
-vi.mock('../../../api/client', () => ({ apiFetch: vi.fn() }));
+vi.mock('../../../../api/client', () => ({ apiFetch: vi.fn() }));
 
 const apiFetchMock = apiFetch as unknown as Mock;
 
