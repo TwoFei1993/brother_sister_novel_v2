@@ -18,6 +18,8 @@ export function Avatar({ name }: { name: string }) {
   );
 }
 
+import { presentable } from '../../engine/prompt/postprocess';
+
 export function UserBubble({ name, content, testid = 'chat-bubble' }: { name?: string; content: string; testid?: string }) {
   return (
     <div className="flex justify-end" data-testid={testid} data-side="right" data-name={name}>
@@ -49,7 +51,8 @@ export function MessageBubble({
   if (message.role === 'user') {
     return <UserBubble name={message.name} content={message.content} />;
   }
-  const content = message.swipes[message.swipeId] ?? message.content;
+  // 显示时净化：旧数据的思维流/预设片段/名字前缀等残留（生成时的净化只覆盖新消息）
+  const content = presentable(message.swipes[message.swipeId] ?? message.content, message.name);
   return (
     <div className="flex justify-start" data-testid="chat-bubble" data-side="left" data-name={message.name}>
       <Avatar name={message.name ?? ''} />

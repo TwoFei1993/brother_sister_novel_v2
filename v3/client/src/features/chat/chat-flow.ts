@@ -15,7 +15,7 @@ import type { Message, MessageExtra } from '@shared/message';
 import { CHAT_REPLY_LENGTH_RANGE, DEFAULT_CHAT_REPLY_LENGTH, type ChatReplyLength, type Work } from '@shared/work';
 
 import type { MacroEnv } from '../../engine/types';
-import { parseStatusBlock, sanitizeOutput } from '../../engine/prompt/postprocess';
+import { parseStatusBlock, presentable } from '../../engine/prompt/postprocess';
 import { getRegexedString } from '../../engine/prompt/regex';
 import type { ChatMember } from '../../engine/prompt/activation';
 import type { GenerateMessage } from '../../api/llm';
@@ -131,8 +131,9 @@ export interface ChatFinalizeInput {
 /** chat 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → user+assistant 成对幂等入库 → 变量回写 */
 export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<ChatTurn> {
   const raw = useGenerationStore.getState().buffer;
-  // 内置卫生层：思考块/角色名前缀剥离（质量测试 T4/T5 发现的残留问题）
-  const hygiened = sanitizeOutput(raw, input.speaker.name);
+  // 完整净化链（与 novel/显示层同源）：无标签思维流+尾部元信息+内置卫生层（预设片段 <Aniplex>、
+  // 思维块、名字前缀等质检T4/对话实测泄露形态全覆盖）
+  const hygiened = presentable(raw, input.speaker.name);
   const cleaned = getRegexedString(
     hygiened,
     'ai_output',

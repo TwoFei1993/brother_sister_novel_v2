@@ -38,18 +38,26 @@ export function sanitizeOutput(raw: string, speakerName?: string): string {
   if (speakerName) {
     const escaped = speakerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     out = out.replace(new RegExp(`^\\s*${escaped}\\s*[:：]\\s*`), '');
+    // 无冒号名字前缀（「哥哥哥哥，你快看」= 前缀+对白）：只剥一层，保留对白里的称呼；
+    // 后随要求为重复名或标点引号——「Seraphina 的森林」这类正文用法不误伤
+    const bareNameRe = new RegExp('^' + escaped + '(?=' + escaped + "|[「」\"'，。：:—…])");
+    out = out.replace(bareNameRe, '');
   }
   out = out.replace(/^\s*(?:小说家|旁白|系统)\s*[:：]\s*/, '');
   // 首行若是「正文」标记头（## 正文 / **正文** / 正文： 等）则剥离——它是 COT 边界标记而非章节标题
   out = out.replace(/^[ \t]*(?:#{1,6}|\*{0,2}|-)[ \t]*正文[ \t]*[:：]?[ \t]*\*{0,2}[ \t]*\n/, '');
-  // 社区预设的标签化元信息（质检T4 实测）：HTML 注释提示 / <reply> 选项块 / <S-summary> 摘要块
-  // 各含未闭合分支（生成流在标签中间被截断的场景）
+  // 社区预设的标签化元信息（质检T4/对话实测）：HTML 注释 / <reply> / <S-summary> / <Aniplex> 等
+  // 自定义标签泛化剥离（含未闭合分支）——安全 HTML 排版标签（em/strong 等）豁免不误伤
+  const SAFE_HTML = new Set([
+    'p', 'em', 'strong', 'b', 'i', 'u', 's', 'br', 'span', 'div', 'hr',
+    'blockquote', 'code', 'pre', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'table', 'tr', 'td', 'th', 'sub', 'sup', 'small', 'mark',
+  ]);
+  const isCustomTag = (tag: string): boolean => !SAFE_HTML.has(tag.toLowerCase());
   out = out.replace(/<!--[\s\S]*?-->/g, '');
   out = out.replace(/<!--[\s\S]*$/g, '');
-  out = out.replace(/<reply>[\s\S]*?<\/reply>/gi, '');
-  out = out.replace(/<reply>[\s\S]*$/i, '');
-  out = out.replace(/<S-\w+>[\s\S]*?<\/S-\w+>/g, '');
-  out = out.replace(/<S-\w+>[\s\S]*$/i, '');
+  out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
+  out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*$/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
   // 嵌套标题清理：首行若为章节标题（parseChapterTitle 的输入）则豁免，只清理其后的标题行
   const firstBreak = out.indexOf('\n');
   const head = firstBreak === -1 ? out : out.slice(0, firstBreak);
@@ -173,6 +181,15 @@ export function stripLooseThinking(content: string): string {
       i += 1;
       continue;
     }
+    // 超短无句读残段（如名字前缀剥离后的残留）：仅当其后紧跟规划段时才跳过（防误伤短开篇）
+    if (p.length <= 6 && !/[。！？」』]$/.test(p)) {
+      const next = paras[i + 1]?.trim() ?? '';
+      if (next && PLANNING_RE.test(next)) {
+        i += 1;
+        continue;
+      }
+      break;
+    }
     const isPlanning = PLANNING_RE.test(p) && !/[」』]"?$/.test(p);
     if (isPlanning) {
       i += 1;
@@ -182,13 +199,14 @@ export function stripLooseThinking(content: string): string {
   }
   if (i >= paras.length) return content; // 整篇都是思考流，保留原样
   const body = paras.slice(i).join('\n\n');
-  // 剥后正文过短视为误判（保守：不动原文）
-  return i > 0 && body.trim().length >= 50 ? body : content;
+  // 剥后正文过短视为误判（保守：不动原文；chat 短对话约 20 字起，取 15）
+  return i > 0 && body.trim().length >= 15 ? body : content;
 }
 
-/** 展示净化组合：思考流剥离 + 尾部元信息剥离 + 内置卫生层（供生成时与显示时共用） */
+/** 展示净化组合：内置卫生层先行（名字/标签/注释清理，让段落启发看干净的文本）
+ *  → 思考流剥离 → 尾部元信息剥离（供生成时与显示时共用） */
 export function presentable(content: string, speakerName?: string): string {
-  const cleaned = sanitizeOutput(stripTailMeta(stripLooseThinking(content)), speakerName);
+  const cleaned = stripTailMeta(stripLooseThinking(sanitizeOutput(content, speakerName)));
   // 剥离后一无所有 = 该章只剩元信息（选项/摘要/思考）——给出重roll引导而非空白
   if (!cleaned.trim() && content.length > 200) {
     return '（本章只剩元信息，没有正文——建议 🎲 重新生成本章或切换候选。）';

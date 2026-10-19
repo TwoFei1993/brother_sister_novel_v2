@@ -190,3 +190,21 @@ describe('标签化元信息剥离（质检T4 实地检查形态）', () => {
     expect(presentable(unclosed)).toBe('正文第一段。');
   });
 });
+
+describe('chat 模式净化收尾（对话实测反馈）', () => {
+  it('无冒号角色名前缀只剥一层（保留对白里的称呼）', async () => {
+    const { sanitizeOutput } = await import('../prompt/postprocess');
+    expect(sanitizeOutput('哥哥哥哥，你快看这个！', '哥哥')).toBe('哥哥，你快看这个！');
+    expect(sanitizeOutput('妹妹，你没事吧。', '哥哥')).toBe('妹妹，你没事吧。');
+    expect(sanitizeOutput('Seraphina 的森林很安静。', 'Seraphina')).toBe('Seraphina 的森林很安静。');
+  });
+
+  it('完整净化链：预设片段 <Aniplex> 与思维流在 presentable 中清除', async () => {
+    const { presentable } = await import('../prompt/postprocess');
+    const raw = '妹妹妹妹<Aniplex>只写角色行为语言</Aniplex>\n\n让我理清思路。用户扮演的是哥哥。\n\n「哥哥，你快看这个！」妹妹举起手中的模型。';
+    const r = presentable(raw, '妹妹');
+    expect(r).not.toContain('<Aniplex>');
+    expect(r).not.toContain('让我理清思路');
+    expect(r).toContain('你快看这个');
+  });
+});
