@@ -10,6 +10,8 @@ export const WorldbookAssetSchema = z.strictObject({
   id: z.string().min(1),
   /** 列表展示名（即酒馆世界书名） */
   name: z.string(),
+  /** 入库时间（毫秒时间戳；服务端生成，列表排序用） */
+  createdAt: z.number().optional(),
   /** 酒馆原生世界书文件 { entries: { "<uid>": entry } } */
   raw: TavernWorldInfoFileSchema,
 });

@@ -27,6 +27,7 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
   const [items, setItems] = useState<LibraryAssetRef[] | null>(null);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
@@ -93,6 +94,18 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
     }
   };
 
+  /** 排序后的列表（最近添加 / 最早添加 / 名称）；无时间戳的旧数据排在其余之后 */
+  const sorted = (() => {
+    const list = [...(items ?? [])];
+    if (sortBy === 'name') {
+      list.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    } else {
+      const dir = sortBy === 'newest' ? -1 : 1;
+      list.sort((a, b) => ((a.createdAt ?? 0) - (b.createdAt ?? 0)) * dir);
+    }
+    return list;
+  })();
+
   return (
     <section aria-label={`${label}资产面板`} className="flex flex-col gap-3">
       {type === 'regex-scripts' && (
@@ -126,6 +139,20 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
           支持 {accept} 文件{type === 'characters' ? '（PNG 卡自动提取内嵌 JSON）' : ''}
         </span>
         <input ref={fileRef} type="file" accept={accept} hidden onChange={onFileChosen} />
+        {(items?.length ?? 0) > 1 && (
+          <label className="ml-auto flex items-center gap-1 text-xs text-[hsl(var(--fg-muted))]">
+            排序
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="h-9 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs text-[hsl(var(--fg))] outline-none focus:border-[hsl(var(--accent))]"
+            >
+              <option value="newest">最近添加</option>
+              <option value="oldest">最早添加</option>
+              <option value="name">按名称</option>
+            </select>
+          </label>
+        )}
       </div>
 
       {items === null && <p className="py-6 text-center text-sm text-[hsl(var(--fg-muted))]">加载中…</p>}
@@ -136,7 +163,7 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
       )}
 
       <ul className="flex flex-col gap-2">
-        {(items ?? []).map((it) => (
+        {sorted.map((it) => (
           <li
             key={it.id}
             className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2"
@@ -146,6 +173,11 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
                 <p className="truncate text-sm font-medium text-[hsl(var(--fg))]">{it.name}</p>
                 <p className="truncate text-xs text-[hsl(var(--fg-muted))]">
                   {summaries[it.id] ?? ''}
+                  {typeof it.createdAt === 'number' && it.createdAt > 0 && (
+                    <span className="ml-2 whitespace-nowrap">
+                      · 添加于 {new Date(it.createdAt).toLocaleDateString('zh-CN')}
+                    </span>
+                  )}
                 </p>
               </div>
               <button

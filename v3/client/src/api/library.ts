@@ -24,6 +24,8 @@ export type AssetType = 'characters' | 'worldbooks' | 'presets' | 'regex-scripts
 export interface LibraryAssetRef {
   id: string;
   name: string;
+  /** 入库时间（毫秒时间戳；旧数据回退文件修改时间） */
+  createdAt?: number;
 }
 
 /** 四类资产元信息（Tab 标签 + 导入 accept 过滤） */

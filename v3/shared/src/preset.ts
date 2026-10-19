@@ -11,6 +11,8 @@ export const PresetAssetSchema = z.strictObject({
   id: z.string().min(1),
   /** 列表展示名 */
   name: z.string(),
+  /** 入库时间（毫秒时间戳；服务端生成，列表排序用） */
+  createdAt: z.number().optional(),
   /** 酒馆原生预设文件 */
   raw: TavernPresetSchema,
 });

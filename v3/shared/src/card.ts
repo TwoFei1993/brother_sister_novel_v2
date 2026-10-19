@@ -11,6 +11,8 @@ export const CharacterAssetSchema = z.strictObject({
   id: z.string().min(1),
   /** 列表展示名（冗余自 card.data.name，导入时同步） */
   name: z.string(),
+  /** 入库时间（毫秒时间戳；服务端生成，列表排序用） */
+  createdAt: z.number().optional(),
   /** 头像引用（data URL 或相对路径，可空） */
   avatar: z.string().optional(),
   /** 酒馆原生 V2 卡（含 spec/spec_version/data 全量字段，原样保存） */

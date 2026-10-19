@@ -145,15 +145,17 @@ describe('POST/GET /api/characters', () => {
     expect(res.body.card).toEqual(characterBody.card);
   });
 
-  it('GET / 列表：浅结构 {id,name}，包含新建项', async () => {
+  it('GET / 列表：浅结构 {id,name,createdAt}，包含新建项', async () => {
     const app = makeApp();
     const created = await request(app).post('/api/characters').set(authed()).send(characterBody);
     const res = await request(app).get('/api/characters').set(authed());
     expect(res.status).toBe(200);
-    const hit = (res.body as Array<{ id: string; name: string }>).find(
+    const hit = (res.body as Array<{ id: string; name: string; createdAt?: number }>).find(
       (x) => x.id === created.body.id,
     );
-    expect(hit).toEqual({ id: created.body.id, name: '妹妹' });
+    // POST 服务端盖章 createdAt；列表回传（新资产必有）
+    expect(hit).toMatchObject({ id: created.body.id, name: '妹妹' });
+    expect(typeof hit?.createdAt).toBe('number');
   });
 
   it('GET 不存在的 id → 404', async () => {

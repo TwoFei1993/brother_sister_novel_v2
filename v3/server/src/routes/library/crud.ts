@@ -6,6 +6,7 @@
  * id 用于拼文件路径，必须过白名单正则，杜绝路径穿越。
  */
 import { randomUUID } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { join } from 'node:path';
@@ -32,7 +33,7 @@ const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 // ---------- 泛型工厂 ----------
 
-export interface CrudOptions<Asset extends { id: string; name: string }> {
+export interface CrudOptions<Asset extends { id: string; name: string; createdAt?: number }> {
   /** 资产子目录解析器（每请求求值） */
   dirOf: () => string;
   /** 完整资产 schema（含 id 字段；POST 时自动 omit，PATCH 时自动 partial） */
@@ -45,7 +46,7 @@ export interface CrudOptions<Asset extends { id: string; name: string }> {
  * 生成某类资产的标准 CRUD 子路由：
  * GET /（浅列表 [{id,name}]）、GET /:id、POST /、PATCH /:id、DELETE /:id。
  */
-export function crudRouter<Asset extends { id: string; name: string }>(
+export function crudRouter<Asset extends { id: string; name: string; createdAt?: number }>(
   opts: CrudOptions<Asset>,
 ): Router {
   const { dirOf, label } = opts;
@@ -65,17 +66,29 @@ export function crudRouter<Asset extends { id: string; name: string }>(
 
   const router = Router();
 
-  // GET /：浅列表 [{id,name}]（列表场景不回传大字段，降低传输量）
+  // GET /：浅列表 [{id,name,createdAt}]（列表场景不回传大字段，降低传输量）。
+  // createdAt 缺失的旧资产回退文件修改时间（不回写，写入路径会逐步补齐）。
   router.get('/', async (_req, res, next) => {
     try {
       const dir = dirOf();
       const files = (await listDir(dir)).filter((name) => name.endsWith('.json'));
-      const assets = await Promise.all(files.map((name) => readJson<Asset>(join(dir, name))));
-      // flatMap 顺带跳过读取竞态中消失的文件（null），避免泛型上的类型谓词
-      const items = assets.flatMap((asset) =>
-        asset ? [{ id: asset.id, name: asset.name }] : [],
+      const assets = await Promise.all(
+        files.map(async (name) => {
+          const file = join(dir, name);
+          const asset = await readJson<Asset>(file);
+          if (!asset) return null;
+          let createdAt = asset.createdAt;
+          if (typeof createdAt !== 'number') {
+            try {
+              createdAt = (await stat(file)).mtimeMs;
+            } catch {
+              createdAt = 0;
+            }
+          }
+          return { id: asset.id, name: asset.name, createdAt };
+        }),
       );
-      res.json(items);
+      res.json(assets.filter((it) => it !== null));
     } catch (err) {
       next(err);
     }
@@ -96,10 +109,11 @@ export function crudRouter<Asset extends { id: string; name: string }>(
     }
   });
 
-  // POST /：校验（无 id）→ 服务端生成 uuid → 原子写 → 201 回全量
+  // POST /：校验（无 id）→ 服务端生成 uuid + 入库时间 → 原子写 → 201 回全量
   router.post('/', zodBody(createSchema), async (req, res, next) => {
     try {
-      const asset = { ...(req.body as object), id: randomUUID() } as Asset;
+      // body 已过 zod 校验；id/createdAt 为服务端元数据（schema 层 createdAt 可选，故断言安全）
+      const asset = { ...(req.body as object), id: randomUUID(), createdAt: Date.now() } as unknown as Asset;
       await writeJsonAtomic(fileOf(asset.id), asset);
       res.status(201).json(asset);
     } catch (err) {
