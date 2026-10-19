@@ -20,11 +20,11 @@ import { useWorkStore } from '../stores/work';
 import type { Message } from '@shared/message';
 import type { ViewPreference } from '@shared/work';
 
-/** 切换器 tab 定义（设计 §7.1：A 对话流 / B 沉浸阅读 / C 工作台；chat 模式不渲染） */
+/** 切换器 tab 定义（设计 §7.1：对话流 / 沉浸阅读 / 工作台；chat 模式不渲染） */
 const VIEW_TABS: ReadonlyArray<{ id: ViewPreference; label: string; title: string }> = [
-  { id: 'a', label: '💬', title: 'A 对话流' },
-  { id: 'b', label: '📖', title: 'B 沉浸阅读' },
-  { id: 'c', label: '🛠️', title: 'C 工作台' },
+  { id: 'a', label: '💬', title: '对话流' },
+  { id: 'b', label: '📖', title: '沉浸阅读' },
+  { id: 'c', label: '🛠️', title: '工作台' },
 ];
 
 /** 视图切换器（A/B/C 三 tab，顶栏；当前值持久化在 work.viewPreference） */

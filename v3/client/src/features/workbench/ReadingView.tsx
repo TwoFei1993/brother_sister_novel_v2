@@ -8,7 +8,7 @@
  * - 流式生成中：尾部呼吸占位块实时渲染 generationStore.buffer，接近底部时自动跟随
  * - TTS 朗读高亮：播放中当前章按 voice-route 同源切分逐段渲染，当前段高亮并滚随
  *   （章序列与 WorkTtsBar 的连播队列同源同序，tts.chapterIndex 直接对齐本组件下标）
- * - 工具条：阅读模式 4 档 / 字号 4 档 / 行高 3 档（localStorage 持久化，见 readingPrefs）+ 导出 TXT
+ * - 工具条：阅读模式 4 档 / 字号 4 档 / 行高 3 档（localStorage 持久化，见 readingPrefs）+ 导出文本
  */
 import { useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -33,7 +33,7 @@ interface ReadingViewProps {
   loadingOlder: boolean;
   /** 触底（scrollTop<100）请求更早章节 */
   onNeedOlder: () => void;
-  /** 导出 TXT（宿主注入 exportTxt 调用；缺省不显示按钮） */
+  /** 导出文本（宿主注入 exportTxt 调用；缺省不显示按钮） */
   onExportTxt?: () => void;
 }
 
@@ -141,8 +141,8 @@ export default function ReadingView({
       {onExportTxt && (
         <button
           type="button"
-          title="导出 TXT"
-          aria-label="导出 TXT"
+          title="导出文本"
+          aria-label="导出文本"
           data-testid="export-txt"
           onClick={onExportTxt}
           className="ml-auto flex h-9 min-w-9 shrink-0 items-center justify-center rounded px-2 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:text-[hsl(var(--fg))]"

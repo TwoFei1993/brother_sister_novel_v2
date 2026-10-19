@@ -34,7 +34,8 @@ export interface ConfigDto {
   [key: string]: unknown;
 }
 
-const DEFAULT_PREFS: LlmPrefs = { source: 'openai', model: '' };
+/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json） */
+const DEFAULT_PREFS: LlmPrefs = { source: 'claude', model: 'MiniMax-M3' };
 
 interface SettingsState {
   config: ConfigDto | null;
@@ -53,6 +54,9 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'v3-llm-prefs',
+      version: 1,
+      // 版本 0→1：丢弃旧持久化偏好，改用新默认通道（MiniMax/Claude 兼容）
+      migrate: () => ({ llmPrefs: { ...DEFAULT_PREFS } }),
       storage: createJSONStorage(() => localStorage),
       // 只持久化偏好；config 属会话态，每次登录重新拉取
       partialize: (s) => ({ llmPrefs: s.llmPrefs }),

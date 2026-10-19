@@ -40,9 +40,16 @@ const EMPTY_INPUTS: Record<LlmSource, { apiKey: string; baseUrl: string }> = {
   claude: { apiKey: '', baseUrl: '' },
 };
 
-/** openai 之外的通道统一忽略 baseUrl */
+/** 各通道接口地址占位提示（留空即用此官方默认；兼容端点可覆盖） */
+const BASEURL_PLACEHOLDER: Record<LlmSource, string> = {
+  openai: 'https://api.openai.com/v1',
+  gemini: 'https://generativelanguage.googleapis.com',
+  claude: 'https://api.anthropic.com',
+};
+
+/** 三通道均支持自定义接口地址（中转站/兼容端点，如 MiniMax 的 Claude 兼容端点） */
 function channelBody(source: LlmSource, apiKey: string, baseUrl: string): CommittedSecret {
-  if (source === 'openai' && baseUrl.trim()) return { apiKey, baseUrl: baseUrl.trim() };
+  if (baseUrl.trim()) return { apiKey, baseUrl: baseUrl.trim() };
   return { apiKey };
 }
 
@@ -69,20 +76,20 @@ export default function SecretsPanel() {
     const cur = inputs[source];
     const apiKey = cur.apiKey.trim();
     if (!apiKey || saving[source]) return;
-    // baseUrl 前端预校验（服务端 zod .url() 校验失败会 400）
-    if (source === 'openai' && cur.baseUrl.trim()) {
+    // 接口地址前端预校验（服务端 zod .url() 校验失败会 400）
+    if (cur.baseUrl.trim()) {
       try {
         new URL(cur.baseUrl.trim());
       } catch {
-        setSaveError((p) => ({ ...p, [source]: 'Base URL 格式不正确，须为完整 URL（含 https://）' }));
+        setSaveError((p) => ({ ...p, [source]: '接口地址格式不正确，须为完整网址（含 https://）' }));
         return;
       }
     }
     // 组装请求体：目标通道用输入框值，其余通道带上本会话已提交的明文（合并防覆盖）
     const body: SecretsPutBody = {
       ...(source === 'openai' ? { openai: channelBody(source, apiKey, cur.baseUrl) } : {}),
-      ...(source === 'gemini' ? { gemini: { apiKey } } : {}),
-      ...(source === 'claude' ? { claude: { apiKey } } : {}),
+      ...(source === 'gemini' ? { gemini: channelBody(source, apiKey, cur.baseUrl) } : {}),
+      ...(source === 'claude' ? { claude: channelBody(source, apiKey, cur.baseUrl) } : {}),
       ...(committed.openai && source !== 'openai' ? { openai: committed.openai } : {}),
       ...(committed.gemini && source !== 'gemini' ? { gemini: committed.gemini } : {}),
       ...(committed.claude && source !== 'claude' ? { claude: committed.claude } : {}),
@@ -187,24 +194,20 @@ export default function SecretsPanel() {
               className="mb-3 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2.5 text-base outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
             />
 
-            {ch.source === 'openai' && (
-              <>
-                <label className="mb-1 block text-sm" htmlFor="baseurl-openai">
-                  Base URL（选填，默认官方地址）
-                </label>
-                <input
-                  id="baseurl-openai"
-                  type="url"
-                  value={inputs.openai.baseUrl}
-                  onChange={(e) =>
-                    setInputs((p) => ({ ...p, openai: { ...p.openai, baseUrl: e.target.value } }))
-                  }
-                  placeholder="https://api.openai.com/v1"
-                  autoComplete="off"
-                  className="mb-3 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2.5 text-base outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
-                />
-              </>
-            )}
+            <label className="mb-1 block text-sm" htmlFor={`baseurl-${ch.source}`}>
+              接口地址（选填，留空用官方默认）
+            </label>
+            <input
+              id={`baseurl-${ch.source}`}
+              type="url"
+              value={inputs[ch.source].baseUrl}
+              onChange={(e) =>
+                setInputs((p) => ({ ...p, [ch.source]: { ...p[ch.source], baseUrl: e.target.value } }))
+              }
+              placeholder={BASEURL_PLACEHOLDER[ch.source]}
+              autoComplete="off"
+              className="mb-3 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2.5 text-base outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+            />
 
             <div className="flex flex-wrap gap-3">
               <button
@@ -236,10 +239,7 @@ export default function SecretsPanel() {
               </p>
             )}
             {outcome?.kind === 'fail' && (
-              <p role="alert" className="mt-3 text-sm text-[hsl(var(--danger))]">
-                {outcome.text}
-                {outcome.code && <span className="ml-1 text-xs opacity-70">（{outcome.code}）</span>}
-              </p>
+              <p role="alert" className="mt-3 text-sm text-[hsl(var(--danger))]">{outcome.text}</p>
             )}
           </div>
         );

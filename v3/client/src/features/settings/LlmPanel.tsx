@@ -78,7 +78,7 @@ export default function LlmPanel() {
           type="text"
           value={llmPrefs.model}
           onChange={(e) => setLlmPrefs({ model: e.target.value })}
-          placeholder="如 gpt-4o-mini / gemini-2.0-flash / claude-sonnet-4-20250514"
+          placeholder="如 MiniMax-M3、claude-sonnet-4 等"
           autoComplete="off"
           className={`${inputCls} mb-1`}
         />

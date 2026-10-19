@@ -13,7 +13,7 @@ import { readJson, writeJsonAtomic } from '../../storage/store';
 
 import { dataDir } from './paths';
 
-/** 三通道密钥 schema：apiKey 必填非空；openai 可选自定义 baseUrl（兼容中转站） */
+/** 三通道密钥 schema：apiKey 必填非空；三通道均可选自定义 baseUrl（兼容中转站，如 MiniMax 的 Claude 兼容端点） */
 export const secretsSchema = z.object({
   openai: z
     .object({
@@ -21,8 +21,18 @@ export const secretsSchema = z.object({
       baseUrl: z.string().url('必须是合法 URL').optional(),
     })
     .optional(),
-  gemini: z.object({ apiKey: z.string().min(1, 'apiKey 不能为空') }).optional(),
-  claude: z.object({ apiKey: z.string().min(1, 'apiKey 不能为空') }).optional(),
+  gemini: z
+    .object({
+      apiKey: z.string().min(1, 'apiKey 不能为空'),
+      baseUrl: z.string().url('必须是合法 URL').optional(),
+    })
+    .optional(),
+  claude: z
+    .object({
+      apiKey: z.string().min(1, 'apiKey 不能为空'),
+      baseUrl: z.string().url('必须是合法 URL').optional(),
+    })
+    .optional(),
 });
 
 export type Secrets = z.infer<typeof secretsSchema>;

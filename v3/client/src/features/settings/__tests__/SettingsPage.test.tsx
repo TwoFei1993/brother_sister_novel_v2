@@ -82,9 +82,9 @@ describe('SettingsPage', () => {
     expect(text).toContain('Anthropic Claude');
     expect(text).toContain('已配置'); // 仅 openai 徽标
     expect(maskMock).toHaveBeenCalledOnce();
-    // 密码框数量 = 三通道 API Key + openai Base URL
+    // 密码框与地址框数量 = 三通道各一（三通道均支持自定义接口地址）
     expect(container.querySelectorAll('input[type="password"]').length).toBe(3);
-    expect(container.querySelectorAll('input[type="url"]').length).toBe(1);
+    expect(container.querySelectorAll('input[type="url"]').length).toBe(3);
   });
 
   it('切到 TTS 分区：展示服务地址', async () => {

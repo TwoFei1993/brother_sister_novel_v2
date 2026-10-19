@@ -7,9 +7,16 @@
       "type": "preset",
       "name": "官方 Default 预设",
       "description": "SillyTavern 官方默认对话补全预设，提示词结构完整，适合作为自定义预设的起点。",
-      "tags": ["官方", "通用", "入门"],
+      "tags": [
+        "官方",
+        "通用",
+        "入门"
+      ],
       "source": "SillyTavern 内置（本地复制）",
-      "ref": { "kind": "builtin", "path": "builtin/presets/Default.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/presets/Default.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -17,9 +24,16 @@
       "type": "worldbook",
       "name": "Eldoria 世界书",
       "description": "官方示例奇幻世界观（大陆、势力、种族、历史），世界书条目写法的教学范本。",
-      "tags": ["官方", "奇幻", "世界观"],
+      "tags": [
+        "官方",
+        "奇幻",
+        "世界观"
+      ],
       "source": "SillyTavern 内置（本地复制）",
-      "ref": { "kind": "builtin", "path": "builtin/worldbooks/Eldoria.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/worldbooks/Eldoria.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -27,9 +41,16 @@
       "type": "character",
       "name": "Seraphina 角色卡",
       "description": "官方示例精灵角色卡（PNG V2），卡字段与问候语的完整示范。",
-      "tags": ["官方", "示例卡", "PNG"],
+      "tags": [
+        "官方",
+        "示例卡",
+        "PNG"
+      ],
       "source": "SillyTavern 内置（本地复制）",
-      "ref": { "kind": "builtin", "path": "builtin/characters/default_Seraphina.png" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/characters/default_Seraphina.png"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -37,9 +58,16 @@
       "type": "preset",
       "name": "系统提示词：Roleplay - Detailed",
       "description": "详细化角色扮演系统提示词：全感官描写、放慢节奏、保持沉浸。",
-      "tags": ["官方", "系统提示词", "扮演"],
+      "tags": [
+        "官方",
+        "系统提示词",
+        "扮演"
+      ],
       "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
-      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Roleplay - Detailed.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/sysprompts/Roleplay - Detailed.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -47,9 +75,16 @@
       "type": "preset",
       "name": "系统提示词：Roleplay - Immersive",
       "description": "沉浸式角色扮演系统提示词：减少出戏描述，专注场景与互动。",
-      "tags": ["官方", "系统提示词", "扮演"],
+      "tags": [
+        "官方",
+        "系统提示词",
+        "扮演"
+      ],
       "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
-      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Roleplay - Immersive.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/sysprompts/Roleplay - Immersive.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -57,9 +92,16 @@
       "type": "preset",
       "name": "系统提示词：Roleplay - Simple",
       "description": "轻量角色扮演系统提示词：只保留最基本的扮演约束，适合搭配强模型。",
-      "tags": ["官方", "系统提示词", "扮演"],
+      "tags": [
+        "官方",
+        "系统提示词",
+        "扮演"
+      ],
       "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
-      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Roleplay - Simple.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/sysprompts/Roleplay - Simple.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -67,9 +109,16 @@
       "type": "preset",
       "name": "系统提示词：Writer - Creative",
       "description": "创意写作系统提示词：鼓励生动比喻与多样化叙事，适合小说创作。",
-      "tags": ["官方", "系统提示词", "写作"],
+      "tags": [
+        "官方",
+        "系统提示词",
+        "写作"
+      ],
       "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
-      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Writer - Creative.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/sysprompts/Writer - Creative.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -77,9 +126,16 @@
       "type": "preset",
       "name": "系统提示词：Writer - Realistic",
       "description": "写实写作系统提示词：克制修辞、注重真实感与人物动机的一致性。",
-      "tags": ["官方", "系统提示词", "写作"],
+      "tags": [
+        "官方",
+        "系统提示词",
+        "写作"
+      ],
       "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
-      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Writer - Realistic.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/sysprompts/Writer - Realistic.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -87,9 +143,16 @@
       "type": "preset",
       "name": "系统提示词：Text Adventure",
       "description": "文字冒险系统提示词：以第二人称推进剧情并提供选项，互动小说好搭档。",
-      "tags": ["官方", "系统提示词", "互动"],
+      "tags": [
+        "官方",
+        "系统提示词",
+        "互动"
+      ],
       "source": "SillyTavern sysprompt（本地复制，以单条系统提示的预设形式导入）",
-      "ref": { "kind": "builtin", "path": "builtin/sysprompts/Text Adventure.json" },
+      "ref": {
+        "kind": "builtin",
+        "path": "builtin/sysprompts/Text Adventure.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -97,9 +160,16 @@
       "type": "preset",
       "name": "Sudachi-Next 主预设",
       "description": "社区知名的中文向对话预设，覆盖主流模型的开箱即用配置。",
-      "tags": ["社区", "中文", "通用"],
+      "tags": [
+        "社区",
+        "中文",
+        "通用"
+      ],
       "source": "GitHub LimeBlogs/Sudachi-Next",
-      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/LimeBlogs/Sudachi-Next/main/Sudachi-Next-Preset.json" },
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/LimeBlogs/Sudachi-Next/main/Sudachi-Next-Preset.json"
+      },
       "license": "MIT"
     },
     {
@@ -107,9 +177,16 @@
       "type": "worldbook",
       "name": "Sudachi-Next DLC 世界书",
       "description": "Sudachi-Next 配套状态栏世界书（好感度、服饰、环境等变量的初始化与维护）。",
-      "tags": ["社区", "中文", "状态栏"],
+      "tags": [
+        "社区",
+        "中文",
+        "状态栏"
+      ],
       "source": "GitHub LimeBlogs/Sudachi-Next",
-      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/LimeBlogs/Sudachi-Next/main/Sudachi-Next-DLC.json" },
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/LimeBlogs/Sudachi-Next/main/Sudachi-Next-DLC.json"
+      },
       "license": "MIT"
     },
     {
@@ -117,9 +194,16 @@
       "type": "preset",
       "name": "Marinara's Spaghetti Recipe（Universal）",
       "description": "MarinaraSpaghetti 的通用预设（Universal），兼容多种对话补全渠道。",
-      "tags": ["社区", "通用", "英文"],
+      "tags": [
+        "社区",
+        "通用",
+        "英文"
+      ],
       "source": "Hugging Face MarinaraSpaghetti/SillyTavern-Settings",
-      "ref": { "kind": "remote", "url": "https://huggingface.co/MarinaraSpaghetti/SillyTavern-Settings/resolve/main/Chat%20Completion/Marinara's%20Spaghetti%20Recipe%20(Universal%20Preset).json" },
+      "ref": {
+        "kind": "remote",
+        "url": "https://huggingface.co/MarinaraSpaghetti/SillyTavern-Settings/resolve/main/Chat%20Completion/Marinara's%20Spaghetti%20Recipe%20(Universal%20Preset).json"
+      },
       "license": "未标注"
     },
     {
@@ -127,9 +211,15 @@
       "type": "preset",
       "name": "官方 Default 预设（在线版）",
       "description": "SillyTavern 仓库直链的 Default 预设，适合想始终取最新版的用户。",
-      "tags": ["官方", "在线"],
+      "tags": [
+        "官方",
+        "在线"
+      ],
       "source": "GitHub SillyTavern/SillyTavern（release 分支）",
-      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/presets/openai/Default.json" },
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/presets/openai/Default.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -137,9 +227,16 @@
       "type": "worldbook",
       "name": "Eldoria 世界书（在线版）",
       "description": "SillyTavern 仓库直链的 Eldoria 世界书，与内置版同源。",
-      "tags": ["官方", "在线", "奇幻"],
+      "tags": [
+        "官方",
+        "在线",
+        "奇幻"
+      ],
       "source": "GitHub SillyTavern/SillyTavern（release 分支）",
-      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/Eldoria.json" },
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/Eldoria.json"
+      },
       "license": "AGPL-3.0"
     },
     {
@@ -147,10 +244,537 @@
       "type": "character",
       "name": "Seraphina 角色卡（在线版）",
       "description": "SillyTavern 仓库直链的 Seraphina PNG 角色卡，与内置版同源。",
-      "tags": ["官方", "在线", "PNG"],
+      "tags": [
+        "官方",
+        "在线",
+        "PNG"
+      ],
       "source": "GitHub SillyTavern/SillyTavern（release 分支）",
-      "ref": { "kind": "remote", "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/default_Seraphina.png" },
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/release/default/content/default_Seraphina.png"
+      },
       "license": "AGPL-3.0"
+    },
+    {
+      "id": "lg-card-1",
+      "type": "character",
+      "name": "星间旅行",
+      "description": "跨时间通信主题的星间浪漫之旅，世界观完整。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "日常",
+        "浪漫",
+        "科幻",
+        "角色卡",
+        "正常向"
+      ],
+      "source": "社区合集（正常向 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E6%AD%A3%E5%B8%B8%E5%90%91/%E6%98%9F%E9%97%B4%E6%97%85%E8%A1%8C.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-2",
+      "type": "character",
+      "name": "暮光",
+      "description": "暮光氛围剧情卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "剧情",
+        "氛围",
+        "角色卡",
+        "正常向"
+      ],
+      "source": "社区合集（正常向 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E6%AD%A3%E5%B8%B8%E5%90%91/%E6%9A%AE%E5%85%89.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-3",
+      "type": "character",
+      "name": "SCP：众生相",
+      "description": "SCP 基金会世界观群像卡，扮演收容设施中的众生。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "SCP",
+        "群像",
+        "收容所",
+        "角色卡",
+        "正常向"
+      ],
+      "source": "社区合集（正常向 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E6%AD%A3%E5%B8%B8%E5%90%91/SCP%EF%BC%9A%E4%BC%97%E7%94%9F%E7%9B%B8_v0.7.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-4",
+      "type": "character",
+      "name": "一九八四：C-4室",
+      "description": "反乌托邦名作改编，扮演思想警察与思想犯周旋。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "反乌托邦",
+        "剧情",
+        "扮演",
+        "角色卡",
+        "正常向"
+      ],
+      "source": "社区合集（正常向 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E6%AD%A3%E5%B8%B8%E5%90%91/%E3%80%8A%E4%B8%80%E4%B9%9D%E5%85%AB%E5%9B%9B%EF%BC%9AC-4%E5%AE%A4%E3%80%8B%E2%80%94%E2%80%94%20%E6%89%AE%E6%BC%94%E6%80%9D%E6%83%B3%E8%AD%A6%E5%AF%9F%EF%BC%8C%E5%92%8C%E6%80%9D%E6%83%B3%E7%8A%AF%E8%BE%A9%E7%BB%8F%E6%88%96%E8%80%85%E5%B9%B2%E8%84%86%E4%B8%8A%E5%88%91.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-5",
+      "type": "character",
+      "name": "纸嫁衣",
+      "description": "中式传统民俗恐怖题材，纸嫁衣风味。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "民俗",
+        "悬疑",
+        "中式",
+        "角色卡",
+        "正常向"
+      ],
+      "source": "社区合集（正常向 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E6%AD%A3%E5%B8%B8%E5%90%91/%E4%BC%A0%E7%BB%9F%E6%96%87%E5%8C%96%20%E7%BA%B8%E5%AB%81%E8%A1%A3.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-6",
+      "type": "character",
+      "name": "1920 年大英",
+      "description": "工业时代与神秘侧碰撞的世界观卡，含完整时代设定。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "世界观",
+        "历史",
+        "神秘",
+        "角色卡",
+        "世界卡"
+      ],
+      "source": "社区合集（世界卡 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E4%B8%96%E7%95%8C%E5%8D%A1/1920%E5%B9%B4%E5%A4%A7%E8%8B%B1%EF%BC%8C%E5%B7%A5%E4%B8%9A%E6%97%B6%E4%BB%A3%E4%B8%8E%E7%A5%9E%E7%A7%98%E4%BE%A7%E7%9A%84%E7%A2%B0%E6%92%9E.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-7",
+      "type": "character",
+      "name": "24XX",
+      "description": "近未来科幻世界观卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "世界观",
+        "科幻",
+        "近未来",
+        "角色卡",
+        "世界卡"
+      ],
+      "source": "社区合集（世界卡 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E4%B8%96%E7%95%8C%E5%8D%A1/24XX_v1.1.4.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-8",
+      "type": "character",
+      "name": "SCP 基金会（世界书卡）",
+      "description": "SCP 基金会完整世界观设定，收容日志式的条目写法。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "世界观",
+        "SCP",
+        "条目丰富",
+        "角色卡",
+        "世界卡"
+      ],
+      "source": "社区合集（世界卡 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E4%B8%96%E7%95%8C%E5%8D%A1/SCP%E5%9F%BA%E9%87%91%E4%BC%9A.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-9",
+      "type": "character",
+      "name": "仙逆（修仙世界）",
+      "description": "经典修仙小说改编世界卡，体系与势力完整。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "修仙",
+        "世界观",
+        "体系",
+        "角色卡",
+        "修仙"
+      ],
+      "source": "社区合集（修仙 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E4%BF%AE%E4%BB%99/V1.56%E7%89%88%E6%9C%AC%E3%80%8A%E4%BB%99%E9%80%86%E3%80%8B.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-10",
+      "type": "character",
+      "name": "大乾风华录",
+      "description": "架空大乾帝国古风剧情卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "古风",
+        "剧情",
+        "帝国",
+        "角色卡",
+        "古风"
+      ],
+      "source": "社区合集（古风 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%8F%A4%E9%A3%8E/%E3%80%8A%E5%A4%A7%E4%B9%BE%E9%A3%8E%E5%8D%8E%E5%BD%95%E3%80%8B%E8%BA%AB%E4%B8%BA%E9%82%A3%E4%BA%BF%E4%B8%87%E5%88%86%E4%B9%8B%E4%B8%80%E7%9A%84%E5%A5%87%E8%BF%B9%EF%BC%8C%E6%9B%B4%E6%98%AF%E5%A4%A7%E4%B9%BE%E5%B8%9D%E5%9B%BD%E7%9A%84%E6%8E%8C%E4%B8%8A%E7%91%B0%E5%AE%9D.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-11",
+      "type": "character",
+      "name": "大夏芳华",
+      "description": "架空大夏王朝古风卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "古风",
+        "王朝",
+        "角色卡",
+        "古风"
+      ],
+      "source": "社区合集（古风 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%8F%A4%E9%A3%8E/%E3%80%8A%E5%A4%A7%E5%A4%8F%E8%8A%B3%E5%8D%8E%E3%80%8B.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-12",
+      "type": "character",
+      "name": "九霄云阙",
+      "description": "仙侠古风世界观卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "古风",
+        "仙侠",
+        "世界观",
+        "角色卡",
+        "古风"
+      ],
+      "source": "社区合集（古风 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%8F%A4%E9%A3%8E/%E4%B9%9D%E9%9C%84%E4%BA%91%E9%98%99.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-13",
+      "type": "character",
+      "name": "五代十国（架空）",
+      "description": "以五代十国为底稿的架空乱世世界卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "古风",
+        "乱世",
+        "历史",
+        "角色卡",
+        "古风"
+      ],
+      "source": "社区合集（古风 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%8F%A4%E9%A3%8E/%E4%BA%94%E4%BB%A3%E5%8D%81%E5%9B%BD%E6%9E%B6%E7%A9%BA.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-14",
+      "type": "character",
+      "name": "不同的世界有不同的你",
+      "description": "多世界线相遇题材古风卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "古风",
+        "多线",
+        "角色卡",
+        "古风"
+      ],
+      "source": "社区合集（古风 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%8F%A4%E9%A3%8E/%E4%B8%8D%E5%90%8C%E7%9A%84%E4%B8%96%E7%95%8C%E6%9C%89%E4%B8%8D%E5%90%8C%E7%9A%84%E4%BD%A0.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-15",
+      "type": "character",
+      "name": "SCP-C 收容设施",
+      "description": "SCP 收容设施群像同人卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "SCP",
+        "同人",
+        "收容所",
+        "角色卡",
+        "同人"
+      ],
+      "source": "社区合集（同人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%90%8C%E4%BA%BA/SCP-C%E6%94%B6%E5%AE%B9%E8%AE%BE%E6%96%BD.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-16",
+      "type": "character",
+      "name": "Vtuber Hololive",
+      "description": "Hololive 成员群像同人卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "同人",
+        "Vtuber",
+        "群像",
+        "角色卡",
+        "同人"
+      ],
+      "source": "社区合集（同人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%90%8C%E4%BA%BA/Vtuber%20HoloLIVE.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-17",
+      "type": "character",
+      "name": "东方：古明地觉",
+      "description": "东方 Project 古明地觉角色卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "同人",
+        "东方",
+        "角色卡",
+        "角色卡",
+        "同人"
+      ],
+      "source": "社区合集（同人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%90%8C%E4%BA%BA/%5B%E4%B8%9C%E6%96%B9%5D%E5%8F%A4%E6%98%8E%E5%9C%B0%E8%A7%89.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-18",
+      "type": "character",
+      "name": "东方：四季映姬",
+      "description": "东方 Project 四季映姬角色卡，乐园最高裁判长。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "同人",
+        "东方",
+        "角色卡",
+        "角色卡",
+        "同人"
+      ],
+      "source": "社区合集（同人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%90%8C%E4%BA%BA/%5B%E4%B8%9C%E6%96%B9%5D%E5%9B%9B%E5%AD%A3%E6%98%A0%E5%A7%AC%C2%B7%E4%BA%9A%E7%8E%9B%E8%90%A8%E9%82%A3%E5%BA%A6-%E4%B9%90%E5%9B%AD%E7%9A%84%E6%9C%80%E9%AB%98%E8%A3%81%E5%88%A4%E9%95%BF.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-19",
+      "type": "character",
+      "name": "东方：八云蓝",
+      "description": "东方 Project 八云蓝角色卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "同人",
+        "东方",
+        "角色卡",
+        "角色卡",
+        "同人"
+      ],
+      "source": "社区合集（同人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%90%8C%E4%BA%BA/%5B%E4%B8%9C%E6%96%B9%5D%E9%97%B4%E9%9A%99%E5%A6%96%E6%80%AA%E7%9A%84%E5%BC%8F%E7%A5%9E%E2%80%94%E2%80%94%E5%85%AB%E4%BA%91%E8%93%9D.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-20",
+      "type": "character",
+      "name": "爱情公寓（第二版）",
+      "description": "爱情公寓群像同人卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "同人",
+        "群像",
+        "喜剧",
+        "角色卡",
+        "同人"
+      ],
+      "source": "社区合集（同人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%90%8C%E4%BA%BA/%E3%80%8A%E7%88%B1%E6%83%85%E5%85%AC%E5%AF%93%E3%80%8B%E7%AC%AC%E4%BA%8C%E7%89%88.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-21",
+      "type": "character",
+      "name": "复制空间",
+      "description": "自由召唤场景与角色的系统类卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "系统",
+        "自由扮演",
+        "角色卡",
+        "系统"
+      ],
+      "source": "社区合集（系统 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E7%B3%BB%E7%BB%9F/%E3%80%90%E5%A4%8D%E5%88%B6%E7%A9%BA%E9%97%B4%E3%80%91%E5%9C%A8%E7%89%B9%E6%AE%8A%E7%9A%84%E7%A9%BA%E9%97%B4%E9%87%8C%E4%B8%8E%E4%BB%BB%E4%BD%95%E4%BA%BA%E4%BA%92%E5%8A%A8.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-22",
+      "type": "character",
+      "name": "拟真推特模拟器",
+      "description": "模拟社交网络的系统类卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "系统",
+        "模拟",
+        "角色卡",
+        "系统"
+      ],
+      "source": "社区合集（系统 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E7%B3%BB%E7%BB%9F/%E4%B8%80%E4%B8%AA%E2%80%9C%E6%AD%A3%E5%B8%B8%E4%B8%96%E7%95%8C%E2%80%9D%E7%9A%84%E6%8B%9F%E7%9C%9F%E6%8E%A8%E7%89%B9%E6%A8%A1%E6%8B%9F%E5%99%A8.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-23",
+      "type": "character",
+      "name": "SCP 研究员：月",
+      "description": "SCP 研究员单人角色卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "SCP",
+        "单人",
+        "角色卡",
+        "角色卡",
+        "单人"
+      ],
+      "source": "社区合集（单人 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E5%8D%95%E4%BA%BA/SCP%E7%A0%94%E7%A9%B6%E5%93%A1%EF%BC%8C%E6%9C%88.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-card-24",
+      "type": "character",
+      "name": "时间线交汇的尽头",
+      "description": "时间线交汇的宿命重逢纯爱剧情卡。来源仓库未标注许可证，仅供个人本地使用；部分开场白含模型推广语，导入后可编辑。",
+      "tags": [
+        "纯爱",
+        "剧情",
+        "角色卡",
+        "纯爱"
+      ],
+      "source": "社区合集（纯爱 分类）",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/cards/%E7%BA%AF%E7%88%B1/%E5%9C%A8%E6%97%B6%E9%97%B4%E7%BA%BF%E4%BA%A4%E6%B1%87%E7%9A%84%E5%B0%BD%E5%A4%B4%EF%BC%8C%E4%BC%9A%E4%B8%8E%E5%91%BD%E4%B8%AD%E6%B3%A8%E5%AE%9A%E5%86%8D%E6%AC%A1%E7%9B%B8%E9%81%87%E5%90%97.png"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "lg-preset-graywill",
+      "type": "preset",
+      "name": "GrayWill 预设",
+      "description": "社区流行的 DeepSeek 系对话预设，中文 RP 调校。（来源仓库未标注许可证，仅供个人本地使用）",
+      "tags": [
+        "中文",
+        "DeepSeek",
+        "RP",
+        "预设"
+      ],
+      "source": "社区开源仓库",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/leigegehaha/sillytavernassets/main/presets/TaverndeepSeek_GrayWill-0.45.3.json"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "preset-magpie",
+      "type": "preset",
+      "name": "Magpie 预设",
+      "description": "NemoEngine 系大型英文预设，提示词编排完整。（来源仓库未标注许可证，仅供个人本地使用）",
+      "tags": [
+        "英文",
+        "大型",
+        "编排",
+        "预设"
+      ],
+      "source": "社区开源仓库",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/NemoVonNirgend/NemoEngine/main/Magpie/Magpie%20v1%20Beta-2.1.json"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "preset-stabs-glm",
+      "type": "preset",
+      "name": "Stabs GLM 指令集",
+      "description": "面向 GLM 系模型的指令式预设。（来源仓库未标注许可证，仅供个人本地使用）",
+      "tags": [
+        "GLM",
+        "指令",
+        "预设"
+      ],
+      "source": "社区开源仓库",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/Zorgonatis/Stabs-EDH/main/Stabs-GLM5.1-Directives-v3.0.1.json"
+      },
+      "license": "未标注"
+    },
+    {
+      "id": "preset-ashu-mini",
+      "type": "preset",
+      "name": "ashu mini 预设（Gemini）",
+      "description": "社区知名的 Gemini 轻量预设。（来源仓库未标注许可证，仅供个人本地使用）",
+      "tags": [
+        "Gemini",
+        "轻量",
+        "预设"
+      ],
+      "source": "社区开源仓库",
+      "ref": {
+        "kind": "remote",
+        "url": "https://raw.githubusercontent.com/ashuotaku/sillytavern/main/ChatCompletionPresets/Gemini/ashu's%20mini%20v4.5.json"
+      },
+      "license": "未标注"
     }
   ]
 }
