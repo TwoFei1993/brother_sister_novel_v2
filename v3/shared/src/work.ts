@@ -81,6 +81,9 @@ export const CHAT_REPLY_LENGTH_RANGE: Record<ChatReplyLength, { min: number; max
   long: { min: 800, max: 1500 },
 };
 
+/** novel 模式每章目标字数缺省值（缺省视为 3000；兜底主提示词与末尾写作要求共用） */
+export const DEFAULT_TARGET_CHAPTER_WORDS = 3000;
+
 export const NovelSettingsSchema = z.strictObject({
   genre: GenreTypeSchema,
   subGenre: z.string(),
@@ -128,6 +131,8 @@ export const NovelSettingsSchema = z.strictObject({
   summaryUpTo: z.number().int().nonnegative().optional(),
   /** chat 模式回复长度档位（短/中/长，缺省视为 medium）；novel 模式不消费此字段 */
   chatReplyLength: ChatReplyLengthSchema.optional(),
+  /** novel 模式每章目标字数（缺省视为 3000；兜底主提示词与末尾写作要求注入共用） */
+  targetChapterWords: z.number().int().positive().optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 
@@ -160,6 +165,7 @@ export const defaultNovelSettings: NovelSettings = {
   pastedOutline: '',
   authorNote: '',
   noteDepth: 4,
+  targetChapterWords: DEFAULT_TARGET_CHAPTER_WORDS,
 };
 
 // ---------- 作品 ----------

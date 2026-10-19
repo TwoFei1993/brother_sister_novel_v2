@@ -9,6 +9,7 @@
  * 不含 React hook；调用方（hook）经 bindController 注册 AbortController 以支持 stop()。
  */
 import { generateStream, type GenerateBody } from '../api/llm';
+import { TypewriterPacer } from '../lib/typewriter';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
 
@@ -37,6 +38,8 @@ export interface RunStreamOptions<T> {
   bindController: (controller: AbortController | null) => void;
   /** 组装阶段：拉资产/扫描总装/构造请求体；失败按生成错误处理（0 chunk 可重试） */
   prepare: (ctx: { prefs: LlmPrefs; startedAt: number }) => Promise<PreparedStream<T>>;
+  /** 打字机匀速逐字显示（novel 章节生成开启；chat 缺省直通保持既有时序） */
+  pace?: boolean;
 }
 
 /** 单次生成流编排（返回 null = 未产出结果，错误已写入 generationStore） */
@@ -56,6 +59,13 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
   let attempt = 0;
   let streamError: GenerationError | null = null;
 
+  // 打字机匀速：SSE chunk 先进 pacer 缓冲，再按固定节奏逐字进 store（中转攒批返回也平滑）。
+  // chat 模式保持直通（intervalMs=0），不改变其既有时序。
+  const pacer = new TypewriterPacer(
+    (text) => useGenerationStore.getState().appendChunk(text),
+    opts.pace ? 24 : 0,
+  );
+
   try {
     const { body, finalize } = await opts.prepare({ prefs, startedAt });
 
@@ -68,7 +78,7 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
           {
             onChunk: (text) => {
               chunksReceived += 1;
-              useGenerationStore.getState().appendChunk(text);
+              pacer.push(text);
             },
             onDone: () => undefined,
             onError: (e) => {
@@ -92,9 +102,13 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
       }
     }
 
+    // 等缓冲区逐字吐完再收尾：buffer 只含已显示文字，最后一屏不会突然弹出
+    await pacer.drained();
+
     // ---------- 完成收尾（novel=章节入库 / chat=成对入库，由 finalize 委托） ----------
     return await finalize();
   } catch (err) {
+    pacer.flushSync(); // 停止/出错时把已收到未显示的内容一次性补进 buffer，partialKept 不丢字
     const ge = err instanceof GenerationFlowError ? err.ge : toGenerationError(err);
     const partialKept = chunksReceived > 0 || opts.initialBuffer.length > 0;
     if (ge.code === 'aborted' && streamError === null) {
@@ -104,6 +118,7 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     }
     return null;
   } finally {
+    pacer.stop();
     opts.bindController(null);
   }
 }

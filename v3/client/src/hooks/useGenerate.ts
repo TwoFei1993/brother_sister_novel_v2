@@ -76,6 +76,7 @@ export function useGenerate(): UseGenerateResult {
         workId: work.id,
         targetId: opts.targetId,
         initialBuffer: opts.initialBuffer,
+        pace: true, // novel 章节生成启用打字机逐字显示
         bindController: (c) => {
           abortRef.current = c;
         },
