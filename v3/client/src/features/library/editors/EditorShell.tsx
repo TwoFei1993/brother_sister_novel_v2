@@ -3,9 +3,12 @@
  *
  * EditorShell：全屏弹层壳（头部：关闭/标题/未保存徽标/保存），
  * 世界书与角色卡编辑器共用，保证一致的保存动线。
- * Field 原语：label + 说明 tooltip（title 属性，一期不引 tooltip 库）。
+ * Field 原语：label + FieldHint 问号说明（第二轮体验改进，替代裸 title）。
  */
 import type { ReactNode } from 'react';
+
+import FieldHint from '../../../components/FieldHint';
+import { OPTION_CLS, SELECT_TONE_CLS } from '../../../components/ui-select';
 
 export interface EditorShellProps {
   title: string;
@@ -37,6 +40,7 @@ export default function EditorShell({ title, dirty, saving, onClose, onSave, chi
           onClick={onSave}
           disabled={!dirty || saving}
           data-testid="editor-save"
+          title="保存全部改动；有未保存改动时按钮亮起"
           className="ml-auto min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
         >
           {saving ? '保存中…' : '保存'}
@@ -47,15 +51,25 @@ export default function EditorShell({ title, dirty, saving, onClose, onSave, chi
   );
 }
 
-// ---------- 字段原语（label 包裹式，说明走 title） ----------
+// ---------- 字段原语（label 包裹式，说明走 FieldHint 问号） ----------
 
 const fieldInputCls =
-  'mt-1 min-h-[36px] w-full rounded-lg border border-[hsl(var(--border-soft))] bg-transparent px-2 text-sm text-[hsl(var(--fg))]';
+  'mt-1 min-h-[36px] w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm text-[hsl(var(--fg))]';
+
+/** label 行：文字 + 问号提示（title 悬停可见） */
+function FieldLabel({ label, tip }: { label: string; tip?: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      {label}
+      {tip && <FieldHint text={tip} />}
+    </span>
+  );
+}
 
 export interface BaseFieldProps {
   /** 中文标签 */
   label: string;
-  /** 简短说明（title tooltip） */
+  /** 简短说明（FieldHint 悬停提示） */
   tip?: string;
 }
 
@@ -70,15 +84,15 @@ export function TextField({
   placeholder?: string;
 }) {
   return (
-    <label className="block text-xs text-[hsl(var(--fg-muted))]" title={tip}>
-      {label}
+    <label className="block text-xs text-[hsl(var(--fg-muted))]">
+      <FieldLabel label={label} tip={tip} />
       {textarea ? (
         <textarea
           value={value}
           rows={rows}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-transparent px-2 py-1.5 text-sm text-[hsl(var(--fg))]"
+          className="mt-1 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 py-1.5 text-sm text-[hsl(var(--fg))]"
         />
       ) : (
         <input
@@ -96,8 +110,8 @@ export function NumberField({
   label, tip, value, onChange, min,
 }: BaseFieldProps & { value: number | null; onChange: (v: number | null) => void; min?: number }) {
   return (
-    <label className="block text-xs text-[hsl(var(--fg-muted))]" title={tip}>
-      {label}
+    <label className="block text-xs text-[hsl(var(--fg-muted))]">
+      <FieldLabel label={label} tip={tip} />
       <input
         type="number"
         min={min}
@@ -121,18 +135,18 @@ export function SelectField<T extends string | number>({
   options: ReadonlyArray<{ value: T; label: string }>;
 }) {
   return (
-    <label className="block text-xs text-[hsl(var(--fg-muted))]" title={tip}>
-      {label}
+    <label className="block text-xs text-[hsl(var(--fg-muted))]">
+      <FieldLabel label={label} tip={tip} />
       <select
         value={String(value)}
         onChange={(e) => {
           const opt = options.find((o) => String(o.value) === e.target.value);
           if (opt) onChange(opt.value);
         }}
-        className={fieldInputCls}
+        className={`${fieldInputCls} ${SELECT_TONE_CLS}`}
       >
         {options.map((o) => (
-          <option key={String(o.value)} value={String(o.value)}>
+          <option key={String(o.value)} value={String(o.value)} className={OPTION_CLS}>
             {o.label}
           </option>
         ))}
@@ -145,14 +159,14 @@ export function ToggleField({
   label, tip, checked, onChange,
 }: BaseFieldProps & { checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex min-h-[36px] cursor-pointer items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" title={tip}>
+    <label className="flex min-h-[36px] cursor-pointer items-center gap-2 text-xs text-[hsl(var(--fg-muted))]">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         className="h-4 w-4 accent-[hsl(var(--accent))]"
       />
-      {label}
+      <FieldLabel label={label} tip={tip} />
     </label>
   );
 }

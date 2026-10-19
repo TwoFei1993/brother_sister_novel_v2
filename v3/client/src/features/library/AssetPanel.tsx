@@ -95,6 +95,24 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
 
   return (
     <section aria-label={`${label}资产面板`} className="flex flex-col gap-3">
+      {type === 'regex-scripts' && (
+        <div
+          data-testid="regex-guide"
+          className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2 text-xs leading-5 text-[hsl(var(--fg-muted))]"
+        >
+          <p className="font-medium text-[hsl(var(--fg))]">正则脚本是什么</p>
+          <p>
+            自动文本处理规则（查找 → 替换），作用于三条轨道：
+            <span className="text-[hsl(var(--fg))]">只改显示</span>
+            （美化输出，不改动原文）/
+            <span className="text-[hsl(var(--fg))]">只改提示词</span>
+            （发给 AI 前清洗）/
+            <span className="text-[hsl(var(--fg))]">全部生效</span>
+            （两者都改）。
+          </p>
+          <p>通常随社区预设或角色卡自动导入生效，无需手动编写。</p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

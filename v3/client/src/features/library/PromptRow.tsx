@@ -7,9 +7,13 @@
  */
 import type { TavernPrompt } from '@shared/tavern';
 
+import { OPTION_CLS, SELECT_TONE_CLS } from '../../components/ui-select';
+
 export interface PromptRowProps {
   /** 名称（prompt.name 缺省回退 identifier） */
   name: string;
+  /** 中文简介（一行人话说明；null 不显示） */
+  description: string | null;
   identifier: string;
   enabled: boolean;
   /** 系统位 marker（chatHistory/main/jailbreak/worldInfoBefore 等） */
@@ -34,7 +38,7 @@ const ROLES = ['system', 'user', 'assistant'] as const;
 
 export default function PromptRow(props: PromptRowProps) {
   const {
-    name, identifier, enabled, marker, role, tokens, expanded,
+    name, description, identifier, enabled, marker, role, tokens, expanded,
     isFirst, isLast, onChange, onToggleEnabled, onMove, onToggleExpand, onDelete,
   } = props;
 
@@ -70,6 +74,9 @@ export default function PromptRow(props: PromptRowProps) {
               </span>
             )}
           </span>
+          {description && (
+            <span className="block truncate text-xs text-[hsl(var(--fg-muted))]">{description}</span>
+          )}
           <span className="block truncate text-xs text-[hsl(var(--fg-muted))]">
             {role} · {tokens === null ? '—' : `~${tokens}`}
           </span>
@@ -111,10 +118,10 @@ export default function PromptRow(props: PromptRowProps) {
               <select
                 value={ROLES.includes(role as (typeof ROLES)[number]) ? role : 'system'}
                 onChange={(e) => onChange({ role: e.target.value })}
-                className="mt-1 min-h-[36px] w-full rounded-lg border border-[hsl(var(--border-soft))] bg-transparent px-2 text-sm text-[hsl(var(--fg))]"
+                className={`mt-1 min-h-[36px] w-full rounded-lg border border-[hsl(var(--border-soft))] px-2 text-sm ${SELECT_TONE_CLS}`}
               >
                 {ROLES.map((r) => (
-                  <option key={r} value={r}>
+                  <option key={r} value={r} className={OPTION_CLS}>
                     {r}
                   </option>
                 ))}

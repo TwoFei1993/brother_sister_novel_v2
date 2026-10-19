@@ -7,6 +7,7 @@
  */
 import { useEffect } from 'react';
 
+import { OPTION_CLS } from '../../components/ui-select';
 import { VOICES } from '../../lib/voice-route';
 
 /** 语速 6 档（对齐旧站 rates） */
@@ -134,7 +135,7 @@ export default function TtsBar({
             className="h-9 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-1.5 text-xs outline-none focus:border-[hsl(var(--accent))]"
           >
             {VOICES.map((v) => (
-              <option key={v.id} value={v.id}>
+              <option key={v.id} value={v.id} className={OPTION_CLS}>
                 {v.name}（{v.gender === 'female' ? '女' : '男'}）
               </option>
             ))}

@@ -4,7 +4,7 @@
  * - LLM 接入：三通道密钥 + 默认生成参数（SecretsPanel / LlmPanel）
  * - TTS：easyvoice 地址与连通性（TtsPanel）
  * - 旧站迁移：localStorage novel_history → 新站作品（MigratePanel，Task 31）
- * - 界面偏好：阅读字号/行高等属阅读体验（Task 20）、题材主题（Task 32），暂占位说明
+ * - 界面偏好：全局皮肤选择（ThemePanel，跟随作品题材或 6 个固定主题）
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import LlmPanel from '../features/settings/LlmPanel';
 import MigratePanel from '../features/settings/MigratePanel';
 import SecretsPanel from '../features/settings/SecretsPanel';
+import ThemePanel from '../features/settings/ThemePanel';
 import TtsPanel from '../features/settings/TtsPanel';
 
 type SectionId = 'llm' | 'tts' | 'migrate' | 'ui';
@@ -68,14 +69,7 @@ export default function SettingsPage() {
       )}
       {section === 'tts' && <TtsPanel />}
       {section === 'migrate' && <MigratePanel />}
-      {section === 'ui' && (
-        <div className="rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-5">
-          <h3 className="mb-1 text-base font-semibold">界面偏好</h3>
-          <p className="text-sm text-[hsl(var(--fg-muted))]">
-            阅读字号/行高在写作台的阅读视图内调整，题材主题随作品设定生效，后续版本在此统一管理。
-          </p>
-        </div>
-      )}
+      {section === 'ui' && <ThemePanel />}
     </main>
   );
 }

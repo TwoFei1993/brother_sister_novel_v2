@@ -7,6 +7,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 
 import { apiFetch } from './api/client';
+import { useUserTheme } from './lib/theme';
 import { useSettingsStore, type ConfigDto } from './stores/settings';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -54,9 +55,18 @@ function AuthGuard() {
   return checked ? <Outlet /> : <PageLoading />;
 }
 
+/** 全局主题同步：用户固定主题（设置页选择，localStorage 持久化）→ <html data-theme>。
+ *  优先级高于 useWorkTheme（后者检测到固定主题时让位，见 lib/theme.ts）。 */
+function GlobalTheme() {
+  const uiTheme = useSettingsStore((s) => s.uiTheme);
+  useUserTheme(uiTheme);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <GlobalTheme />
       <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

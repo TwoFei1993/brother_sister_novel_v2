@@ -7,11 +7,20 @@
  * - 空态引导"新建作品"；加载失败可重试
  */
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { Link } from 'react-router-dom';
 
 import { listWorks } from '../../api/works';
 import type { WorkSummary } from '../../api/works';
+import { OPTION_CLS } from '../../components/ui-select';
 import WorkCard from './WorkCard';
 import NewWorkDialog from './NewWorkDialog';
+
+/** 空态三步引导（第二轮体验改进）：资源 → 建作品 → 写作 */
+const EMPTY_STEPS: ReadonlyArray<string> = [
+  '① 到「资源中心」导入或创建角色卡 / 世界书',
+  '② 「新建作品」并绑定它们',
+  '③ 进入写作台，输入剧情方向开始创作',
+];
 
 type SortKey = 'recent' | 'chapters' | 'title';
 
@@ -92,7 +101,7 @@ export default function Bookshelf() {
             className={selectClass}
           >
             {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
+              <option key={opt.value} value={opt.value} className={OPTION_CLS}>
                 {opt.label}
               </option>
             ))}
@@ -137,13 +146,38 @@ export default function Bookshelf() {
           ) : (
             <>
               <p className="text-base">书架空空如也</p>
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                className="mt-5 h-11 rounded-lg bg-[hsl(var(--accent))] px-6 text-sm font-medium text-[hsl(var(--accent-fg))] transition-opacity hover:opacity-90"
+              <div
+                data-testid="bookshelf-empty-guide"
+                className="mx-auto mt-5 max-w-sm rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-5 py-4 text-left"
               >
-                ＋ 新建作品
-              </button>
+                <p className="mb-2 text-sm font-semibold">三步开始第一本书</p>
+                <ol className="flex flex-col gap-1 text-sm leading-6 text-[hsl(var(--fg-muted))]">
+                  {EMPTY_STEPS.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link
+                    to="/library?tab=hub"
+                    className="flex h-10 items-center rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm transition-colors hover:border-[hsl(var(--accent))]"
+                  >
+                    去资源中心
+                  </Link>
+                  <Link
+                    to="/wizard"
+                    className="flex h-10 items-center rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm transition-colors hover:border-[hsl(var(--accent))]"
+                  >
+                    打开创作向导
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setCreating(true)}
+                    className="h-10 rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent-fg))] transition-opacity hover:opacity-90"
+                  >
+                    ＋ 新建作品
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </div>

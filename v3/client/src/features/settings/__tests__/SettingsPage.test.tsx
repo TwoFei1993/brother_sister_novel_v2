@@ -98,11 +98,21 @@ describe('SettingsPage', () => {
     expect(input?.value).toBe('https://tts.example.com');
   });
 
-  it('切到界面偏好分区：占位说明', async () => {
+  it('切到界面偏好分区：主题选择器（跟随作品 + 6 固定主题）', async () => {
     maskMock.mockResolvedValue({ openai: false, gemini: false, claude: false });
     const container = await renderSettings();
     await clickSection(container, '界面偏好');
-    expect(container.textContent).toContain('界面偏好');
+    const text = container.textContent ?? '';
+    expect(text).toContain('界面主题');
+    expect(text).toContain('跟随作品题材（默认）');
+    expect(text).toContain('穿越重生');
+    expect(text).toContain('星际科幻');
+    expect(text).toContain('末世求生');
+    expect(text).toContain('无限流');
+    expect(text).toContain('玄幻修仙');
+    expect(text).toContain('混合暗色');
+    expect(container.querySelector('[data-testid="theme-follow"]')).not.toBeNull();
+    expect(container.querySelectorAll('button[data-testid^="theme-"]').length).toBe(7);
   });
 
   it('切到旧站迁移分区：展示导出引导与上传入口（Task 31）', async () => {

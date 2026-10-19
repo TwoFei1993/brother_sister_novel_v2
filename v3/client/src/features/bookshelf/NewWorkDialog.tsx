@@ -12,6 +12,8 @@ import { useNavigate } from 'react-router-dom';
 import { createWork } from '../../api/works';
 import { listCharacters, listWorldbooks, listPresets, type LibraryAssetRef } from '../../api/library';
 import { ApiError } from '../../api/client';
+import FieldHint from '../../components/FieldHint';
+import { OPTION_CLS } from '../../components/ui-select';
 import type { WorkMode } from '@shared/work';
 import { GENRE_OPTIONS } from './genres';
 
@@ -25,9 +27,24 @@ const MODE_CHOICES: ReadonlyArray<{ value: WorkMode; label: string; hint: string
 ];
 
 const BINDING_FIELDS = [
-  { key: 'characterIds', label: '角色卡', listKey: 'characters' },
-  { key: 'worldbookIds', label: '世界书', listKey: 'worldbooks' },
-  { key: 'presetId', label: '预设', listKey: 'presets' },
+  {
+    key: 'characterIds',
+    label: '角色卡',
+    listKey: 'characters',
+    hint: '作品主角的设定来源：人设、开场白、对话示例都来自角色卡。',
+  },
+  {
+    key: 'worldbookIds',
+    label: '世界书',
+    listKey: 'worldbooks',
+    hint: '世界观设定集：关键词命中时自动注入对应设定（如地名、势力、规则）。',
+  },
+  {
+    key: 'presetId',
+    label: '预设',
+    listKey: 'presets',
+    hint: '提示词编排方案：决定 AI 的写作风格与提示词装配顺序，推荐先从资源中心导入社区预设。',
+  },
 ] as const;
 
 type BindingKey = (typeof BINDING_FIELDS)[number]['key'];
@@ -131,7 +148,13 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
 
         {/* 模式单选 */}
         <div className="mb-4" role="radiogroup" aria-label="作品模式">
-          <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">模式（创建后不可切换）</span>
+          <span className="mb-1.5 flex items-center gap-1 text-sm text-[hsl(var(--fg-muted))]">
+            模式（创建后不可切换）
+            <FieldHint
+              tapToExpand
+              text="互动小说：你下达剧情指令，AI 按章续写，适合小说创作；对话写作：酒馆式角色扮演，以角色口吻逐条对话。"
+            />
+          </span>
           <div className="grid grid-cols-2 gap-2">
             {MODE_CHOICES.map((choice) => (
               <button
@@ -158,7 +181,7 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
           <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">题材</span>
           <select value={genre} onChange={(e) => setGenre(e.target.value)} className={selectClass}>
             {GENRE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
+              <option key={opt.value} value={opt.value} className={OPTION_CLS}>
                 {opt.label}
               </option>
             ))}
@@ -178,15 +201,20 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
           <div className="space-y-2">
             {BINDING_FIELDS.map((field) => (
               <label key={field.key} className="flex items-center gap-3">
-                <span className="w-14 shrink-0 text-sm">{field.label}</span>
+                <span className="flex w-14 shrink-0 items-center gap-1 text-sm">
+                  {field.label}
+                  <FieldHint text={field.hint} />
+                </span>
                 <select
                   value={bindings[field.key]}
                   onChange={(e) => setBinding(field.key, e.target.value)}
                   className={selectClass}
                 >
-                  <option value="">不绑定</option>
+                  <option value="" className={OPTION_CLS}>
+                    不绑定
+                  </option>
                   {options[field.key].map((asset) => (
-                    <option key={asset.id} value={asset.id}>
+                    <option key={asset.id} value={asset.id} className={OPTION_CLS}>
                       {asset.name}
                     </option>
                   ))}

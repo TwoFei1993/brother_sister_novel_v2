@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { listCharacters, type LibraryAssetRef } from '../../api/library';
 import { updateWork } from '../../api/works';
+import { OPTION_CLS } from '../../components/ui-select';
 import type { Work } from '@shared/work';
 import { NARRATOR_VOICE_KEY, VOICES } from '../../lib/voice-route';
 
@@ -123,9 +124,9 @@ export default function VoiceMapEditor({ work, onSaved }: VoiceMapEditorProps) {
                 onChange={(e) => setRowVoice(row.name, e.target.value)}
                 className={selectCls}
               >
-                <option value="">未设置（用旁白声）</option>
+                <option value="" className={OPTION_CLS}>未设置（用旁白声）</option>
                 {VOICES.map((v) => (
-                  <option key={v.id} value={v.id}>
+                  <option key={v.id} value={v.id} className={OPTION_CLS}>
                     {v.name}（{v.gender === 'female' ? '女' : '男'}）
                   </option>
                 ))}
@@ -144,9 +145,9 @@ export default function VoiceMapEditor({ work, onSaved }: VoiceMapEditorProps) {
           onChange={(e) => setNarratorVoice(e.target.value)}
           className={selectCls}
         >
-          <option value="">跟随播放条（晓晓）</option>
+          <option value="" className={OPTION_CLS}>跟随播放条（晓晓）</option>
           {VOICES.map((v) => (
-            <option key={v.id} value={v.id}>
+            <option key={v.id} value={v.id} className={OPTION_CLS}>
               {v.name}（{v.gender === 'female' ? '女' : '男'}）
             </option>
           ))}

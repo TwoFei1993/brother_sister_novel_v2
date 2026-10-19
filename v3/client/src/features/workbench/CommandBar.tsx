@@ -8,6 +8,8 @@
  */
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
+import FieldHint from '../../components/FieldHint';
+
 interface CommandBarProps {
   streaming: boolean;
   /** 断流/停止后已产出部分保留，「继续」可用 */
@@ -95,10 +97,15 @@ export default function CommandBar({
               onClick={submit}
               disabled={disabled || busy}
               data-testid="generate-btn"
+              title="按当前指令续写一章；指令可留空由 AI 自由发挥"
               className={`${btnBase} bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]`}
             >
               ▶ 续写
             </button>
+            <FieldHint
+              tapToExpand
+              text="续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。"
+            />
             {canToggleSwipe ? (
               <div className="flex h-10 shrink-0 items-center rounded-lg border border-[hsl(var(--border-soft))]">
                 <button
@@ -124,16 +131,22 @@ export default function CommandBar({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => onToggleSwipe(1)}
-                disabled={disabled || busy}
-                title="换一支：同指令重新生成本章"
-                data-testid="swipe-btn"
-                className={`${btnBase} border border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]`}
-              >
-                🎲 换一支
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onToggleSwipe(1)}
+                  disabled={disabled || busy}
+                  title="换一支：同指令重新生成本章"
+                  data-testid="swipe-btn"
+                  className={`${btnBase} border border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]`}
+                >
+                  🎲 换一支
+                </button>
+                <FieldHint
+                  tapToExpand
+                  text="换一支：同一章重新生成一个候选版本；已有多支候选时用 ◀▶ 按钮来回切换对比。"
+                />
+              </>
             )}
           </>
         )}

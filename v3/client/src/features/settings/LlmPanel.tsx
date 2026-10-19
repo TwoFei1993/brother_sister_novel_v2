@@ -5,6 +5,7 @@
  */
 import type { ChangeEvent } from 'react';
 
+import FieldHint from '../../components/FieldHint';
 import { useSettingsStore, type LlmSource } from '../../stores/settings';
 
 /** 通道选项（与 SecretsPanel 三通道一致；命名强调用途差异） */
@@ -70,8 +71,9 @@ export default function LlmPanel() {
       <fieldset className="rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-5">
         <legend className="px-1 text-sm font-semibold">模型与采样</legend>
 
-        <label className="mb-1 block text-sm" htmlFor="llm-model">
+        <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-model">
           模型名
+          <FieldHint text="该通道下调用的模型 ID（如 MiniMax-M3、claude-sonnet-4），须与服务商提供的名称完全一致。" />
         </label>
         <input
           id="llm-model"
@@ -88,8 +90,9 @@ export default function LlmPanel() {
 
         <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-sm" htmlFor="llm-temperature">
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-temperature">
               Temperature
+              <FieldHint text="随机度：0 严谨固定，1 均衡，1.5+ 天马行空。小说续写建议 0.8–1.2。" />
             </label>
             <input
               id="llm-temperature"
@@ -105,8 +108,9 @@ export default function LlmPanel() {
             <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">0–2，越高越发散</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm" htmlFor="llm-max-tokens">
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-max-tokens">
               最大输出 tokens
+              <FieldHint text="单次生成长度上限，1 token ≈ 0.7 个汉字；一章 2000 字建议 4096 以上。" />
             </label>
             <input
               id="llm-max-tokens"
@@ -121,8 +125,9 @@ export default function LlmPanel() {
             <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">单次生成的长度上限</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm" htmlFor="llm-max-context">
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-max-context">
               上下文预算 tokens
+              <FieldHint text="发给 AI 的总预算上限：历史装填预算 = 此值 − 最大输出。建议不超过模型窗口的 3/4。" />
             </label>
             <input
               id="llm-max-context"

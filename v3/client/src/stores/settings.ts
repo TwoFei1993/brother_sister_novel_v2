@@ -37,11 +37,20 @@ export interface ConfigDto {
 /** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json） */
 const DEFAULT_PREFS: LlmPrefs = { source: 'claude', model: 'MiniMax-M3' };
 
+/** localStorage 持久化切片（partialize 输出；migrate 返回值同构） */
+interface PersistedSettings {
+  llmPrefs: LlmPrefs;
+  /** 用户固定主题（null = 跟随作品题材；值 = ThemeName，见 lib/theme.ts） */
+  uiTheme: string | null;
+}
+
 interface SettingsState {
   config: ConfigDto | null;
   llmPrefs: LlmPrefs;
+  uiTheme: string | null;
   setConfig: (config: ConfigDto) => void;
   setLlmPrefs: (patch: Partial<LlmPrefs>) => void;
+  setUiTheme: (theme: string | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -49,17 +58,26 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       config: null,
       llmPrefs: DEFAULT_PREFS,
+      uiTheme: null,
       setConfig: (config) => set({ config }),
       setLlmPrefs: (patch) => set((s) => ({ llmPrefs: { ...s.llmPrefs, ...patch } })),
+      setUiTheme: (uiTheme) => set({ uiTheme }),
     }),
     {
       name: 'v3-llm-prefs',
-      version: 1,
-      // 版本 0→1：丢弃旧持久化偏好，改用新默认通道（MiniMax/Claude 兼容）
-      migrate: () => ({ llmPrefs: { ...DEFAULT_PREFS } }),
+      version: 2,
+      migrate: (persisted: unknown, version: number): PersistedSettings => {
+        const prev =
+          typeof persisted === 'object' && persisted !== null
+            ? (persisted as { llmPrefs?: LlmPrefs })
+            : {};
+        // 版本 0→1：丢弃旧持久化偏好，改用新默认通道；1→2：保留偏好，新增 uiTheme
+        const llmPrefs = version < 1 ? { ...DEFAULT_PREFS } : (prev.llmPrefs ?? { ...DEFAULT_PREFS });
+        return { llmPrefs, uiTheme: null };
+      },
       storage: createJSONStorage(() => localStorage),
       // 只持久化偏好；config 属会话态，每次登录重新拉取
-      partialize: (s) => ({ llmPrefs: s.llmPrefs }),
+      partialize: (s): PersistedSettings => ({ llmPrefs: s.llmPrefs, uiTheme: s.uiTheme }),
     },
   ),
 );

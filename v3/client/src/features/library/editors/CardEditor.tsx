@@ -139,10 +139,10 @@ export default function CardEditor({ characterId, onClose, onSaved, notify }: Ca
           )}
 
           <TextField label="名字" tip="角色名（data.name），保存后同步列表显示名" value={s(data.name)} onChange={(name) => patchData({ name })} />
-          <TextField label="人设描述" tip="角色的外貌/性格/背景设定（description）" textarea rows={8} value={s(data.description)} onChange={(description) => patchData({ description })} />
+          <TextField label="人设描述" tip="角色卡描述：角色的外貌/性格/背景设定，每轮注入给 AI（description）" textarea rows={8} value={s(data.description)} onChange={(description) => patchData({ description })} />
           <TextField label="性格" tip="性格摘要（personality）" textarea rows={3} value={s(data.personality)} onChange={(personality) => patchData({ personality })} />
           <TextField label="场景" tip="开场场景设定（scenario）" textarea rows={3} value={s(data.scenario)} onChange={(scenario) => patchData({ scenario })} />
-          <TextField label="开场白" tip="第一条消息（first_mes）" textarea rows={6} value={s(data.first_mes)} onChange={(first_mes) => patchData({ first_mes })} />
+          <TextField label="开场白" tip="第一条消息：对话开场时角色说的第一段话（first_mes）" textarea rows={6} value={s(data.first_mes)} onChange={(first_mes) => patchData({ first_mes })} />
 
           {/* 备用问候 */}
           <fieldset data-testid="alternate-greetings" className="rounded-xl border border-[hsl(var(--border-soft))] p-3">
@@ -180,8 +180,8 @@ export default function CardEditor({ characterId, onClose, onSaved, notify }: Ca
 
           <TextField label="对话示例" tip="few-shot 对话样例（mes_example），<START> 分隔" textarea rows={5} value={s(data.mes_example)} onChange={(mes_example) => patchData({ mes_example })} />
           <TextField label="创作者注释" tip="卡片作者给使用者的说明（creator_notes）" textarea rows={3} value={s(data.creator_notes)} onChange={(creator_notes) => patchData({ creator_notes })} />
-          <TextField label="系统提示词覆写" tip="覆盖默认主提示词（system_prompt），留空用预设默认" textarea rows={3} value={s(data.system_prompt)} onChange={(system_prompt) => patchData({ system_prompt })} />
-          <TextField label="历史后注入" tip="注入在聊天历史之后的指令（post_history_instructions，jailbreak 位）" textarea rows={3} value={s(data.post_history_instructions)} onChange={(post_history_instructions) => patchData({ post_history_instructions })} />
+          <TextField label="系统提示词覆写" tip="作用：整段替换预设的主提示词（system_prompt），一般留空以使用预设默认" textarea rows={3} value={s(data.system_prompt)} onChange={(system_prompt) => patchData({ system_prompt })} />
+          <TextField label="历史后注入" tip="作用：注入在聊天历史之后的收尾指令（post_history_instructions），离生成最近、影响最大" textarea rows={3} value={s(data.post_history_instructions)} onChange={(post_history_instructions) => patchData({ post_history_instructions })} />
 
           {/* 深度人设 extensions.depth_prompt */}
           <fieldset data-testid="depth-prompt" className="rounded-xl border border-[hsl(var(--border-soft))] p-3">

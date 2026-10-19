@@ -6,9 +6,11 @@
  * assetType 跳转对应资产 Tab。本地上传复用 LibraryPage 同款 multipart 导入管道
  * （importAsset），上传前需选择资产类型。
  */
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { apiFetch } from '../../api/client';
+import FieldHint from '../../components/FieldHint';
+import { OPTION_CLS, SELECT_TONE_CLS } from '../../components/ui-select';
 import { ASSET_META, importAsset, type AssetType, type LibraryAssetRef } from '../../api/library';
 
 // ---------- 索引条目（与服务端 resources.ts 的 index.json 同构） ----------
@@ -54,24 +56,29 @@ export default function ResourceHub({ notify, onJump }: ResourceHubProps) {
   const [importingId, setImportingId] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<AssetType>('presets');
   const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /** 拉取资源索引（首载与「刷新」共用）；失败置空列表并提示 */
+  const loadIndex = useCallback(
+    async (withSpinner: boolean): Promise<void> => {
+      if (withSpinner) setRefreshing(true);
+      try {
+        const idx = await apiFetch<{ entries: ResourceEntry[] }>('/api/io/resources/index');
+        setEntries(idx.entries);
+      } catch (err) {
+        setEntries([]);
+        notify('err', err instanceof Error ? err.message : '资源索引加载失败');
+      } finally {
+        if (withSpinner) setRefreshing(false);
+      }
+    },
+    [notify],
+  );
+
   useEffect(() => {
-    let alive = true;
-    apiFetch<{ entries: ResourceEntry[] }>('/api/io/resources/index')
-      .then((idx) => {
-        if (alive) setEntries(idx.entries);
-      })
-      .catch((err: unknown) => {
-        if (alive) {
-          setEntries([]);
-          notify('err', err instanceof Error ? err.message : '资源索引加载失败');
-        }
-      });
-    return () => {
-      alive = false;
-    };
-  }, [notify]);
+    void loadIndex(false);
+  }, [loadIndex]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -131,6 +138,40 @@ export default function ResourceHub({ notify, onJump }: ResourceHubProps) {
 
   return (
     <section aria-label="资源中心" className="flex flex-col gap-4">
+      {/* 来源说明 + 刷新 */}
+      <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-[hsl(var(--fg))]">资源从哪来</h3>
+          <button
+            type="button"
+            data-testid="hub-refresh"
+            onClick={() => void loadIndex(true)}
+            disabled={refreshing}
+            aria-label="刷新资源索引"
+            className="flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] transition-colors hover:border-[hsl(var(--accent))] disabled:opacity-40"
+          >
+            <span aria-hidden="true" className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>
+              ⟳
+            </span>
+            {refreshing ? '刷新中…' : '刷新'}
+          </button>
+        </div>
+        <ul className="mt-1 flex flex-col gap-0.5 text-xs leading-5 text-[hsl(var(--fg-muted))]">
+          <li>
+            <span className="font-medium text-[hsl(var(--fg))]">官方内置</span>
+            ：酒馆自带资源，本地复制导入，离线可用
+          </li>
+          <li>
+            <span className="font-medium text-[hsl(var(--fg))]">社区直链</span>
+            ：GitHub 公开仓库（Sudachi-Next、社区卡合集等），服务端拉取后入库
+          </li>
+          <li>
+            <span className="font-medium text-[hsl(var(--fg))]">自定义</span>
+            ：任意 https 直链或本地上传，不限于下方清单
+          </li>
+        </ul>
+      </div>
+
       {/* 搜索 + 类型筛选 */}
       <div className="flex flex-col gap-2">
         <input
@@ -151,17 +192,18 @@ export default function ResourceHub({ notify, onJump }: ResourceHubProps) {
 
       {/* 本地上传入口（复用各资产 Tab 的 multipart 导入管道） */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-[hsl(var(--border-soft))] px-3 py-2">
-        <span className="text-xs text-[hsl(var(--fg-muted))]">
+        <span className="flex items-center gap-1 text-xs text-[hsl(var(--fg-muted))]">
           本地上传：先选类型，再选酒馆格式文件（{uploadType === 'characters' ? '.png/.json' : '.json'}）
+          <FieldHint text="本地上传不限于下方清单：任何符合酒馆格式的文件（角色卡 PNG/JSON、世界书、预设 JSON）都可以导入。" />
         </span>
         <select
           value={uploadType}
           onChange={(e) => setUploadType(e.target.value as AssetType)}
-          className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 text-sm text-[hsl(var(--fg))]"
+          className={`min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-2 text-sm ${SELECT_TONE_CLS}`}
           aria-label="选择上传的资产类型"
         >
           {ASSET_META.map((m) => (
-            <option key={m.id} value={m.id}>
+            <option key={m.id} value={m.id} className={OPTION_CLS}>
               {m.label}
             </option>
           ))}
@@ -222,6 +264,10 @@ export default function ResourceHub({ notify, onJump }: ResourceHubProps) {
               >
                 {importingId === e.id ? '导入中…' : '导入'}
               </button>
+              <FieldHint
+                tapToExpand
+                text={`导入「${e.name}」到资产库：服务端拉取并校验后入库，成功后自动切换到对应标签页。`}
+              />
             </div>
           </li>
         ))}

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ApiError } from '../../api/client';
+import FieldHint from '../../components/FieldHint';
 import { useSettingsStore } from '../../stores/settings';
 
 import { getConfig, getHealth, putConfig } from './api';
@@ -102,8 +103,9 @@ export default function TtsPanel() {
           </p>
         ) : (
           <>
-            <label className="mb-1 block text-sm" htmlFor="tts-url">
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="tts-url">
               服务地址
+              <FieldHint text="easyvoice 语音合成服务的完整网址（含 https://），格式如 https://your-easyvoice.example.com；部署时由服务端初始化。" />
             </label>
             <input
               id="tts-url"

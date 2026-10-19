@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { ApiError } from '../../api/client';
+import FieldHint from '../../components/FieldHint';
 import type { LlmSource } from '../../stores/settings';
 
 import { getSecretsMask, putSecrets, testLlm } from './api';
@@ -179,8 +180,9 @@ export default function SecretsPanel() {
             </div>
             <p className="mb-4 text-xs text-[hsl(var(--fg-muted))]">{ch.desc}</p>
 
-            <label className="mb-1 block text-sm" htmlFor={`apikey-${ch.source}`}>
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor={`apikey-${ch.source}`}>
               API Key
+              <FieldHint text="服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" />
             </label>
             <input
               id={`apikey-${ch.source}`}
@@ -194,8 +196,9 @@ export default function SecretsPanel() {
               className="mb-3 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2.5 text-base outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
             />
 
-            <label className="mb-1 block text-sm" htmlFor={`baseurl-${ch.source}`}>
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor={`baseurl-${ch.source}`}>
               接口地址（选填，留空用官方默认）
+              <FieldHint text="使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" />
             </label>
             <input
               id={`baseurl-${ch.source}`}

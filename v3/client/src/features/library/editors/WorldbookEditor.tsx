@@ -11,6 +11,7 @@ import type { TavernWorldInfoEntry, TavernWorldInfoFile } from '@shared/tavern';
 import type { WorldbookAsset } from '@shared/worldbook';
 
 import { apiFetch } from '../../../api/client';
+import FieldHint from '../../../components/FieldHint';
 
 import EditorShell from './EditorShell';
 import EntryEditor from './EntryEditor';
@@ -230,15 +231,19 @@ export default function WorldbookEditor({ worldbookId, onClose, onSaved, notify 
         <div className="grid h-full grid-cols-1 md:grid-cols-[280px_1fr]">
           {/* 左：条目列表 */}
           <aside aria-label="条目列表" className="flex min-h-0 flex-col border-b border-[hsl(var(--border-soft))] md:border-b-0 md:border-r">
-            <div className="p-2">
+            <div className="flex items-start gap-1 p-2">
               <button
                 type="button"
                 data-testid="entry-create"
                 onClick={createEntry}
-                className="min-h-[36px] w-full rounded-lg bg-[hsl(var(--accent))] px-3 text-sm font-medium text-white"
+                className="min-h-[36px] flex-1 rounded-lg bg-[hsl(var(--accent))] px-3 text-sm font-medium text-white"
               >
                 新建条目
               </button>
+              <FieldHint
+                tapToExpand
+                text="新建条目：添加一条空白世界书设定，填入触发关键词与内容后记得点右上角「保存」。"
+              />
             </div>
             <ol className="flex-1 overflow-y-auto px-2 pb-2">
               {entries.map((entry, index) => (

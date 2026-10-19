@@ -12,6 +12,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import type { TavernWorldInfoEntry } from '@shared/tavern';
 
+import FieldHint from '../../../components/FieldHint';
 import { NumberField, SelectField, TextField, ToggleField } from './EditorShell';
 
 const LOGIC_OPTIONS = [
@@ -83,8 +84,11 @@ export function ChipsInput({ label, tip, testId, values, onChange }: ChipsInputP
   };
 
   return (
-    <div className="text-xs text-[hsl(var(--fg-muted))]" title={tip} data-testid={testId}>
-      {label}
+    <div className="text-xs text-[hsl(var(--fg-muted))]" data-testid={testId}>
+      <span className="flex items-center gap-1">
+        {label}
+        <FieldHint text={tip} />
+      </span>
       <div className="mt-1 flex min-h-[36px] flex-wrap items-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] px-2 py-1">
         {values.map((k) => (
           <span
@@ -135,14 +139,14 @@ export default function EntryEditor({ entry, onChange }: EntryEditorProps) {
 
       <ChipsInput
         label="主键"
-        tip="触发该条目的关键词，多个用逗号/回车分隔；支持 /正则/ 格式"
+        tip="触发关键词：最近的对话文本中出现任一主键，该条目才会被注入；多个用逗号/回车分隔，支持 /正则/ 格式"
         testId="chips-key"
         values={entry.key ?? []}
         onChange={(key) => onChange({ key })}
       />
       <ChipsInput
         label="二级键"
-        tip="配合下方逻辑对主键做二次过滤；留空则仅按主键判定"
+        tip="配合下方逻辑对主键做二次过滤（如要求主键与二级键同时命中）；留空则仅按主键判定"
         testId="chips-keysecondary"
         values={entry.keysecondary ?? []}
         onChange={(keysecondary) => onChange({ keysecondary })}
@@ -151,7 +155,7 @@ export default function EntryEditor({ entry, onChange }: EntryEditorProps) {
       <div className="grid grid-cols-2 gap-3">
         <SelectField
           label="二级键逻辑"
-          tip="主键命中后如何结合二级键判定"
+          tip="四选项：任一匹配=主键命中且任一二级键命中；全部匹配=二级键全命中；任一/全部不匹配=主键命中但二级键不命中"
           value={num(entry.selectiveLogic, 0)}
           onChange={(selectiveLogic) => onChange({ selectiveLogic })}
           options={LOGIC_OPTIONS}
@@ -192,7 +196,7 @@ export default function EntryEditor({ entry, onChange }: EntryEditorProps) {
       <div className="grid grid-cols-3 gap-3">
         <NumberField
           label="顺序 order"
-          tip="插入优先级，越大越靠前"
+          tip="插入优先级：数值越大越靠前（同时命中多条时的排序权重）"
           value={num(entry.order, 100)}
           onChange={(order) => onChange({ order: order ?? 100 })}
           min={0}

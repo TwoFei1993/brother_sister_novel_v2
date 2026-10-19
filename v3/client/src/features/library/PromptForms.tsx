@@ -10,6 +10,7 @@ import { useState } from 'react';
 import type { TavernPrompt } from '@shared/tavern';
 
 import { importAsset } from '../../api/library';
+import { OPTION_CLS, SELECT_TONE_CLS } from '../../components/ui-select';
 
 const ROLES = ['system', 'user', 'assistant'] as const;
 
@@ -60,10 +61,10 @@ export function NewPromptForm({ onCreate }: NewPromptFormProps) {
           aria-label="新提示词角色"
           value={role}
           onChange={(e) => setRole(e.target.value as (typeof ROLES)[number])}
-          className="min-h-[36px] w-28 rounded-lg border border-[hsl(var(--border-soft))] bg-transparent px-2 text-sm text-[hsl(var(--fg))]"
+          className={`min-h-[36px] w-28 rounded-lg border border-[hsl(var(--border-soft))] px-2 text-sm ${SELECT_TONE_CLS}`}
         >
           {ROLES.map((r) => (
-            <option key={r} value={r}>
+            <option key={r} value={r} className={OPTION_CLS}>
               {r}
             </option>
           ))}

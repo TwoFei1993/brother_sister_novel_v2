@@ -17,10 +17,12 @@ import type { MacroEnv } from '../../engine/types';
 import { countTokensApprox } from '../../engine/budget';
 import { substituteParams } from '../../engine/prompt/macros';
 import { assemblePrompt } from '../../engine/prompt/assemble';
-import { getPreset, updatePresetRaw, type LibraryAssetRef } from '../../api/library';
+import { getPreset, updatePresetRaw } from '../../api/library';
 
 import PromptRow from './PromptRow';
 import { NewPromptForm, PasteImportForm } from './PromptForms';
+import { describePrompt, isSudachiPreset } from './guides/preset-guides';
+import SudachiGuideCard from './guides/SudachiGuideCard';
 
 /** 一期装配感知的 marker 集（与 assemble.ts blocks 键一致 + 常见占位符） */
 const MARKER_IDS = new Set([
@@ -76,6 +78,7 @@ export interface PromptManagerProps {
 
 export default function PromptManager({ presetId, onImportedNew, notify }: PromptManagerProps) {
   const [raw, setRaw] = useState<TavernPreset | null>(null);
+  const [presetName, setPresetName] = useState('');
   const [dirty, setDirty] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -86,11 +89,15 @@ export default function PromptManager({ presetId, onImportedNew, notify }: Promp
   useEffect(() => {
     let alive = true;
     setRaw(null);
+    setPresetName('');
     setDirty(false);
     setExpandedId(null);
     getPreset(presetId)
       .then((a) => {
-        if (alive) setRaw(normalizePreset(a.raw));
+        if (alive) {
+          setRaw(normalizePreset(a.raw));
+          setPresetName(a.name);
+        }
       })
       .catch((err: unknown) => {
         notifyRef.current('err', err instanceof Error ? err.message : '预设加载失败');
@@ -253,15 +260,18 @@ export default function PromptManager({ presetId, onImportedNew, notify }: Promp
         />
       </div>
 
+      {isSudachiPreset(presetName) && <SudachiGuideCard />}
+
       <ol className="flex flex-col gap-2">
         {order.map((entry, index) => {
           const prompt = promptsById.get(entry.identifier);
-          const name = prompt?.name ?? entry.identifier;
+          const name = typeof prompt?.name === 'string' && prompt.name ? prompt.name : entry.identifier;
           return (
             <PromptRow
               key={entry.identifier}
               identifier={entry.identifier}
-              name={typeof name === 'string' && name ? name : entry.identifier}
+              name={name}
+              description={describePrompt(entry.identifier, name)}
               enabled={entry.enabled}
               marker={isMarker(prompt)}
               role={typeof prompt?.role === 'string' ? prompt.role : 'system'}
@@ -287,6 +297,3 @@ export default function PromptManager({ presetId, onImportedNew, notify }: Promp
     </section>
   );
 }
-
-/** 供列表刷新用的资产引用类型 re-export（减少页面 import 路径噪音） */
-export type { LibraryAssetRef };

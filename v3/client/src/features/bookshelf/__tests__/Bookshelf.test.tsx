@@ -61,11 +61,18 @@ afterEach(async () => {
 });
 
 describe('Bookshelf', () => {
-  it('空书架渲染空态与新建引导', async () => {
+  it('空书架渲染空态与三步引导（资源中心/向导快捷入口）', async () => {
     listWorksMock.mockResolvedValue([]);
     const container = await renderBookshelf();
     expect(container.textContent).toContain('书架空空如也');
     expect(container.textContent).toContain('新建作品');
+    // 三步引导卡与快捷入口（第二轮体验改进）
+    const guide = container.querySelector('[data-testid="bookshelf-empty-guide"]');
+    expect(guide).not.toBeNull();
+    expect(guide!.textContent).toContain('① 到「资源中心」导入或创建角色卡 / 世界书');
+    expect(guide!.textContent).toContain('③ 进入写作台，输入剧情方向开始创作');
+    const links = [...guide!.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/library?tab=hub', '/wizard']);
   });
 
   it('渲染作品卡片：标题、模式标签与作品计数', async () => {
