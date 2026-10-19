@@ -19,6 +19,7 @@ import { ZodError } from 'zod';
 import { httpLogger, logger } from './middleware/logger';
 import { HttpError, formatZodError } from './middleware/validate';
 import { coreRouter } from './routes/core';
+import { dataDir } from './routes/core/paths';
 import { libraryRouter } from './routes/library';
 import { llmRouter } from './routes/llm';
 import { worksRouter } from './routes/works';
@@ -60,6 +61,20 @@ export function createApp(): Express {
   app.disable('x-powered-by');
   app.use(httpLogger);
   app.use(express.json({ limit: '50mb' }));
+
+  // 角色卡头像静态托管（CardEditor 直接以 /data-assets/<id>.png 引用，无需 API 鉴权）。
+  // DATA_DIR 每请求实时读 env（与 libraryDir/dataDir 同约定，测试注入即生效）；
+  // handler 按目录惰性缓存，env 变更时重建一次，避免每请求新建 static 实例。
+  let avatarStatic: ReturnType<typeof express.static> | null = null;
+  let avatarDir = '';
+  app.use('/data-assets', (req, res, next) => {
+    const dir = resolve(dataDir(), 'characters');
+    if (dir !== avatarDir || avatarStatic === null) {
+      avatarDir = dir;
+      avatarStatic = express.static(dir);
+    }
+    avatarStatic(req, res, next);
+  });
 
   // 静态托管前端构建产物（构建后存在才挂，开发期跳过避免干扰）
   if (existsSync(PUBLIC_DIR)) {

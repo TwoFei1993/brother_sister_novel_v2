@@ -1,0 +1,200 @@
+/**
+ * 输出净化器（设计 §5.3 质量治理：从 postprocess.ts 迁出）
+ *
+ * 职责：与正则脚本/状态块/标题解析无关的纯文本净化——
+ * 内置卫生层（思考块/名字前缀/嵌套标题/自定义标签）→ 无标签思维流剥离 →
+ * 尾部元信息剥离 → 提纲分离 → 展示净化组合。
+ * postprocess.ts 的 postprocessMessage 总入口仍按原顺序调用本模块。
+ */
+
+/** 正文中的后续标题行（模型自拟的嵌套小标题，如 `## 卷一`）——连同行尾换行一并移除 */
+const HEADING_LINE_RE = /^#{1,6}[ \t]+\S.*\n?/gm;
+
+/** 提纲/要点的标记词（标题行或引导行含其一即判定为提纲块开始） */
+const OUTLINE_MARKERS = ['要点', '提纲', '大纲', '思路', '剧情走向', '本章梗概', 'outline'];
+
+/** 正文开始标记行（社区预设 COT 输出约定）：独立成行的 --- 分隔线 / 【正文】 / 最终正文： 等。
+ *  「正文」前允许 ≤6 字前缀（如「最终」），后必须紧跟冒号/星号/空白（前瞻）——叙述行不匹配。 */
+const BODY_MARKER_RE =
+  /^[ \t]*(?:[-*_]{3,}[ \t]*|【正文】|\*{0,2}(?:.{0,6})?正文\*{0,2}(?:[：：]|(?=[\s])))[ \t]*\n?/gm;
+
+/** 规划段关键词：命中其一即视作思考流段落（对照实测泄露样本归纳） */
+const PLANNING_RE =
+  /(让我|我需要|我应该|这意味着|剧情指引|场景回顾|性格分析|场景设定|场景设计|对话设计|写作风格|情感基调|输出格式|字数要求|回复选项|剧情摘要|思维链|构思|梳理|分析一下|正文开始|开始写正文|正式写作)/;
+
+/** 选项行：`A. xxx` / `B、xxx`（Sudachi 多回复选项格式，≥2 行连续构成选项块） */
+const OPTION_LINE_RE = /^[ \t]*[A-H][.、．][ \t]*\S/;
+
+/** 单行是否为列表项（短横线/星号/圆点/数字编号起始） */
+const LIST_ITEM_RE = /^\s*(?:[-*•·]|\d+[.、)]|[（(]\d+[)])\s+/;
+
+/**
+ * 内置卫生层（不依赖用户绑定正则，所有生成共用）：
+ * 1. 思考块剥离：成对 `<think>/<thinking>…</…>` 与流中断产生的未闭合尾部思考块；
+ * 2. 名字前缀剥离：模型模仿对话格式在正文开头写「名字：」；
+ * 3. 嵌套标题行清理：首行章节标题之外的 `#` 标题行。
+ */
+export function sanitizeOutput(raw: string, speakerName?: string): string {
+  let out = raw.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
+  out = out.replace(/<think(?:ing)?>[\s\S]*$/i, '');
+  if (speakerName) {
+    const escaped = speakerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`^\\s*${escaped}\\s*[:：]\\s*`), '');
+    // 无冒号名字前缀（「哥哥哥哥，你快看」= 前缀+对白）：只剥一层，保留对白里的称呼；
+    // 后随要求为重复名或标点引号——「Seraphina 的森林」这类正文用法不误伤
+    const bareNameRe = new RegExp('^' + escaped + '(?=' + escaped + "|[「」\"'，。：:—…])");
+    out = out.replace(bareNameRe, '');
+  }
+  out = out.replace(/^\s*(?:小说家|旁白|系统)\s*[:：]\s*/, '');
+  // 首行若是「正文」标记头（## 正文 / **正文** / 正文： 等）则剥离——它是 COT 边界标记而非章节标题
+  out = out.replace(/^[ \t]*(?:#{1,6}|\*{0,2}|-)[ \t]*正文[ \t]*[:：]?[ \t]*\*{0,2}[ \t]*\n/, '');
+  // 社区预设的标签化元信息（质检T4/对话实测）：HTML 注释 / <reply> / <S-summary> / <Aniplex> 等
+  // 自定义标签泛化剥离（含未闭合分支）——安全 HTML 排版标签（em/strong 等）豁免不误伤
+  const SAFE_HTML = new Set([
+    'p', 'em', 'strong', 'b', 'i', 'u', 's', 'br', 'span', 'div', 'hr',
+    'blockquote', 'code', 'pre', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'table', 'tr', 'td', 'th', 'sub', 'sup', 'small', 'mark',
+  ]);
+  const isCustomTag = (tag: string): boolean => !SAFE_HTML.has(tag.toLowerCase());
+  out = out.replace(/<!--[\s\S]*?-->/g, '');
+  out = out.replace(/<!--[\s\S]*$/g, '');
+  out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
+  out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*$/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
+  // 嵌套标题清理：首行若为章节标题（parseChapterTitle 的输入）则豁免，只清理其后的标题行
+  const firstBreak = out.indexOf('\n');
+  const head = firstBreak === -1 ? out : out.slice(0, firstBreak);
+  const rest = firstBreak === -1 ? '' : out.slice(firstBreak + 1).replace(HEADING_LINE_RE, '');
+  out = rest ? `${head}\n${rest}` : head;
+  return out.replace(/^\n+/, '').trim();
+}
+
+/**
+ * 剥离「无标签思维流」：模型把思考过程以纯文本形式混在正文里（实测 M3+Sudachi 组合）。
+ * 两层策略，均为高置信才动手：
+ * 1. 标记行：取最后一个「正文：/【正文】/---」标记行之后的内容（剩余过短则放弃）；
+ * 2. 段落启发：开头连续含规划关键词的段落逐段剥离（遇叙述段即停）。
+ */
+export function stripLooseThinking(content: string): string {
+  // 1) 标记行优先（高置信）
+  BODY_MARKER_RE.lastIndex = 0;
+  let last: RegExpExecArray | null = null;
+  for (let m = BODY_MARKER_RE.exec(content); m !== null; m = BODY_MARKER_RE.exec(content)) {
+    last = m;
+  }
+  if (last) {
+    const body = content.slice(last.index + last[0].length).replace(/^\n+/, '');
+    if (body.length >= Math.min(200, content.length * 0.15)) return body;
+  }
+  // 2) 段落启发：开头连续规划段逐段剥离；全部都是规划段时保护性放弃（防清空）
+  const paras = content.split(/\n{2,}/);
+  let i = 0;
+  while (i < paras.length) {
+    const p = paras[i].trim();
+    if (!p) {
+      i += 1;
+      continue;
+    }
+    // 超短无句读残段（如名字前缀剥离后的残留）：仅当其后紧跟规划段时才跳过（防误伤短开篇）
+    if (p.length <= 6 && !/[。！？」』]$/.test(p)) {
+      const next = paras[i + 1]?.trim() ?? '';
+      if (next && PLANNING_RE.test(next)) {
+        i += 1;
+        continue;
+      }
+      break;
+    }
+    const isPlanning = PLANNING_RE.test(p) && !/[」』]"?$/.test(p);
+    if (isPlanning) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  if (i >= paras.length) return content; // 整篇都是思考流，保留原样
+  const body = paras.slice(i).join('\n\n');
+  // 剥后正文过短视为误判（保守：不动原文；chat 短对话约 20 字起，取 15）
+  return i > 0 && body.trim().length >= 15 ? body : content;
+}
+
+/**
+ * 剥离尾部元信息块（质检T4 实测：Sudachi 在正文后追加「A./B./C./D. 选项 + 剧情摘要」）。
+ * 判定：存在 ≥2 行连续选项行、且位于全文后半段 → 从选项块起点截断到结尾。
+ * （选项与随后的摘要段都是交互元信息，不属于小说正文。）
+ */
+export function stripTailMeta(content: string): string {
+  const lines = content.split('\n');
+  const tailStart = Math.floor(lines.length * 0.4);
+  for (let i = tailStart; i < lines.length - 1; i += 1) {
+    if (OPTION_LINE_RE.test(lines[i]) && OPTION_LINE_RE.test(lines[i + 1])) {
+      return content
+        .slice(0, content.indexOf(lines[i]))
+        .replace(/\n+$/, '')
+        .trim();
+    }
+  }
+  return content;
+}
+
+/** 展示净化组合：内置卫生层先行（名字/标签/注释清理，让段落启发看干净的文本）
+ *  → 思考流剥离 → 尾部元信息剥离（供生成时与显示时共用） */
+export function presentable(content: string, speakerName?: string): string {
+  const cleaned = stripTailMeta(stripLooseThinking(sanitizeOutput(content, speakerName)));
+  // 剥离后一无所有 = 该章只剩元信息（选项/摘要/思考）——给出重roll引导而非空白
+  if (!cleaned.trim() && content.length > 200) {
+    return '（本章只剩元信息，没有正文——建议 🎲 重新生成本章或切换候选。）';
+  }
+  return cleaned;
+}
+
+/** 单行是否像「提纲引导行」（含标记词，或以【】/**包裹的短标签且以冒号结尾） */
+function isOutlineLead(line: string): boolean {
+  if (OUTLINE_MARKERS.some((m) => line.includes(m))) return true;
+  return /^\s*(?:【[^】]{1,12}】|\*\*[^*]{1,12}\*\*)\s*[:：]?\s*$/.test(line);
+}
+
+export interface SplitOutline {
+  /** 提纲块文本（含引导行；无提纲时为 undefined） */
+  outline?: string;
+  /** 正文（提纲之后的全部内容；无提纲时与输入相同） */
+  body: string;
+}
+
+/**
+ * 从章节正文头部分离「要点提纲」块（用户需求：显示时默认折叠、朗读跳过）。
+ * 判定：从首行开始连续匹配——提纲引导行 / 列表项 / 短行（≤30 字且非叙述段）；
+ * 一旦遇到长叙述行即停止。整块 ≥1 行且不超过 20 行才认定为提纲，否则视为正文。
+ */
+export function splitOutline(content: string): SplitOutline {
+  const lines = content.split('\n');
+  let i = 0;
+  let sawMarker = false;
+  while (i < lines.length && i < 20) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+    if (isOutlineLead(trimmed)) {
+      sawMarker = true;
+      i += 1;
+      continue;
+    }
+    if (LIST_ITEM_RE.test(line)) {
+      i += 1;
+      continue;
+    }
+    // 短行：可能是提纲的散文条目；长叙述行：正文开始
+    if (trimmed.length <= 30 && !/[。！？」』"']$/.test(trimmed)) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  const rest = lines.slice(i).join('\n').replace(/^\n+/, '');
+  // 必须见到明确标记词/引导行才算提纲（纯列表开头可能是正文手法），且正文确实存在
+  if (sawMarker && rest.trim()) {
+    return { outline: lines.slice(0, i).join('\n').trim(), body: rest };
+  }
+  return { body: content };
+}
