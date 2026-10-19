@@ -34,8 +34,14 @@ export interface ConfigDto {
   [key: string]: unknown;
 }
 
-/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json） */
-const DEFAULT_PREFS: LlmPrefs = { source: 'claude', model: 'MiniMax-M3' };
+/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json）；预算默认拉满 1M（MiniMax-M3 支持） */
+const DEFAULT_PREFS: LlmPrefs = {
+  source: 'claude',
+  model: 'MiniMax-M3',
+  maxContext: 1000000,
+  maxTokens: 8192,
+  temperature: 0.8,
+};
 
 /** localStorage 持久化切片（partialize 输出；migrate 返回值同构） */
 interface PersistedSettings {
@@ -65,14 +71,18 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'v3-llm-prefs',
-      version: 2,
+      version: 3,
       migrate: (persisted: unknown, version: number): PersistedSettings => {
         const prev =
           typeof persisted === 'object' && persisted !== null
             ? (persisted as { llmPrefs?: LlmPrefs })
             : {};
-        // 版本 0→1：丢弃旧持久化偏好，改用新默认通道；1→2：保留偏好，新增 uiTheme
-        const llmPrefs = version < 1 ? { ...DEFAULT_PREFS } : (prev.llmPrefs ?? { ...DEFAULT_PREFS });
+        // 0→1 丢弃旧偏好换新默认通道；1→2 新增 uiTheme；2→3 为缺失的预算字段补默认值
+        // （保留用户已显式设置的字段，仅补缺——修复旧浏览器预算过小导致续写截断前文）
+        const llmPrefs =
+          version < 1
+            ? { ...DEFAULT_PREFS }
+            : { ...DEFAULT_PREFS, ...(prev.llmPrefs ?? {}), model: prev.llmPrefs?.model ?? DEFAULT_PREFS.model };
         return { llmPrefs, uiTheme: null };
       },
       storage: createJSONStorage(() => localStorage),

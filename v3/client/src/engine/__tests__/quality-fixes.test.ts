@@ -57,3 +57,49 @@ describe('postprocessMessage 集成卫生层', () => {
     expect(r.content).toBe('雨夜逃亡。');
   });
 });
+
+describe('提纲分离 splitOutline', () => {
+  it('分离带标记词的要点提纲（列表式）', async () => {
+    const { splitOutline } = await import('../prompt/postprocess');
+    const content = '**本章要点**\n- 林枫在便利店发现异响\n- 神秘店员现身\n- 结尾留下悬念\n\n天蒙蒙亮的时候，林枫被一阵急促的脚步声惊醒。他几乎是本能地从床上弹起。';
+    const r = splitOutline(content);
+    expect(r.outline).toContain('本章要点');
+    expect(r.body).toBe('天蒙蒙亮的时候，林枫被一阵急促的脚步声惊醒。他几乎是本能地从床上弹起。');
+  });
+
+  it('分离编号式提纲（含引导行「剧情走向：」）', async () => {
+    const { splitOutline } = await import('../prompt/postprocess');
+    const content = '剧情走向：\n1. 开篇雨夜\n2. 追兵现身\n\n雨点砸在窗棂上，她攥紧了那半块玉佩。';
+    const r = splitOutline(content);
+    expect(r.outline).toContain('剧情走向');
+    expect(r.body.startsWith('雨点砸在窗棂上')).toBe(true);
+  });
+
+  it('无提纲标记时原样返回（正文以列表开头不算提纲）', async () => {
+    const { splitOutline } = await import('../prompt/postprocess');
+    const content = '- 第一天\n- 第二天\n这样的日子持续了很久，直到那个人的出现改变了一切。';
+    const r = splitOutline(content);
+    expect(r.outline).toBeUndefined();
+    expect(r.body).toBe(content);
+  });
+});
+
+describe('防失忆：planContext 上下文规划', () => {
+  it('预算充足时全量保留', async () => {
+    const { planContext } = await import('../../hooks/generation-pipeline');
+    const msgs = [1, 2, 3].map((i) => ({ id: `m${i}`, role: 'assistant' as const, name: '小说家', content: '短'.repeat(50), createdAt: i, swipes: ['短'.repeat(50)], swipeId: 0, extra: {} }));
+    const r = planContext(msgs, 10000);
+    expect(r.dropped).toHaveLength(0);
+    expect(r.kept).toHaveLength(3);
+  });
+
+  it('超预算时从最旧侧切出待摘要区（保留最新）', async () => {
+    const { planContext } = await import('../../hooks/generation-pipeline');
+    const long = '字'.repeat(3000);
+    const msgs = [1, 2, 3, 4].map((i) => ({ id: `m${i}`, role: 'assistant' as const, name: '小说家', content: long, createdAt: i, swipes: [long], swipeId: 0, extra: {} }));
+    const r = planContext(msgs, 5000); // 每条约 4500 token，预算只装得下 1 条
+    expect(r.kept).toHaveLength(1);
+    expect(r.kept[0].id).toBe('m4');
+    expect(r.dropped.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+  });
+});

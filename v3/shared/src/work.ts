@@ -107,6 +107,10 @@ export const NovelSettingsSchema = z.strictObject({
   variables: z.record(z.string(), z.string()).optional(),
   /** 快速指令（C 工作台侧栏一键复填的常用指令，作品级）；缺省视为空表 */
   quickDirectives: z.array(z.string()).optional(),
+  /** 滚动摘要（防失忆）：前文超出上下文预算的部分被 LLM 压缩后的摘要文本，装配时注入 */
+  rollingSummary: z.string().optional(),
+  /** 已摘要覆盖的消息条数（增量摘要游标：历史超过此数才需要再次摘要） */
+  summaryUpTo: z.number().int().nonnegative().optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 

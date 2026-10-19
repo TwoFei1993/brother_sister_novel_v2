@@ -125,6 +125,65 @@ export interface PostprocessOpts {
   speakerName?: string;
 }
 
+/** 提纲/要点的标记词（标题行或引导行含其一即判定为提纲块开始） */
+const OUTLINE_MARKERS = ['要点', '提纲', '大纲', '思路', '剧情走向', '本章梗概', 'outline'];
+
+/** 单行是否为列表项（短横线/星号/圆点/数字编号起始） */
+const LIST_ITEM_RE = /^\s*(?:[-*•·]|\d+[.、)]|[（(]\d+[)])\s+/;
+
+/** 单行是否像「提纲引导行」（含标记词，或以【】/**包裹的短标签且以冒号结尾） */
+function isOutlineLead(line: string): boolean {
+  if (OUTLINE_MARKERS.some((m) => line.includes(m))) return true;
+  return /^\s*(?:【[^】]{1,12}】|\*\*[^*]{1,12}\*\*)\s*[:：]?\s*$/.test(line);
+}
+
+export interface SplitOutline {
+  /** 提纲块文本（含引导行；无提纲时为 undefined） */
+  outline?: string;
+  /** 正文（提纲之后的全部内容；无提纲时与输入相同） */
+  body: string;
+}
+
+/**
+ * 从章节正文头部分离「要点提纲」块（用户需求：显示时默认折叠、朗读跳过）。
+ * 判定：从首行开始连续匹配——提纲引导行 / 列表项 / 短行（≤30 字且非叙述段）；
+ * 一旦遇到长叙述行即停止。整块 ≥1 行且不超过 20 行才认定为提纲，否则视为正文。
+ */
+export function splitOutline(content: string): SplitOutline {
+  const lines = content.split('\n');
+  let i = 0;
+  let sawMarker = false;
+  while (i < lines.length && i < 20) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+    if (isOutlineLead(trimmed)) {
+      sawMarker = true;
+      i += 1;
+      continue;
+    }
+    if (LIST_ITEM_RE.test(line)) {
+      i += 1;
+      continue;
+    }
+    // 短行：可能是提纲的散文条目；长叙述行：正文开始
+    if (trimmed.length <= 30 && !/[。！？」』"']$/.test(trimmed)) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  const rest = lines.slice(i).join('\n').replace(/^\n+/, '');
+  // 必须见到明确标记词/引导行才算提纲（纯列表开头可能是正文手法），且正文确实存在
+  if (sawMarker && rest.trim()) {
+    return { outline: lines.slice(0, i).join('\n').trim(), body: rest };
+  }
+  return { body: content };
+}
+
 export interface PostprocessResult {
   content: string;
   title: string;

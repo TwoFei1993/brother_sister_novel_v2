@@ -21,6 +21,8 @@ import { apiFetch } from '../api/client';
 import type { RegexAsset } from '../api/library';
 import { tokenizeMessages, type GenerateMessage } from '../api/llm';
 import type { MacroEnv } from '../engine/types';
+import { countTokensApprox } from '../engine/budget';
+import { buildSummarizePrompt } from '../engine/prompt/memory';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { postprocessMessage } from '../engine/prompt/postprocess';
 import { scanWorldInfo, type ScanSettings } from '../engine/worldbook';
@@ -122,6 +124,52 @@ const SCAN_SETTINGS: ScanSettings = {
   maxRecursionSteps: 10,
 };
 
+/** 上下文规划（纯函数）：预算装得下则全量保留；装不下时从最旧侧切出 dropped（待摘要区） */
+export function planContext(history: Message[], budget: number): { kept: Message[]; dropped: Message[] } {
+  const tokens = history.map((m) => countTokensApprox(m.content));
+  const total = tokens.reduce((a, b) => a + b, 0);
+  if (total <= budget) return { kept: history, dropped: [] };
+  let acc = 0;
+  let cut = history.length;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    acc += tokens[i];
+    if (acc > budget) {
+      cut = i + 1;
+      break;
+    }
+  }
+  return { kept: history.slice(cut), dropped: history.slice(0, cut) };
+}
+
+/** 滚动摘要（防失忆）：把被预算切出的最旧消息压缩为摘要文本；失败返回 null（生成不阻塞） */
+export async function summarizeDropped(
+  prefs: LlmPrefs,
+  prevSummary: string | undefined,
+  texts: string[],
+): Promise<string | null> {
+  if (texts.length === 0) return null;
+  const { system, user } = buildSummarizePrompt(prevSummary ?? '', texts);
+  try {
+    const out = (await apiFetch('/api/llm/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        source: prefs.source,
+        model: prefs.model || undefined,
+        stream: false,
+        params: { max_tokens: 700, temperature: 0.3 },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+    })) as { text?: string };
+    const text = out.text?.trim();
+    return text ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 拉取作品绑定的正则脚本（生成轨装配 + 显示轨渲染共用；单项失败跳过不阻塞） */
 export async function loadRegexScripts(work: Work): Promise<TavernRegexScript[]> {
   const list = await Promise.all(
@@ -210,11 +258,40 @@ export async function scanAndAssemble(
     settings: SCAN_SETTINGS,
     macroEnv: env,
   });
-  const maxContext = prefs.maxContext ?? 8192;
-  const maxTokens = prefs.maxTokens ?? 2048;
+  // 预算默认拉满：MiniMax-M3 支持百万级上下文；过小的预算会把前文章节全部截掉，
+  // 导致续写脱离前文（质量测试后用户实测踩中）。用户显式设置仍优先生效。
+  const maxContext = prefs.maxContext ?? 1000000;
+  const maxTokens = prefs.maxTokens ?? 8192;
   const budget = Math.max(0, maxContext - maxTokens);
 
-  let history = messages;
+  // 防失忆（§5.3 滚动摘要）：历史超出预算的最旧部分不再静默丢弃，
+  // 而是压缩成滚动摘要注入（增量游标 summaryUpTo 避免重复摘要）。
+  const plan = planContext(messages, budget);
+  let summary = work.settings.rollingSummary;
+  if (plan.dropped.length > 0 && (work.settings.summaryUpTo ?? 0) < plan.dropped.length) {
+    const fresh = await summarizeDropped(
+      prefs,
+      summary,
+      plan.dropped.map((m) => m.content),
+    );
+    if (fresh !== null) {
+      summary = fresh;
+      // best-effort 持久化（失败仅影响本会话，下次生成会重新摘要）
+      try {
+        await apiFetch(`/api/works/${work.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            revision: work.revision,
+            settings: { ...work.settings, rollingSummary: fresh, summaryUpTo: plan.dropped.length },
+          }),
+        });
+      } catch {
+        /* 摘要照常用于本次组装 */
+      }
+    }
+  }
+
+  let history = plan.kept;
   for (;;) {
     const result = assemblePrompt({
       preset: assets.preset ?? buildFallbackPreset(tail.kind),
@@ -223,6 +300,7 @@ export async function scanAndAssemble(
       allowCardOverride: work.allowCardOverride !== false,
       worldbookScan: scan,
       workSettings: work.settings,
+      ...(summary ? { summary } : {}),
       history,
       ...(tail.kind === 'directive' ? { directive: tail.text } : { userMessage: tail.text }),
       macroEnv: env,
