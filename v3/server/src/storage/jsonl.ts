@@ -3,7 +3,7 @@
 // 读取支持尾部窗口（tail）、游标分页（before）、增量同步（since）三种窗口。
 // 当前实现为整文件读入后切片：单用户场景文件量级可控；文件超大时可再优化为反向块读。
 
-import { appendFile, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 /** 行对象约束：必须带唯一 id，游标/增量都以 id 定位 */
@@ -102,12 +102,11 @@ export async function appendLine<T extends HasId>(file: string, obj: T): Promise
   await appendFile(file, `${JSON.stringify(obj)}\n`, 'utf8');
 }
 
-/** 整文件重写（编辑/删除中间行时用）：tmp+rename 原子替换，旧行整体被替换 */
+/** 整文件重写（编辑/删除中间行时用）：tmp+rename 原子替换（rename 可覆盖，review #12），旧行整体被替换 */
 export async function rewriteAll<T extends HasId>(file: string, objs: T[]): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   const body = objs.map((o) => JSON.stringify(o)).join('\n');
   await writeFile(tmp, objs.length > 0 ? `${body}\n` : '', 'utf8');
-  await unlink(file).catch(() => undefined);
   await rename(tmp, file);
 }

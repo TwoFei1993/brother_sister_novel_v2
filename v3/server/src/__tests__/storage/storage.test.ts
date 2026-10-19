@@ -94,7 +94,7 @@ describe('store.ts 原子写', () => {
     await writeJsonAtomic(file, { id: 'w1', revision: 1, title: '旧' });
     expect(await readJson(file)).toEqual({ id: 'w1', revision: 1, title: '旧' });
 
-    // 覆盖已存在的文件（Windows 上 rename 前需 unlink 目标的分支）
+    // 覆盖已存在的文件（fs.rename 在 Windows 经 MOVEFILE_REPLACE_EXISTING 可直接覆盖，review #12）
     await writeJsonAtomic(file, { id: 'w1', revision: 2, title: '新' });
     expect(await readJson(file)).toEqual({ id: 'w1', revision: 2, title: '新' });
 

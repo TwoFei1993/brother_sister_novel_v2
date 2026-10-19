@@ -3,6 +3,7 @@
 // 写入统一走 tmp+rename 原子替换，保证任意时刻磁盘上的文件都是完整可解析的。
 
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+
 import { dirname } from 'node:path';
 
 /** 确保目录存在（递归创建，幂等） */
@@ -35,14 +36,15 @@ export async function readJson<T>(file: string): Promise<T | null> {
 
 /**
  * 原子写 JSON：先写 <file>.tmp，再 rename 到目标。
- * Windows 上 rename 不能覆盖已存在文件（EPERM），故 rename 前先 unlink 目标（不存在则容错跳过）。
+ * Node 的 fs.rename 在 Windows 上经 libuv MoveFileExW(MOVEFILE_REPLACE_EXISTING) 实现，
+ * 可直接覆盖已存在文件——先 unlink 反而制造「目标短暂不存在」的窗口（rename 失败时
+ * 旧文件已删、数据丢失），故直接 rename（review #12）。
  * 任意时刻目标文件要么是旧完整内容、要么是新完整内容，不会出现半截 JSON。
  */
 export async function writeJsonAtomic<T>(file: string, data: T): Promise<void> {
   await ensureDir(dirname(file));
   const tmp = `${file}.tmp`;
   await writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
-  await unlink(file).catch(() => undefined);
   await rename(tmp, file);
 }
 

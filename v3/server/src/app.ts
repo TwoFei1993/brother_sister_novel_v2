@@ -13,6 +13,7 @@ import express, {
   type Request,
   type Response,
 } from 'express';
+import multer from 'multer';
 import { ZodError } from 'zod';
 
 import { httpLogger, logger } from './middleware/logger';
@@ -43,6 +44,10 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
   }
   if (err instanceof SyntaxError && (err as { status?: number }).status === 400) {
     res.status(400).json({ error: '请求体不是合法 JSON' });
+    return;
+  }
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    res.status(413).json({ error: '文件超过大小限制' }); // 上传超限是客户端问题，非 500（review #8）
     return;
   }
   logger.error({ err }, '未处理异常');

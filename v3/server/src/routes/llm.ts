@@ -3,7 +3,9 @@
  *
  * 全部需登录（authRequired）；无状态不落盘（§9.2）——生成内容由前端暂存与入库。
  * 流式帧协议：增量 `data: {"text": "...", "raw": <上游原chunk>}`，收束 `data: [DONE]`，
- * 流中错误 `data: {"error": {code, message}}`；未开流前的错误一律 502 JSON {code, message}。
+ * 流中错误 `data: {"error": {code, message}}`；未开流前的错误一律 502 JSON {code, message}，
+ * 开流后异常也以 error 帧收尾（HTTP 已 200，不可再改状态码）。
+ * 客户端提前断开时中止上游请求（res close → abort signal），避免空烧 token。
  */
 import type { Request, Response } from 'express';
 import { Router } from 'express';
@@ -103,7 +105,20 @@ llmRouter.post('/llm/generate', zodBody(generateSchema), wrap(async (req, res) =
     params?: GenParams;
     stream?: boolean;
   };
-  const events = runGenerate({ source, model, messages, params, stream });
+  // 客户端断开 → 中止上游请求（省 token，review #6）；正常完成后 close 不触发中止
+  const clientGone = new AbortController();
+  let finished = false;
+  res.on('close', () => {
+    if (!finished) clientGone.abort();
+  });
+  const events = runGenerate({
+    source,
+    model,
+    messages,
+    params,
+    stream,
+    signal: clientGone.signal,
+  });
 
   if (!stream) {
     let text = '';
@@ -112,6 +127,7 @@ llmRouter.post('/llm/generate', zodBody(generateSchema), wrap(async (req, res) =
         if (ev.kind === 'text') text += ev.text;
       }
     } catch (e) {
+      if (clientGone.signal.aborted) return; // 断开引发的中止，连接已不可写
       res.status(502).json(errorPayload(e));
       return;
     }
@@ -132,7 +148,20 @@ llmRouter.post('/llm/generate', zodBody(generateSchema), wrap(async (req, res) =
     for await (const ev of events) sendEvent(res, ev);
     res.end();
   } catch (e) {
+    if (clientGone.signal.aborted) {
+      res.end(); // 客户端已断开，仅收尾
+      return;
+    }
+    if (res.headersSent) {
+      // 已开流：状态码不可再改，必须以 SSE error 帧收尾（保持帧协议，review #5）
+      const payload = errorPayload(e);
+      res.write(`data: ${JSON.stringify({ error: payload })}\n\n`);
+      res.end();
+      return;
+    }
     res.status(502).json(errorPayload(e));
+  } finally {
+    finished = true;
   }
 }));
 

@@ -96,6 +96,8 @@ authRouter.post('/login', zodBody(loginSchema), (req, res) => {
   res.cookie(COOKIE_NAME, signToken(), {
     httpOnly: true,
     sameSite: 'lax',
+    // 生产仅经 HTTPS 传输；本地 http dev（NODE_ENV 未设/development）不启用以免登录失效（review #14）
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: TOKEN_TTL_MS,
   });

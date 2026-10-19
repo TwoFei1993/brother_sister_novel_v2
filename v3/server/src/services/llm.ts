@@ -46,6 +46,8 @@ export interface GenerateInput {
   messages: ChatMessage[];
   params?: GenParams;
   stream: boolean;
+  /** 外部中止信号（客户端断开时由路由层触发，中止上游以省 token，review #6） */
+  signal?: AbortSignal;
 }
 
 /** 统一流事件：text=增量（raw 为上游原 chunk 供调试透传）、done=正常收束、error=分类错误 */
@@ -111,6 +113,10 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), upstreamTimeoutMs());
+  // 外部中止信号（客户端断开）并入同一 controller：任一触发即中止上游请求（review #6）
+  const onExternalAbort = (): void => controller.abort();
+  if (input.signal?.aborted) controller.abort();
+  input.signal?.addEventListener('abort', onExternalAbort, { once: true });
   let emitted = false;
 
   try {
@@ -165,5 +171,6 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
     }
   } finally {
     clearTimeout(timer);
+    input.signal?.removeEventListener('abort', onExternalAbort);
   }
 }

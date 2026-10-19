@@ -6,8 +6,10 @@
  * remote 用例用 vi.stubGlobal 模拟 fetch（超时/非法 JSON），不触真实网络：
  *   - 真实 https 慢服务器需证书，且 http://127.0.0.1 会被协议白名单先拒，
  *     故以 stub fetch + signal abort 模拟超时（与 undici TimeoutError 同语义）。
+ * DNS lookup 一律 mock（review #4 SSRF 用例需注入私网解析结果，且 stub fetch 域名
+ * 不应触发真实 DNS）：默认解析到公网 IP，私网用例逐次覆盖。
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +26,12 @@ import { signToken } from '../../middleware/auth';
 import { HttpError } from '../../middleware/validate';
 import { libraryRouter } from '../../routes/library';
 import { libraryDir } from '../../routes/library/crud';
+
+// DNS lookup mock：默认公网地址（hoisted 供 vi.mock 工厂与用例内覆写共用）
+const lookupMock = vi.hoisted(() =>
+  vi.fn(async (_hostname: string, _options?: unknown) => [{ address: '93.184.216.34', family: 4 }]),
+);
+vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
 
 // ---------- 测试装置 ----------
 
@@ -76,6 +84,10 @@ afterAll(async () => {
   delete process.env.RESOURCES_FETCH_TIMEOUT_MS;
   vi.unstubAllGlobals();
   await rm(root, { recursive: true, force: true });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals(); // 每用例独立的 fetch stub，互不泄漏
 });
 
 // ---------- 用例 ----------
@@ -208,5 +220,112 @@ describe('POST /api/io/resources/fetch — remote', () => {
       .send({ kind: 'remote', url: 'https://example.com/unknown.json' });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('无法识别');
+  });
+});
+
+describe('remote 安全收口（review #4）', () => {
+  const VALID_WORLDBOOK = JSON.stringify({
+    entries: { '0': { uid: 0, key: ['魔法'], content: '这个世界存在魔法' } },
+  });
+
+  it('DNS 解析到私网/环回/链路本地地址 → 400 拒绝（SSRF 黑名单）', async () => {
+    const blocked: Array<[string, number]> = [
+      ['127.0.0.1', 4],
+      ['10.1.2.3', 4],
+      ['172.16.0.9', 4],
+      ['192.168.1.1', 4],
+      ['169.254.9.9', 4],
+      ['100.64.0.1', 4],
+      ['::1', 6],
+      ['fd12::1', 6],
+      ['fe80::1', 6],
+      ['::ffff:127.0.0.1', 6],
+    ];
+    for (const [address, family] of blocked) {
+      lookupMock.mockResolvedValueOnce([{ address, family }]);
+      const res = await request(makeApp())
+        .post('/api/io/resources/fetch')
+        .set(authed())
+        .send({ kind: 'remote', url: 'https://evil.example.com/preset.json' });
+      expect(res.status, `地址 ${address} 应被拒绝`).toBe(400);
+      expect(res.body.error).toContain('内网');
+    }
+  });
+
+  it('公网解析 + 合法 JSON → 正常导入（黑名单不误伤公网）', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(VALID_WORLDBOOK, { status: 200 })));
+    const res = await request(makeApp())
+      .post('/api/io/resources/fetch')
+      .set(authed())
+      .send({ kind: 'remote', url: 'https://ok.example.com/wb.json' });
+    expect(res.status).toBe(201);
+    expect(res.body.assetType).toBe('worldbooks');
+  });
+
+  it('域名无法解析 → 400', async () => {
+    lookupMock.mockRejectedValueOnce(new Error('ENOTFOUND'));
+    const res = await request(makeApp())
+      .post('/api/io/resources/fetch')
+      .set(authed())
+      .send({ kind: 'remote', url: 'https://no-such.example.com/wb.json' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('无法解析');
+  });
+
+  it('响应体超 20MB → 流式中止 413（不整包下载）', async () => {
+    const big = new Uint8Array(20 * 1024 * 1024 + 1);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(big, { status: 200 })));
+    const res = await request(makeApp())
+      .post('/api/io/resources/fetch')
+      .set(authed())
+      .send({ kind: 'remote', url: 'https://big.example.com/huge.json' });
+    expect(res.status).toBe(413);
+    expect(res.body.error).toContain('20MB');
+  });
+
+  it('302 重定向到 http:// → 400 拒绝（重定向不豁免协议校验）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(null, { status: 302, headers: { location: 'http://insecure.example.com/preset.json' } }),
+      ),
+    );
+    const res = await request(makeApp())
+      .post('/api/io/resources/fetch')
+      .set(authed())
+      .send({ kind: 'remote', url: 'https://redirect.example.com/a.json' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('https');
+  });
+
+  it('302 重定向到公网 https → 跟随一跳并以最终 URL 导入成功', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: 'https://final.example.com/preset.json' } }),
+      )
+      .mockResolvedValueOnce(new Response(VALID_WORLDBOOK, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await request(makeApp())
+      .post('/api/io/resources/fetch')
+      .set(authed())
+      .send({ kind: 'remote', url: 'https://start.example.com/a.json' });
+    expect(res.status).toBe(201);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]![0])).toContain('final.example.com');
+  });
+
+  it('重定向超过 3 跳 → 502', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 302, headers: { location: 'https://next.example.com/b.json' } })),
+    );
+    const res = await request(makeApp())
+      .post('/api/io/resources/fetch')
+      .set(authed())
+      .send({ kind: 'remote', url: 'https://loop.example.com/a.json' });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain('3 跳');
   });
 });

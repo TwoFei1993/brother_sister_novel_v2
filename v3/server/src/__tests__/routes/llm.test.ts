@@ -7,7 +7,13 @@
  * 数据落在 os.tmpdir() 随机临时目录；超时用 LLM_UPSTREAM_TIMEOUT_MS env 注入。
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -224,6 +230,82 @@ describe('POST /api/llm/generate 流式（SSE）', () => {
         expect(JSON.parse(frames[0]).text).toBe('写到一半');
         const last = JSON.parse(frames.at(-1)!);
         expect(last.error.code).toBe('LLM_NET');
+      },
+    );
+  });
+
+  it('上游发首帧后挂起超时 → 部分帧 + LLM_TIMEOUT error 帧 + HTTP 200（流中异常不破坏帧协议，review #5）', async () => {
+    process.env.LLM_UPSTREAM_TIMEOUT_MS = '150';
+    await withUpstream(
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '开头' } }] })}\n\n`);
+        // 之后永久挂起：由服务端超时中止，必须以 error 帧收尾而非 502 JSON
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send(GEN_BODY);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/event-stream');
+        const frames = sseFrames(res.text);
+        expect(JSON.parse(frames[0]).text).toBe('开头');
+        const last = JSON.parse(frames.at(-1)!);
+        expect(last.error.code).toBe('LLM_TIMEOUT');
+        expect(res.text).not.toContain('[DONE]'); // 异常收尾不发正常完成帧
+      },
+    );
+  });
+});
+
+describe('客户端断开联动（review #6）', () => {
+  it('客户端提前断开 → 服务端中止上游请求（上游侧连接被关闭）', async () => {
+    let upstreamClosed = false;
+    let notifyClosed: (() => void) | undefined;
+    const upstreamClosedPromise = new Promise<void>((ok) => (notifyClosed = ok));
+    await withUpstream(
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.on('close', () => {
+          upstreamClosed = true;
+          notifyClosed?.();
+        });
+        const timer = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'x' } }] })}\n\n`);
+          }
+        }, 10);
+        res.on('close', () => clearInterval(timer));
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const cookie = await loginCookie(app);
+        // supertest 无法中途断开，改用原生 http 请求 + 手动 destroy
+        const server = app.listen(0, '127.0.0.1');
+        await new Promise<void>((ok) => server.once('listening', () => ok()));
+        const port = (server.address() as AddressInfo).port;
+        const client = httpRequest(
+          {
+            host: '127.0.0.1',
+            port,
+            path: '/api/llm/generate',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Cookie: cookie },
+          },
+          (r) => {
+            r.once('data', () => client.destroy()); // 收到首个 SSE 块即断开
+          },
+        );
+        client.write(JSON.stringify(GEN_BODY));
+        client.end();
+        await Promise.race([upstreamClosedPromise, new Promise<void>((ok) => setTimeout(ok, 3000))]);
+        expect(upstreamClosed).toBe(true); // 上游感知到连接关闭 = 服务端已中止请求
+        server.closeAllConnections?.();
+        await new Promise<void>((ok) => server.close(() => ok()));
       },
     );
   });

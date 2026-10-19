@@ -8,7 +8,8 @@
  *   POST /api/io/resources/fetch  body {kind:'builtin', path} | {kind:'remote', url}
  *                                 → 拉取 → 格式嗅探 → 既有 normalize → 入库 → 201
  * 安全：builtin 路径白名单（限定 resources/builtin/ 内，拒 .. 与盘符）；
- *       remote 仅 https、10s 超时（测试可用 RESOURCES_FETCH_TIMEOUT_MS 覆盖）、20MB 上限。
+ *       remote 仅 https、SSRF 黑名单、手动重定向逐跳校验、10s 超时、20MB 上限
+ *       （实现与安全细节见 ./remote-fetch.ts，review #4）。
  * 索引路径解析用 import.meta.url 推导（不依赖进程 cwd，tsx/vitest 均成立）。
  */
 import { readFile, stat } from 'node:fs/promises';
@@ -27,15 +28,10 @@ import { HttpError, zodBody } from '../../middleware/validate';
 import { readJson, writeJsonAtomic } from '../../storage/store';
 import { libraryDir } from './crud';
 import { persist as persistCharacter } from './io-card';
+import { MAX_BYTES, fetchRemote } from './remote-fetch';
 
 const RESOURCES_DIR = fileURLToPath(new URL('../../../../resources/', import.meta.url));
 const BUILTIN_DIR = resolve(RESOURCES_DIR, 'builtin');
-
-/** remote 拉取体积上限：与角色卡上传同一量级（20MB） */
-const MAX_BYTES = 20 * 1024 * 1024;
-
-/** fetch 超时（毫秒）；env 仅供测试注入，生产默认 10s */
-const fetchTimeoutMs = (): number => Number(process.env.RESOURCES_FETCH_TIMEOUT_MS ?? 10_000);
 
 // ---------- 索引 ----------
 
@@ -176,33 +172,7 @@ function detectAndNormalize(raw: unknown, fallbackName: string): Sniffed {
   throw new HttpError(400, '无法识别的资源格式：不是世界书/预设/角色卡/正则脚本');
 }
 
-// ---------- 拉取 ----------
-
-async function fetchRemote(url: string): Promise<Buffer> {
-  let target: URL;
-  try {
-    target = new URL(url);
-  } catch {
-    throw new HttpError(400, 'URL 格式不合法');
-  }
-  if (target.protocol !== 'https:') {
-    throw new HttpError(400, '仅支持 https:// 直链（防明文注入）');
-  }
-  let res: globalThis.Response;
-  try {
-    res = await fetch(target, { signal: AbortSignal.timeout(fetchTimeoutMs()), redirect: 'follow' });
-  } catch (err) {
-    const name = err instanceof Error ? err.name : '';
-    if (name === 'TimeoutError' || name === 'AbortError') {
-      throw new HttpError(504, '资源拉取超时，请稍后重试或改用本地上传');
-    }
-    throw new HttpError(502, `资源拉取失败：${err instanceof Error ? err.message : '网络错误'}`);
-  }
-  if (!res.ok) {
-    throw new HttpError(502, `资源上游返回 ${res.status}，请检查直链是否有效`);
-  }
-  return Buffer.from(await res.arrayBuffer());
-}
+// ---------- 入库 ----------
 
 /** 统一入库：PNG → 角色卡（带底图）；JSON → 按类型分流 normalize 后写入对应资产目录 */
 async function ingest(buf: Buffer, fallbackName: string): Promise<ImportedAsset> {
