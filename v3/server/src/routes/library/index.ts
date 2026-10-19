@@ -12,9 +12,9 @@ import { charactersRouter } from './characters';
 import { worldbooksRouter } from './worldbooks';
 import { presetsRouter } from './presets';
 import { regexRouter } from './regex';
-import { ioCardRouter } from './io-card';
-import { ioAssetsRouter } from './io-assets';
-import { resourcesRouter } from './resources';
+import { ioCardRouter } from './io/io-card';
+import { ioAssetsRouter } from './io/io-assets';
+import { resourcesRouter } from './io/resources';
 
 export const libraryRouter = Router();
 

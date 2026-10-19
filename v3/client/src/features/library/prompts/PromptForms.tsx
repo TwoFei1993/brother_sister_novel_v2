@@ -9,8 +9,8 @@ import { useState } from 'react';
 
 import type { TavernPrompt } from '@shared/tavern';
 
-import { importAsset } from '../../api/library';
-import { OPTION_CLS, SELECT_TONE_CLS } from '../../components/ui-select';
+import { importAsset } from '../../../api/library';
+import { OPTION_CLS, SELECT_TONE_CLS } from '../../../components/ui-select';
 
 const ROLES = ['system', 'user', 'assistant'] as const;
 

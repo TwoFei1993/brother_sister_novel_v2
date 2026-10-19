@@ -21,16 +21,16 @@ import { z } from 'zod';
 
 import type { CharacterAsset } from '@shared/card';
 
-import { extractCardData, toInternalCard } from '../../converters/card-png';
-import { normalizePreset, normalizeRegex, normalizeWorldbook } from '../../converters/tavern';
-import { authRequired } from '../../middleware/auth';
-import { HttpError, zodBody } from '../../middleware/validate';
-import { readJson, writeJsonAtomic } from '../../storage/store';
-import { libraryDir } from './crud';
+import { extractCardData, toInternalCard } from '../../../converters/card-png';
+import { normalizePreset, normalizeRegex, normalizeWorldbook } from '../../../converters/tavern';
+import { authRequired } from '../../../middleware/auth';
+import { HttpError, zodBody } from '../../../middleware/validate';
+import { readJson, writeJsonAtomic } from '../../../storage/store';
+import { libraryDir } from '../crud';
 import { persist as persistCharacter } from './io-card';
 import { MAX_BYTES, fetchRemote } from './remote-fetch';
 
-const RESOURCES_DIR = fileURLToPath(new URL('../../../../resources/', import.meta.url));
+const RESOURCES_DIR = fileURLToPath(new URL('../../../../../resources/', import.meta.url));
 const BUILTIN_DIR = resolve(RESOURCES_DIR, 'builtin');
 
 // ---------- 索引 ----------

@@ -27,7 +27,7 @@ import {
   toInternalCard,
   writeCardData,
 } from '../../converters/card-png';
-import { ioCardRouter } from '../../routes/library/io-card';
+import { ioCardRouter } from '../../routes/library/io/io-card';
 import { charactersRouter } from '../../routes/library/characters';
 import { signToken } from '../../middleware/auth';
 import { HttpError } from '../../middleware/validate';

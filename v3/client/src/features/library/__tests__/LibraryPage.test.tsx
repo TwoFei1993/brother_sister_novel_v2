@@ -11,7 +11,7 @@ import type { PresetAsset } from '@shared/preset';
 
 import { getPreset, importAsset, listAssets, updatePresetRaw } from '../../../api/library';
 import LibraryPage from '../../../pages/LibraryPage';
-import PromptManager from '../PromptManager';
+import PromptManager from '../prompts/PromptManager';
 
 vi.mock('../../../api/library', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../api/library')>();

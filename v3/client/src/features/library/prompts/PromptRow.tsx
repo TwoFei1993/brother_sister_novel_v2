@@ -7,7 +7,7 @@
  */
 import type { TavernPrompt } from '@shared/tavern';
 
-import { OPTION_CLS, SELECT_TONE_CLS } from '../../components/ui-select';
+import { OPTION_CLS, SELECT_TONE_CLS } from '../../../components/ui-select';
 
 export interface PromptRowProps {
   /** 名称（prompt.name 缺省回退 identifier） */

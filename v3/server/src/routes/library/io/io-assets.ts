@@ -15,11 +15,11 @@ import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 
-import { normalizePreset, normalizeRegex, normalizeWorldbook } from '../../converters/tavern';
-import { authRequired } from '../../middleware/auth';
-import { HttpError, zodBody } from '../../middleware/validate';
-import { readJson, writeJsonAtomic } from '../../storage/store';
-import { libraryDir } from './crud';
+import { normalizePreset, normalizeRegex, normalizeWorldbook } from '../../../converters/tavern';
+import { authRequired } from '../../../middleware/auth';
+import { HttpError, zodBody } from '../../../middleware/validate';
+import { readJson, writeJsonAtomic } from '../../../storage/store';
+import { libraryDir } from '../crud';
 
 // ---------- 上传 ----------
 

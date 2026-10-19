@@ -8,7 +8,7 @@
  */
 import { lookup } from 'node:dns/promises';
 
-import { HttpError } from '../../middleware/validate';
+import { HttpError } from '../../../middleware/validate';
 
 /** remote 拉取体积上限：与角色卡上传同一量级（20MB） */
 export const MAX_BYTES = 20 * 1024 * 1024;

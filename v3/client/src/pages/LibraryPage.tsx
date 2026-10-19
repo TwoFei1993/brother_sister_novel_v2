@@ -13,7 +13,7 @@ import AssetPanel from '../features/library/AssetPanel';
 import AssetTabs, { type LibraryTab } from '../features/library/AssetTabs';
 import CardEditor from '../features/library/editors/CardEditor';
 import WorldbookEditor from '../features/library/editors/WorldbookEditor';
-import PromptManager from '../features/library/PromptManager';
+import PromptManager from '../features/library/prompts/PromptManager';
 import ResourceHub from '../features/library/ResourceHub';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
