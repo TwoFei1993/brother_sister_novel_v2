@@ -12,6 +12,11 @@ logs/*
 backups/
 server/public/
 
+# E2E（Playwright）：临时数据目录 / 登录态 / 报告与痕迹
+client/.e2e-data/
+client/test-results/
+client/playwright-report/
+
 # 日志与杂项
 *.log
 .DS_Store
