@@ -10,7 +10,7 @@
  * 流编排（重试/停止/事务 fail）统一走 generation-runtime 共享内核（与 chat 同构）。
  * 真实 UI 接线属 Task 20（WorkPage/CommandBar）。
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
@@ -58,10 +58,17 @@ export interface UseGenerateResult {
   stop: () => void;
   /** 关闭错误提示（保留半成品供继续） */
   clearError: () => void;
+  /** 上一轮生成完成入库时上下文是否发生过截断（usage.truncated，界面提示条消费） */
+  lastTruncated: boolean;
+  /** 关闭截断提示 */
+  clearTruncated: () => void;
 }
 
 export function useGenerate(): UseGenerateResult {
   const abortRef = useRef<AbortController | null>(null);
+  // 上下文截断提示（store 收束即清零，generationStore 不留痕，挂 hook 本地态最小改动）
+  const [lastTruncated, setLastTruncated] = useState(false);
+  const clearTruncated = useCallback(() => setLastTruncated(false), []);
 
   const run = useCallback(
     (work: Work, messages: Message[], directive: string, opts: RunOptions): Promise<Message | null> =>
@@ -88,9 +95,9 @@ export function useGenerate(): UseGenerateResult {
           });
           return {
             body,
-            // ---------- 完成收尾：后处理 → 幂等入库 → 变量回写 ----------
-            finalize: () =>
-              finalizeGeneration({
+            // ---------- 完成收尾：后处理 → 幂等入库 → 变量回写 → 记录截断 ----------
+            finalize: async () => {
+              const msg = await finalizeGeneration({
                 work,
                 messages,
                 directive,
@@ -102,7 +109,10 @@ export function useGenerate(): UseGenerateResult {
                 activatedIds: fitted.activatedIds,
                 startedAt,
                 pending,
-              }),
+              });
+              setLastTruncated(fitted.truncated);
+              return msg;
+            },
           };
         },
       }),
@@ -153,5 +163,7 @@ export function useGenerate(): UseGenerateResult {
     swipeRegenerate,
     stop,
     clearError,
+    lastTruncated,
+    clearTruncated,
   };
 }

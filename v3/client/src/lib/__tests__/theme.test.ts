@@ -75,8 +75,8 @@ describe('applyUserTheme / useWorkTheme 优先级', () => {
 });
 
 describe('USER_THEME_OPTIONS', () => {
-  it('6 个固定主题：中文名与色板齐全', () => {
-    expect(USER_THEME_OPTIONS).toHaveLength(6);
+  it('7 个固定主题：中文名与色板齐全', () => {
+    expect(USER_THEME_OPTIONS).toHaveLength(7);
     for (const opt of USER_THEME_OPTIONS) {
       expect(opt.label.length).toBeGreaterThan(0);
       expect(opt.swatch.bg).toMatch(/^\d+ \d+% \d+%$/);

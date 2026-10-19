@@ -98,7 +98,7 @@ describe('SettingsPage', () => {
     expect(input?.value).toBe('https://tts.example.com');
   });
 
-  it('切到界面偏好分区：主题选择器（跟随作品 + 6 固定主题）', async () => {
+  it('切到界面偏好分区：主题选择器（跟随作品 + 7 固定主题）', async () => {
     maskMock.mockResolvedValue({ openai: false, gemini: false, claude: false });
     const container = await renderSettings();
     await clickSection(container, '界面偏好');
@@ -111,8 +111,10 @@ describe('SettingsPage', () => {
     expect(text).toContain('无限流');
     expect(text).toContain('玄幻修仙');
     expect(text).toContain('混合暗色');
+    expect(text).toContain('商务白');
     expect(container.querySelector('[data-testid="theme-follow"]')).not.toBeNull();
-    expect(container.querySelectorAll('button[data-testid^="theme-"]').length).toBe(7);
+    expect(container.querySelector('[data-testid="theme-business"]')).not.toBeNull();
+    expect(container.querySelectorAll('button[data-testid^="theme-"]').length).toBe(8);
   });
 
   it('切到旧站迁移分区：展示导出引导与上传入口（Task 31）', async () => {

@@ -3,8 +3,8 @@
  *
  * - 作者注释：authorNote 文本域 + noteDepth 注入深度（酒馆 Author's Note 对齐）
  * - allowCardOverride 开关：允许角色卡覆盖预设（缺省开，§4.4 覆盖关系）
- * - 绑定管理：当前绑定的角色卡/世界书/预设名单（解绑编辑属 M3 资产库，此处只读展示）
- * 保存走 PATCH（revision 乐观锁），409 提示刷新；成功回传新 Work 给父级同步 store。
+ * - 绑定管理（可编辑）：角色卡/世界书多选 chips、预设单选——见 WorkBindingsEditor（改动即 PATCH）
+ * 作者注释保存走 PATCH（revision 乐观锁），409 提示刷新；成功回传新 Work 给父级同步 store。
  */
 import { useEffect, useState } from 'react';
 
@@ -13,16 +13,13 @@ import { listCharacters, listPresets, listWorldbooks, type LibraryAssetRef } fro
 import type { Work } from '@shared/work';
 import VoiceMapEditor from '../tts/VoiceMapEditor';
 
+import WorkBindingsEditor from './dialog/WorkBindingsEditor';
+
 interface WorkSettingsSheetProps {
   work: Work;
   onClose: () => void;
   /** 保存成功（父级同步 workStore.setWork） */
   onSaved: (work: Work) => void;
-}
-
-/** id → name 映射辅助（绑定了但已删除的资产显示为占位） */
-function nameOf(list: LibraryAssetRef[], id: string): string {
-  return list.find((a) => a.id === id)?.name ?? `（已删除：${id.slice(0, 8)}…）`;
 }
 
 export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettingsSheetProps) {
@@ -68,15 +65,6 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
       setSaving(false);
     }
   }
-
-  const bindingRows: ReadonlyArray<{ label: string; names: string[] }> = [
-    { label: '角色卡', names: work.characterIds.map((id) => nameOf(assets?.characters ?? [], id)) },
-    { label: '世界书', names: work.worldbookIds.map((id) => nameOf(assets?.worldbooks ?? [], id)) },
-    {
-      label: '预设',
-      names: work.presetId ? [nameOf(assets?.presets ?? [], work.presetId)] : ['（未绑定，生成用内置空预设）'],
-    },
-  ];
 
   return (
     <>
@@ -156,19 +144,8 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
             </button>
           </section>
 
-          <section>
-            <p className="mb-2 text-sm font-medium">绑定资产</p>
-            <div className="space-y-2">
-              {bindingRows.map((row) => (
-                <div key={row.label} className="flex gap-2 text-sm">
-                  <span className="w-14 shrink-0 text-[hsl(var(--fg-muted))]">{row.label}</span>
-                  <span className="min-w-0 flex-1 break-words">
-                    {row.names.length === 0 ? '（无）' : row.names.join('、')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* 绑定资产（可编辑）：改动即 PATCH work，乐观更新失败回滚 */}
+          <WorkBindingsEditor work={work} assets={assets} onSaved={onSaved} />
 
           {/* TTS 分声绑定：独立 PATCH voiceMap（revision 乐观锁），保存后同步 store */}
           <section className="border-t border-[hsl(var(--border-soft))] pt-4">

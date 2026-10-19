@@ -14,7 +14,10 @@ import { useState } from 'react';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
+import { splitOutline } from '../../../engine/prompt/postprocess';
+
 import BubbleMarkdown from './BubbleMarkdown';
+import OutlineBlock from './OutlineBlock';
 import SwipeBar from './SwipeBar';
 
 /** 操作条显隐类：触屏常显，桌面 hover/focus 显示 */
@@ -126,6 +129,8 @@ function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe,
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState(false);
+  // 显示分离：头部要点提纲折叠展示（默认收起），气泡正文只渲染 body（编辑/复制仍取全文）
+  const { outline, body } = splitOutline(message.content);
 
   function startEdit(): void {
     setDraft(message.content);
@@ -190,7 +195,10 @@ function ChapterBubble({ message, disabled, busy, buffer, regexScripts, onSwipe,
             </div>
           </div>
         ) : (
-          <BubbleMarkdown text={message.content} regexScripts={regexScripts} />
+          <>
+            {outline && <OutlineBlock outline={outline} regexScripts={regexScripts} />}
+            <BubbleMarkdown text={body} regexScripts={regexScripts} />
+          </>
         )}
         {busy && (
           <div

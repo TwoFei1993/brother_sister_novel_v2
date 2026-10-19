@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react';
 import type { Work } from '@shared/work';
 
+import { splitOutline } from '../../engine/prompt/postprocess';
 import { useTts, type TtsChapterInput } from '../../hooks/useTts';
 import { useTtsStore } from '../../stores/tts';
 
@@ -42,8 +43,9 @@ export default function WorkTtsBar({ work, chapters, visible }: WorkTtsBarProps)
       return;
     }
     startedRef.current = true;
+    // 朗读跳过头部要点提纲：每章先 splitOutline 取正文（与 ReadingView 高亮段落同源切分）
     engine.startChapters(
-      chapters.map((c) => ({ text: c.text, voiceMap: work.voiceMap })),
+      chapters.map((c) => ({ text: splitOutline(c.text).body, voiceMap: work.voiceMap })),
       currentIndex >= 0 ? chapterIndex : 0,
     );
   }

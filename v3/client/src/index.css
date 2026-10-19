@@ -243,6 +243,42 @@
     --danger: var(--destructive);
   }
 
+  /* 商务白 - Business（白底黑字极简；仅用户自选主题，不绑题材——themeForGenre 不映射） */
+  [data-theme='business'] {
+    --background: 0 0% 100%; /* 白底 #ffffff */
+    --foreground: 0 0% 10%; /* 黑字 #1a1a1a */
+    --card: 220 19% 97%; /* 表面 #f7f8fa */
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 221 79% 48%; /* 克制蓝 #1a56db */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 19% 95%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 214 5% 39%; /* 次要文字 #5f6368 */
+    --accent: 221 79% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 45%; /* 白底下加深的警示红（对比度达标） */
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 14% 91%; /* 浅灰细描边（极简） */
+    --input: 220 14% 91%;
+    --ring: 221 79% 48%;
+    --radius: 0.5rem;
+    --theme-glow: 221 79% 48%;
+    --theme-font-heading: 'Inter', sans-serif;
+    --theme-font-body: 'Inter', sans-serif;
+    /* v3 组件变量派生 */
+    --bg: var(--background);
+    --surface: var(--card);
+    --border-soft: var(--border);
+    --fg: var(--foreground);
+    --fg-muted: var(--muted-foreground);
+    --accent: var(--primary);
+    --accent-fg: var(--primary-foreground);
+    --danger: var(--destructive);
+  }
+
   /* ---------- 阅读模式变量 ----------
    * 与 lib/readingPrefs.ts 的 JS 内联色值同源（Task 20 既有实现走 JS），
    * 此处为 data-reading 属性驱动的 CSS 侧定义，供后续组件按属性取色。 */

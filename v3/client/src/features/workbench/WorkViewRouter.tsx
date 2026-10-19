@@ -12,86 +12,21 @@ import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 import type { Work, ViewPreference } from '@shared/work';
 
-import { patchMessage, upsertMessage } from '../../api/works';
+import { patchMessage } from '../../api/works';
 import { exportTxt } from '../../lib/export';
-import { loadAssembleAssets, loadRegexScripts } from '../../hooks/generation-pipeline';
+import { loadRegexScripts } from '../../hooks/generation-pipeline';
 import type { UseGenerateResult } from '../../hooks/useGenerate';
 import { useWorkbenchData } from '../../hooks/useWorkbenchData';
 import { useGenerationStore } from '../../stores/generation';
 import { useWorkStore } from '../../stores/work';
 
 import ChatWorkspace from '../chat/ChatWorkspace';
+import EmptyGuide from './bench/EmptyGuide';
 import WorkbenchView from './bench/WorkbenchView';
 import CommandBar from './CommandBar';
 import DialogView from './dialog/DialogView';
 import ReadingView from './ReadingView';
 import WorkTtsBar from '../tts/WorkTtsBar';
-
-/** 空态引导：无章节且未在生成时展示；含角色卡备选开场（alternate_greetings）一键入库 */
-function EmptyGuide({ work, onCreated }: { work: Work; onCreated: (m: Message) => void }) {
-  const [greetings, setGreetings] = useState<string[]>([]);
-  const [importing, setImporting] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    loadAssembleAssets(work)
-      .then((a) => {
-        if (alive) setGreetings(a.cards[0]?.data.alternate_greetings ?? []);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [work]);
-
-  async function importGreeting(text: string): Promise<void> {
-    setImporting(true);
-    const message: Message = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      name: '小说家',
-      content: text,
-      createdAt: Date.now(),
-      swipes: [text],
-      swipeId: 0,
-      chapter: { index: 1, title: '序章' },
-      extra: {},
-    };
-    try {
-      await upsertMessage(work.id, message);
-      onCreated(message);
-    } catch {
-      console.warn('[WorkViewRouter] 备选开场上传失败');
-    } finally {
-      setImporting(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center" data-testid="empty-guide">
-      <p className="text-lg font-semibold">《{work.title}》</p>
-      <p className="text-sm text-[hsl(var(--fg-muted))]">
-        在下方输入剧情指令（可留空），点击「▶ 续写」开始创作第一章
-      </p>
-      {greetings.length > 0 && (
-        <div className="mt-4 w-full max-w-md space-y-2">
-          <p className="text-xs text-[hsl(var(--fg-muted))]">或使用角色卡备选开场：</p>
-          {greetings.map((g, i) => (
-            <button
-              key={i}
-              type="button"
-              disabled={importing}
-              onClick={() => importGreeting(g)}
-              className="line-clamp-2 w-full rounded-lg border border-[hsl(var(--border-soft))] p-3 text-left text-xs transition-colors hover:border-[hsl(var(--accent))] disabled:opacity-40"
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export interface WorkViewRouterProps {
   work: Work;
@@ -223,6 +158,27 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
 
   return (
     <>
+      {/* 上下文截断提示（生成完成入库后由 useGenerate 记录；⚠ 手动可关） */}
+      {gen.lastTruncated && (
+        <div
+          role="status"
+          data-testid="context-truncated-tip"
+          className="flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--danger))]/10 px-3 py-2 text-xs text-[hsl(var(--danger))]"
+        >
+          <span className="min-w-0 flex-1">
+            ⚠ 上下文预算不足，最旧章节已被截断——可在 设置→生成参数 调大「上下文预算」
+          </span>
+          <button
+            type="button"
+            aria-label="关闭提示"
+            data-testid="truncated-tip-close"
+            onClick={gen.clearTruncated}
+            className="flex h-7 min-w-7 shrink-0 items-center justify-center rounded hover:bg-[hsl(var(--danger))]/20"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {currentView === 'c' ? (
         <WorkbenchView
           messages={messages}

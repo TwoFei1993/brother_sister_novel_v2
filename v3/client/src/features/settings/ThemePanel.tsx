@@ -1,7 +1,7 @@
 /**
  * 界面偏好面板：全局皮肤选择（第二轮体验改进）
  *
- * - 「跟随作品题材」（默认，存 null）+ 6 个固定主题（lib/theme.ts USER_THEME_OPTIONS）
+ * - 「跟随作品题材」（默认，存 null）+ 7 个固定主题（lib/theme.ts USER_THEME_OPTIONS）
  * - 选择持久化 settingsStore.uiTheme（localStorage v3-llm-prefs，version 2 迁移）
  * - App 级 GlobalTheme 同步 <html data-theme>；固定主题优先级高于作品题材主题
  */

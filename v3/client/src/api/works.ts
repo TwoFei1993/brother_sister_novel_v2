@@ -41,6 +41,10 @@ export interface UpdateWorkTitleInput {
 export interface UpdateWorkSettingsInput {
   revision: number;
   title?: string;
+  /** 绑定资产（作品设置可编辑名单）：角色卡/世界书多选、预设单选 */
+  characterIds?: string[];
+  worldbookIds?: string[];
+  presetId?: string;
   settings?: Work['settings'];
   allowCardOverride?: boolean;
   viewPreference?: Work['viewPreference'];

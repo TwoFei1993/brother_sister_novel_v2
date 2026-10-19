@@ -16,11 +16,14 @@ import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
+import { splitOutline } from '../../engine/prompt/postprocess';
 import { applyDisplayRegex, MARKDOWN_CLASS } from '../../lib/markdown';
 import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/readingPrefs';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
 import { splitParagraphs } from '../../lib/voice-route';
 import { useTtsStore } from '../../stores/tts';
+
+import OutlineBlock from './dialog/OutlineBlock';
 
 interface ReadingViewProps {
   messages: Message[];
@@ -179,10 +182,14 @@ export default function ReadingView({
 
           {chapters.map((m, ci) => {
             const highlightThis = ttsActive && ci === tts.chapterIndex;
-            const paras = highlightThis ? splitParagraphs(m.content) : null;
+            // 提纲分离：头部要点提纲折叠展示（默认收起），正文只渲染 body（§5.1⑥ 显示分离）
+            const { outline, body } = splitOutline(m.content);
+            // 朗读高亮段落与 WorkTtsBar 连播队列同源：都从 body 切分，保证段序对齐
+            const paras = highlightThis ? splitParagraphs(body) : null;
             return (
               <article key={m.id} id={chapterAnchorId(m.chapter.index)} className="mb-10 scroll-mt-4">
                 <h2 className="mb-4 text-xl font-bold">{m.chapter.title}</h2>
+                {outline && <OutlineBlock outline={outline} regexScripts={regexScripts} />}
                 {paras ? (
                   <div className={MARKDOWN_CLASS}>
                     {paras.map((p, pi) => (
@@ -205,7 +212,7 @@ export default function ReadingView({
                 ) : (
                   <div className={MARKDOWN_CLASS}>
                     <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                      {sanitizeMarkdownSource(applyDisplayRegex(m.content, regexScripts))}
+                      {sanitizeMarkdownSource(applyDisplayRegex(body, regexScripts))}
                     </ReactMarkdown>
                   </div>
                 )}
