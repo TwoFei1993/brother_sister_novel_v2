@@ -226,3 +226,26 @@ describe('chat 模式净化收尾（对话实测反馈）', () => {
     expect(r).toContain('你快看这个');
   });
 });
+
+describe('孤立闭合标签复读段剥离（深度测试 D4 回归）', () => {
+  it('剥离开头 </Tag>…</Tag> 复读片段（无开标签形态，实测 MiniMax 复读提示词包裹段）', async () => {
+    const { sanitizeOutput } = await import('../prompt/postprocess');
+    const raw = '</Aniplex>只写角色行为语言，不做作者视角说明；不揭示内在动机。</Aniplex>\n\n那只透明的小东西蹦跳着离开。';
+    const r = sanitizeOutput(raw);
+    expect(r).not.toContain('Aniplex');
+    expect(r).not.toContain('只写角色行为语言');
+    expect(r).toContain('那只透明的小东西');
+  });
+
+  it('剥后正文过短时保护性放弃（防误清）', async () => {
+    const { sanitizeOutput } = await import('../prompt/postprocess');
+    const raw = '</Aniplex>短指令</Aniplex>好';
+    expect(sanitizeOutput(raw)).toBe(raw);
+  });
+
+  it('正文中间的孤立闭合标签不动（只处理开头复读形态）', async () => {
+    const { sanitizeOutput } = await import('../prompt/postprocess');
+    const raw = '正文开头。中间有 </Aniplex> 样本不剥离。';
+    expect(sanitizeOutput(raw)).toContain('</Aniplex>');
+  });
+});

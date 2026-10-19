@@ -21,9 +21,12 @@ export interface DirectiveHistoryProps {
   onRemoveQuickDirective: (index: number) => void;
 }
 
-/** user 消息倒序（最新指令在最上） */
-function directiveList(messages: Message[]): Message[] {
-  return messages.filter((m) => m.role === 'user').reverse();
+/** 指令倒序（最新指令在最上）：novel 的指令存在章节消息的 directive 元数据（不落独立 user 消息），
+ *  同时兼容 chat 等场景的独立 user 消息（正文即指令）。导出供回归测试 */
+export function directiveList(messages: Message[]): Message[] {
+  return messages
+    .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.directive))
+    .reverse();
 }
 
 export default function DirectiveHistory({
@@ -109,12 +112,12 @@ export default function DirectiveHistory({
           <li key={m.id}>
             <button
               type="button"
-              onClick={() => onPick(m.content)}
+              onClick={() => onPick(m.directive ?? m.content)}
               data-testid="history-item"
               title="点击复填到指令输入"
               className="min-h-9 w-full rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[hsl(var(--surface))]"
             >
-              <span className="block truncate text-xs text-[hsl(var(--fg))]">{m.content}</span>
+              <span className="block truncate text-xs text-[hsl(var(--fg))]">{m.directive ?? m.content}</span>
               <span className="mt-0.5 block text-[10px] text-[hsl(var(--fg-muted))]">
                 {new Date(m.createdAt).toLocaleString()}
               </span>

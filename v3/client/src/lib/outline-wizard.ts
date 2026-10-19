@@ -163,7 +163,9 @@ export function extractFromOutline(text: string): ExtractedOutline {
   const factionsText = extract(
     [
       new RegExp(String.raw`(?:势力分布|势力格局|阵营分布|主要势力|派系|门派分布)[：:、，,]?\s*(.{3,300}?)${SECTION_END}`),
-      new RegExp(String.raw`(?:势力|阵营|组织|家族|帝国)[：:、，,]\s*(.{3,300}?)${SECTION_END}`),
+      // 字段名须贴近行首（锚定行首 + 编号类短前缀），防止正文中
+      // 「……刺客组织，总部位置成谜」被误当「组织：」字段截取
+      new RegExp(String.raw`(?:^|\n)\s*(?:[（(]?[\d一二三四五六七八九十]{1,3}[）)]?[、.．：:]|\S{0,4}?)\s*(?:势力|阵营|组织|家族|帝国)(?:设定|分布|简介)?[：:、，]\s*(.{3,300}?)${SECTION_END}`),
     ],
     normalized,
   );

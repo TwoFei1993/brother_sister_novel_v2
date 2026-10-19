@@ -64,6 +64,14 @@ export function sanitizeOutput(raw: string, speakerName?: string): string {
   out = out.replace(/<!--[\s\S]*$/g, '');
   out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
   out = out.replace(/<([A-Za-z][\w-]*)>[\s\S]*$/g, (m, tag: string) => (isCustomTag(tag) ? '' : m));
+  // 孤立闭合标签开头的复读片段（实测 MiniMax：模型把提示词包裹段复读为「</Aniplex>…指令…</Aniplex>」，
+  // 无开标签使上面的成对/未闭合正则都不命中）：仅当文本以孤立闭合标签开头时剥到同名闭合标签；
+  // 剥后正文过短则放弃（防误清正常内容）
+  const orphan = out.match(/^[ \t]*<\/([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/);
+  if (orphan) {
+    const body = out.slice(orphan[0].length).replace(/^\n+/, '');
+    if (body.length >= Math.min(30, out.length * 0.2)) out = body;
+  }
   // 嵌套标题清理：首行若为章节标题（parseChapterTitle 的输入）则豁免，只清理其后的标题行
   const firstBreak = out.indexOf('\n');
   const head = firstBreak === -1 ? out : out.slice(0, firstBreak);

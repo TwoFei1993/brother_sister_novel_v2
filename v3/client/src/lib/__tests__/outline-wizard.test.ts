@@ -103,3 +103,23 @@ describe('buildWorldbookDraft', () => {
     expect(draft.name.length).toBeGreaterThan(0);
   });
 });
+
+describe('势力字段提取边界（深度测试 D5 回归）', () => {
+  it('「二、势力设定：」编号行整段提取（此前被句中「组织，」误截）', () => {
+    const text = '一、故事背景：灵气复苏的大周王朝。\n二、势力设定：镇北侯府掌北境兵权；青云观立于东境云梦山，以占卜闻名；血衣楼为天下第一刺客组织，总部位置成谜。';
+    const r = extractFromOutline(text);
+    expect(r.factions.length).toBeGreaterThan(0);
+    expect(r.factions[0]).toContain('镇北侯府掌北境兵权');
+    expect(r.factions[0]).toContain('青云观立于东境云梦山');
+  });
+
+  it('行首「势力：」与「阵营简介：」照常提取', () => {
+    expect(extractFromOutline('势力：三大阵营对峙。').factions[0]).toContain('三大阵营对峙');
+    expect(extractFromOutline('阵营简介：四方割据。').factions[0]).toContain('四方割据');
+  });
+
+  it('正文句中「……刺客组织，总部位置成谜」不再误当字段截取', () => {
+    const r = extractFromOutline('他与那刺客组织，总部位置成谜的地方相遇。');
+    expect(r.factions).toEqual([]);
+  });
+});

@@ -255,7 +255,7 @@ export default function ChatWorkspace({ work }: { work: Work }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {(chat.error || settingsError) && (
-        <div className="flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--danger))]/10 px-4 py-2 text-xs text-[hsl(var(--danger))]">
+        <div className="fixed inset-x-0 top-0 z-[60] flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--danger))]/10 px-4 py-2 text-xs text-[hsl(var(--danger))] backdrop-blur-sm">
           <span className="min-w-0 flex-1">{chat.error?.message ?? settingsError}</span>
           {chat.error ? (
             <>

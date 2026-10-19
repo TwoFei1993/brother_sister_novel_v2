@@ -158,9 +158,10 @@ export default function WorkPage() {
         </button>
       </header>
 
-      {/* 错误条（novel 生成失败人话提示，半成品保留可「继续」；chat 错误在 ChatWorkspace 内） */}
+      {/* 错误条（novel 生成失败人话提示，半成品保留可「继续」；chat 错误在 ChatWorkspace 内）
+          fixed 浮层 + z-[60]：高于作品设置面板（z-50），避免被遮挡无法点「知道了」 */}
       {gen.error && (
-        <div className="flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--danger))]/10 px-4 py-2 text-xs text-[hsl(var(--danger))]">
+        <div className="fixed inset-x-0 top-0 z-[60] flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--danger))]/10 px-4 py-2 text-xs text-[hsl(var(--danger))] backdrop-blur-sm">
           <span className="min-w-0 flex-1">{gen.error.message}</span>
           <button type="button" onClick={gen.clearError} className="shrink-0 underline">
             知道了

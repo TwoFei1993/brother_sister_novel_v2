@@ -122,6 +122,15 @@ export default function ReadingView({
     if (el.scrollTop < 100 && hasMore && !loadingOlder && !streaming) onNeedOlder();
   }
 
+  // 挂载/数据就绪时已在顶部（如刷新后窗口顶=列表顶）：scrollTop 无法再变小、scroll 事件
+  // 不会触发，主动补一发加载更早，避免「继续向上滚动加载更早章节」提示永远无法满足
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && el.scrollTop < 100 && hasMore && !loadingOlder && !streaming) onNeedOlder();
+    // hasMore 变化（新加载后仍有更早）时同样补触发，直至加载到顶或加载完
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore]);
+
   const toolbar = (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-[hsl(var(--border-soft))] px-2 py-1">
       {READING_MODES.map((m) => (
