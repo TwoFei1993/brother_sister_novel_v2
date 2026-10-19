@@ -40,6 +40,16 @@ export function sanitizeOutput(raw: string, speakerName?: string): string {
     out = out.replace(new RegExp(`^\\s*${escaped}\\s*[:：]\\s*`), '');
   }
   out = out.replace(/^\s*(?:小说家|旁白|系统)\s*[:：]\s*/, '');
+  // 首行若是「正文」标记头（## 正文 / **正文** / 正文： 等）则剥离——它是 COT 边界标记而非章节标题
+  out = out.replace(/^[ \t]*(?:#{1,6}|\*{0,2}|-)[ \t]*正文[ \t]*[:：]?[ \t]*\*{0,2}[ \t]*\n/, '');
+  // 社区预设的标签化元信息（质检T4 实测）：HTML 注释提示 / <reply> 选项块 / <S-summary> 摘要块
+  // 各含未闭合分支（生成流在标签中间被截断的场景）
+  out = out.replace(/<!--[\s\S]*?-->/g, '');
+  out = out.replace(/<!--[\s\S]*$/g, '');
+  out = out.replace(/<reply>[\s\S]*?<\/reply>/gi, '');
+  out = out.replace(/<reply>[\s\S]*$/i, '');
+  out = out.replace(/<S-\w+>[\s\S]*?<\/S-\w+>/g, '');
+  out = out.replace(/<S-\w+>[\s\S]*$/i, '');
   // 嵌套标题清理：首行若为章节标题（parseChapterTitle 的输入）则豁免，只清理其后的标题行
   const firstBreak = out.indexOf('\n');
   const head = firstBreak === -1 ? out : out.slice(0, firstBreak);
@@ -128,8 +138,10 @@ export interface PostprocessOpts {
 /** 提纲/要点的标记词（标题行或引导行含其一即判定为提纲块开始） */
 const OUTLINE_MARKERS = ['要点', '提纲', '大纲', '思路', '剧情走向', '本章梗概', 'outline'];
 
-/** 正文开始标记行（社区预设 COT 输出约定）：独立成行的 --- 分隔线 / 【正文】 / 正文： 等 */
-const BODY_MARKER_RE = /^[ \t]*(?:[-*_]{3,}[ \t]*|【正文】|\*{0,2}正文\*{0,2}[:：]?)[ \t]*\n?/gm;
+/** 正文开始标记行（社区预设 COT 输出约定）：独立成行的 --- 分隔线 / 【正文】 / 最终正文： 等。
+ *  「正文」前允许 ≤6 字前缀（如「最终」），后必须紧跟冒号/星号/空白（前瞻）——叙述行不匹配。 */
+const BODY_MARKER_RE =
+  /^[ \t]*(?:[-*_]{3,}[ \t]*|【正文】|\*{0,2}(?:.{0,6})?正文\*{0,2}(?:[：：]|(?=[\s])))[ \t]*\n?/gm;
 
 /** 规划段关键词：命中其一即视作思考流段落（对照实测泄露样本归纳） */
 const PLANNING_RE =
@@ -139,7 +151,7 @@ const PLANNING_RE =
  * 剥离「无标签思维流」：模型把思考过程以纯文本形式混在正文里（实测 M3+Sudachi 组合）。
  * 两层策略，均为高置信才动手：
  * 1. 标记行：取最后一个「正文：/【正文】/---」标记行之后的内容（剩余过短则放弃）；
- * 2. 段落启发：开头连续含规划关键词的段落逐段剥离（遇叙述段即停，最多剥前 60%）。
+ * 2. 段落启发：开头连续含规划关键词的段落逐段剥离（遇叙述段即停）。
  */
 export function stripLooseThinking(content: string): string {
   // 1) 标记行优先（高置信）
@@ -174,9 +186,36 @@ export function stripLooseThinking(content: string): string {
   return i > 0 && body.trim().length >= 50 ? body : content;
 }
 
-/** 展示净化组合：无标签思考流剥离 + 内置卫生层（供生成时与显示时共用） */
+/** 展示净化组合：思考流剥离 + 尾部元信息剥离 + 内置卫生层（供生成时与显示时共用） */
 export function presentable(content: string, speakerName?: string): string {
-  return sanitizeOutput(stripLooseThinking(content), speakerName);
+  const cleaned = sanitizeOutput(stripTailMeta(stripLooseThinking(content)), speakerName);
+  // 剥离后一无所有 = 该章只剩元信息（选项/摘要/思考）——给出重roll引导而非空白
+  if (!cleaned.trim() && content.length > 200) {
+    return '（本章只剩元信息，没有正文——建议 🎲 重新生成本章或切换候选。）';
+  }
+  return cleaned;
+}
+
+/** 选项行：`A. xxx` / `B、xxx`（Sudachi 多回复选项格式，≥2 行连续构成选项块） */
+const OPTION_LINE_RE = /^[ \t]*[A-H][.、．][ \t]*\S/;
+
+/**
+ * 剥离尾部元信息块（质检T4 实测：Sudachi 在正文后追加「A./B./C./D. 选项 + 剧情摘要」）。
+ * 判定：存在 ≥2 行连续选项行、且位于全文后半段 → 从选项块起点截断到结尾。
+ * （选项与随后的摘要段都是交互元信息，不属于小说正文。）
+ */
+export function stripTailMeta(content: string): string {
+  const lines = content.split('\n');
+  const tailStart = Math.floor(lines.length * 0.4);
+  for (let i = tailStart; i < lines.length - 1; i += 1) {
+    if (OPTION_LINE_RE.test(lines[i]) && OPTION_LINE_RE.test(lines[i + 1])) {
+      return content
+        .slice(0, content.indexOf(lines[i]))
+        .replace(/\n+$/, '')
+        .trim();
+    }
+  }
+  return content;
 }
 
 /** 单行是否为列表项（短横线/星号/圆点/数字编号起始） */

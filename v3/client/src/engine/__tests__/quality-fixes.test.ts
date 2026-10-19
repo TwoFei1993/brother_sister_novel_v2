@@ -135,3 +135,58 @@ describe('无标签思维流剥离（质检T4 实测泄露形态）', () => {
     expect(stripLooseThinking(raw)).toBe(raw);
   });
 });
+
+describe('尾部元信息块剥离（质检T4 用户实地反馈形态）', () => {
+  it('正文后的 A-D 选项块+剧情摘要整体截断', async () => {
+    const { stripTailMeta, presentable } = await import('../prompt/postprocess');
+    const raw = [
+      '「哥，你盯着我看干嘛啦。」铃奈吸溜了一大口面条。',
+      '「没什么，只是看你吃这么香。」我放下筷子笑了。',
+      '车轮终于顺畅地转了起来，哥哥站起来拍了拍手上的油渍。',
+      'A. 我牵起她的手：「走慢点，别摔了。」',
+      'B. 我无奈叹气：「就知道乱花钱，钱包又要空了。」',
+      'C. 我看向她的脸色：「今天脸色不错吗？」',
+      'D. 我掏出钱结账，催促道：「快点，夜市一会就收摊了。」',
+      '',
+      '在老城区的街边老面馆，兄妹二人吃着晚饭，回忆起过去的艰难时光。',
+    ].join('\n');
+    const r = stripTailMeta(raw);
+    expect(r).not.toContain('A. 我牵起她的手');
+    expect(r).not.toContain('在老城区的街边老面馆');
+    expect(r.startsWith('「哥，你盯着我看干嘛啦。」')).toBe(true);
+    // presentable 组合链不受影响
+    expect(presentable(raw)).not.toContain('B. 我无奈叹气');
+  });
+
+  it('首行「## 正文」标记头剥离', async () => {
+    const { presentable } = await import('../prompt/postprocess');
+    const raw = '## 正文\n\n随着老城区深秋傍晚的夕阳拉长，我夹起一筷子热气腾腾的碱面，送进嘴里。';
+    expect(presentable(raw)).toBe('随着老城区深秋傍晚的夕阳拉长，我夹起一筷子热气腾腾的碱面，送进嘴里。');
+  });
+
+  it('前部选项形文本（位置阈值前）与单行选项不触发截断', async () => {
+    const { stripTailMeta } = await import('../prompt/postprocess');
+    // 选项形行位于全文前部（<40%），不在尾部元信息区
+    const early = ['A. 开头第一行', 'B. 开头第二行', '叙述一。', '叙述二。', '叙述三。', '叙述四。'].join('\n');
+    expect(stripTailMeta(early)).toBe(early);
+    // 尾部仅单行选项形（不足 ≥2 行连续），不构成选项块
+    const single = ['叙述一。', '叙述二。', '叙述三。', '叙述四。', '叙述五。', '附注：A. 备忘'].join('\n');
+    expect(stripTailMeta(single)).toBe(single);
+  });
+});
+
+describe('标签化元信息剥离（质检T4 实地检查形态）', () => {
+  it('HTML 注释提示从正文中移除', async () => {
+    const { presentable } = await import('../prompt/postprocess');
+    const raw = '<!-- 1. 确立视角与场景基调 --> 随着夕阳拉长，我夹起一筷子碱面。<!-- 2. 对话为主 -->';
+    expect(presentable(raw)).toBe('随着夕阳拉长，我夹起一筷子碱面。');
+  });
+
+  it('<reply> 选项块与 <S-summary> 摘要块整体移除（含未闭合）', async () => {
+    const { presentable } = await import('../prompt/postprocess');
+    const closed = '正文第一段。\n<reply>\nA. 选项一\nB. 选项二\n</reply>\n<S-summary>兄妹吃完面。</S-summary>';
+    expect(presentable(closed)).toBe('正文第一段。');
+    const unclosed = '正文第一段。\n<reply>\nA. 选项一\nB. 选项二';
+    expect(presentable(unclosed)).toBe('正文第一段。');
+  });
+});
