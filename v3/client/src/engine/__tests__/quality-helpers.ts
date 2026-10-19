@@ -1,15 +1,12 @@
 /**
- * 真实生成质量测试基础设施（quality.slow.test.ts 专用，默认跳过不进 CI）
+ * 真实生成质量测试基础设施 — 环境/组装/入库（quality.slow.test.ts 专用，默认跳过不进 CI）
  *
  * 不走 client/src/api（其 fetch 为同源相对路径）——直接以 Node fetch 调
  * http://localhost:3001 绝对地址：登录拿 cookie → 作品 CRUD → SSE 生成 → 幂等入库。
  * 提示词组装复用 engine 纯函数（scanWorldInfo + assemblePrompt + postprocessMessage），
  * 语义对齐 hooks/generation-pipeline.ts 的 scanAndAssemble（同一扫描池 + EMPTY_PRESET 兜底）。
+ * 断言记录器与报告见 quality-assert.ts（自本模块单向导入 SseUsage/MODEL）。
  */
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import type { Message, MessageExtra } from '@shared/message';
 import { defaultNovelSettings, type NovelSettings } from '@shared/work';
 import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tavern';
@@ -32,11 +29,8 @@ export const GEN_PARAMS = { max_tokens: 4096, temperature: 0.8 };
 
 /** 世界书扫描全局设置（与 generation-pipeline SCAN_SETTINGS 同参） */
 const SCAN_SETTINGS: ScanSettings = {
-  scanDepth: 10,
-  caseSensitive: false,
-  matchWholeWords: false,
-  recursive: true,
-  maxRecursionSteps: 10,
+  scanDepth: 10, caseSensitive: false, matchWholeWords: false,
+  recursive: true, maxRecursionSteps: 10,
 };
 
 // ---------- HTTP 基础 ----------
@@ -148,11 +142,7 @@ export interface AssembleAssets {
 export type Tail = { kind: 'directive'; text: string } | { kind: 'userMessage'; text: string };
 
 /** no-op 变量读写（质量测试不使用 {{setvar}} 流程，仅满足 MacroEnv 形参） */
-const noopVars = {
-  getVar: () => undefined,
-  setVar: () => undefined,
-  scope: 'work' as const,
-};
+const noopVars = { getVar: () => undefined, setVar: () => undefined, scope: 'work' as const };
 
 /** novel 宏环境：user=「作者」、char=主卡名（对齐 buildMacroEnv） */
 export function novelMacroEnv(primaryCharName: string | undefined): MacroEnv {
@@ -201,7 +191,7 @@ export function assemble(args: {
 }
 
 /**
- * 预设缺失兜底骨架（与 hooks/generation-pipeline EMPTY_PRESET 同构的内联副本：
+ * 预设缺失兜底骨架（与 hooks/context-plan EMPTY_PRESET 同构的内联副本：
  * 不从该模块导入以避免牵入 api/store 依赖链——此处仅取 8 marker 顺序常量）。
  */
 const EMPTY_PRESET_LIKE: TavernPreset = {
@@ -212,12 +202,10 @@ const EMPTY_PRESET_LIKE: TavernPreset = {
       order: [
         { identifier: 'main', enabled: true },
         { identifier: 'worldInfoBefore', enabled: true },
-        { identifier: 'charDescription', enabled: true },
-        { identifier: 'charPersonality', enabled: true },
+        { identifier: 'charDescription', enabled: true }, { identifier: 'charPersonality', enabled: true },
         { identifier: 'scenario', enabled: true },
         { identifier: 'worldInfoAfter', enabled: true },
-        { identifier: 'chatHistory', enabled: true },
-        { identifier: 'jailbreak', enabled: true },
+        { identifier: 'chatHistory', enabled: true }, { identifier: 'jailbreak', enabled: true },
       ],
     },
   ],
@@ -253,15 +241,35 @@ export async function createWork(input: {
   return api('/api/works', {
     method: 'POST',
     body: JSON.stringify({
-      title: input.title,
-      mode: input.mode,
-      genre: 'xuanhuan',
-      characterIds: input.characterIds ?? [],
-      worldbookIds: input.worldbookIds ?? [],
-      presetId: input.presetId ?? '',
-      regexScriptIds: input.regexScriptIds ?? [],
+      title: input.title, mode: input.mode, genre: 'xuanhuan',
+      characterIds: input.characterIds ?? [], worldbookIds: input.worldbookIds ?? [],
+      presetId: input.presetId ?? '', regexScriptIds: input.regexScriptIds ?? [],
     }),
   });
+}
+
+/** Message 公共骨架（id/时间戳/swipes 骨架；三个 build 复用） */
+function baseMessage(role: 'user' | 'assistant', name: string, content: string, extra: MessageExtra): Message {
+  return {
+    id: crypto.randomUUID(),
+    role,
+    name,
+    content,
+    createdAt: Date.now(),
+    swipes: [content],
+    swipeId: 0,
+    extra,
+  };
+}
+
+/** assistant 生成类消息的 extra（model/token/generationMs + 可选激活条目） */
+function genExtra(input: { promptTokens: number; generationMs: number; activatedEntries?: string[] }): MessageExtra {
+  return {
+    model: MODEL,
+    tokenCount: input.promptTokens,
+    generationMs: input.generationMs,
+    ...(input.activatedEntries?.length ? { activatedEntries: input.activatedEntries } : {}),
+  };
 }
 
 /** novel 章节消息（对齐 buildChapterMessage §4.2） */
@@ -274,137 +282,19 @@ export function buildChapterMessage(input: {
   generationMs: number;
   activatedEntries?: string[];
 }): Message {
-  const extra: MessageExtra = {
-    model: MODEL,
-    tokenCount: input.promptTokens,
-    generationMs: input.generationMs,
-    ...(input.activatedEntries?.length ? { activatedEntries: input.activatedEntries } : {}),
-  };
   return {
-    id: crypto.randomUUID(),
-    role: 'assistant',
-    name: '小说家',
-    content: input.content,
-    createdAt: Date.now(),
-    swipes: [input.content],
-    swipeId: 0,
+    ...baseMessage('assistant', '小说家', input.content, genExtra(input)),
     chapter: { index: input.chapterIndex, title: input.title },
     ...(input.directive ? { directive: input.directive } : {}),
-    extra,
   };
 }
 
 /** chat 用户消息（对齐 buildUserTurn） */
 export function buildUserTurn(text: string): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: 'user',
-    name: '用户',
-    content: text,
-    createdAt: Date.now(),
-    swipes: [text],
-    swipeId: 0,
-    extra: {},
-  };
+  return baseMessage('user', '用户', text, {});
 }
 
 /** chat AI 回复（对齐 buildAssistantTurn：name=激活角色，无章节语义） */
 export function buildAssistantTurn(input: { content: string; speakerName: string; promptTokens: number; generationMs: number; activatedEntries?: string[] }): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: 'assistant',
-    name: input.speakerName,
-    content: input.content,
-    createdAt: Date.now(),
-    swipes: [input.content],
-    swipeId: 0,
-    extra: {
-      model: MODEL,
-      tokenCount: input.promptTokens,
-      generationMs: input.generationMs,
-      ...(input.activatedEntries?.length ? { activatedEntries: input.activatedEntries } : {}),
-    },
-  };
-}
-
-// ---------- 质量记录器（测试产物 → test-results/quality-artifacts.json，gitignore 内） ----------
-
-export interface ChapterRecord {
-  scene: string;
-  index: number;
-  title: string;
-  titleSource: 'model' | 'fallback';
-  chars: number;
-  firstSentence: string;
-  directive: string;
-  activatedIds: string[];
-  rawHadThinkTag: boolean;
-  usage: SseUsage;
-  promptTokens: number;
-  generationMs: number;
-  content: string;
-}
-
-export interface CheckRecord {
-  scene: string;
-  name: string;
-  pass: boolean;
-  detail?: string;
-}
-
-const chapters: ChapterRecord[] = [];
-const checks: CheckRecord[] = [];
-const usageTotals: Record<string, SseUsage> = {};
-
-export const recorder = {
-  chapter: (rec: ChapterRecord): void => {
-    chapters.push(rec);
-    const acc = usageTotals[rec.scene] ?? { inputTokens: 0, outputTokens: 0 };
-    usageTotals[rec.scene] = {
-      inputTokens: acc.inputTokens + rec.usage.inputTokens + rec.promptTokens,
-      outputTokens: acc.outputTokens + rec.usage.outputTokens + estimateTokens(rec.content),
-    };
-  },
-  check: (scene: string, name: string, pass: boolean, detail?: string): void => {
-    checks.push({ scene, name, pass, detail });
-  },
-  /** 场景内全部断言记录（报告矩阵 + 末尾聚合 expect 的数据源） */
-  checksOf: (scene: string): CheckRecord[] => checks.filter((c) => c.scene === scene),
-  /** 场景内失败断言详情（空数组 = 全过） */
-  failuresOf: (scene: string): string[] =>
-    checks.filter((c) => c.scene === scene && !c.pass).map((f) => `${f.name}${f.detail ? ` — ${f.detail}` : ''}`),
-  usageOf: (scene: string): SseUsage => usageTotals[scene] ?? { inputTokens: 0, outputTokens: 0 },
-  /** 落盘测试产物（人工审阅摘录与断言矩阵的数据源；test-results/ 在 .gitignore 内） */
-  flush: (): void => {
-    try {
-      const dir = artifactsDir();
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        join(dir, 'quality-artifacts.json'),
-        JSON.stringify({ generatedAt: new Date().toISOString(), model: MODEL, usageTotals, checks, chapters }, null, 2),
-        'utf8',
-      );
-    } catch {
-      // 产物落盘失败不影响测试结论
-    }
-  },
-};
-
-/** 测试产物目录：v3/client/test-results/（jsdom 下 import.meta.url 可能非 file scheme，退回 cwd） */
-function artifactsDir(): string {
-  try {
-    return fileURLToPath(new URL('../../../../test-results', import.meta.url));
-  } catch {
-    return join(process.cwd(), 'test-results');
-  }
-}
-
-/** 中文正文字数（去空白） */
-export function charCount(text: string): number {
-  return text.replace(/\s/g, '').length;
-}
-
-/** 中文 token 粗估（MiniMax 中文 ≈0.6 token/字） */
-export function estimateTokens(text: string): number {
-  return Math.round(charCount(text) * 0.6);
+  return baseMessage('assistant', input.speakerName, input.content, genExtra(input));
 }

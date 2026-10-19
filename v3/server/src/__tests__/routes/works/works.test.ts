@@ -19,10 +19,10 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import request from 'supertest';
 import type { Response as SupertestResponse } from 'supertest';
 
-import { createApp } from '../../app';
-import { worksRouter } from '../../routes/works';
-import { signToken } from '../../middleware/auth';
-import { HttpError } from '../../middleware/validate';
+import { createApp } from '../../../app';
+import { worksRouter } from '../../../routes/works';
+import { signToken } from '../../../middleware/auth';
+import { HttpError } from '../../../middleware/validate';
 import { defaultNovelSettings } from '@shared/work';
 
 process.env.ACCESS_PASSWORD = 'test123';

@@ -21,7 +21,6 @@ import {
   buildAssistantTurn,
   buildChapterMessage,
   buildUserTurn,
-  charCount,
   chatMacroEnv,
   createWork,
   generateStream,
@@ -29,10 +28,10 @@ import {
   novelMacroEnv,
   postprocessChat,
   postprocessNovel,
-  recorder,
   SCENE_TIMEOUT,
   type AssembleAssets,
 } from './quality-helpers';
+import { charCount, recorder } from './quality-assert';
 
 const SKIP = !process.env.QUALITY_RUN;
 const MACRO_RESIDUE = /\{\{(char|user)\}\}/;

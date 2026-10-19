@@ -10,10 +10,10 @@ import { dirname, join } from 'node:path';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import request from 'supertest';
 
-import { worksRouter } from '../../routes/works';
-import { signToken } from '../../middleware/auth';
-import { HttpError } from '../../middleware/validate';
-import { readAll } from '../../storage/jsonl';
+import { worksRouter } from '../../../routes/works';
+import { signToken } from '../../../middleware/auth';
+import { HttpError } from '../../../middleware/validate';
+import { readAll } from '../../../storage/jsonl';
 import type { Message } from '@shared/message';
 
 process.env.ACCESS_PASSWORD = 'test123';
