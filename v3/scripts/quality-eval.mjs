@@ -35,6 +35,7 @@ if (!titleKey) {
 // ---------- 数据读取 ----------
 function findWork(key) {
   const dir = path.join(DATA, 'works');
+  let best = null;
   for (const id of fs.readdirSync(dir)) {
     try {
       const work = JSON.parse(fs.readFileSync(path.join(dir, id, 'work.json'), 'utf8'));
@@ -46,11 +47,12 @@ function findWork(key) {
           .map((l) => JSON.parse(l))
           .filter((m) => m.chapter)
           .sort((a, b) => a.chapter.index - b.chapter.index);
-        return { id, work, messages };
+        // 同名多作品时取章节最多的（避免残留空壳被误选）
+        if (!best || messages.length > best.messages.length) best = { id, work, messages };
       }
     } catch { /* 跳过坏行 */ }
   }
-  return null;
+  return best;
 }
 
 // ---------- 机械文学指标 ----------
@@ -231,12 +233,17 @@ if (doJudge) {
     console.log(` 叙事${j.叙事} 人物${j.人物} 文笔${j.文笔} 节奏${j.节奏} 贴合${j.贴合}`);
   }
   process.stdout.write('评审全书…');
-  overallJudge = await judge(
-    '你是资深网文主编。只输出严格 JSON，无其他文字。',
-    overallRubric(chapters.map((c) => ({ index: c.index, len: c.len, opening: c.metrics.opening }))),
-    700,
-  );
-  console.log(' done');
+  try {
+    overallJudge = await judge(
+      '你是资深网文主编。只输出严格 JSON，无其他文字。',
+      overallRubric(chapters.map((c) => ({ index: c.index, len: c.len, opening: c.metrics.opening }))),
+      700,
+    );
+    console.log(' done');
+  } catch (err) {
+    // 全书评审失败不丢报告：机械指标与已成功的单章评分照常落盘
+    console.log(` 失败（${String(err.message).slice(0, 60)}），报告仍生成`);
+  }
 }
 
 // ---------- 报告 ----------

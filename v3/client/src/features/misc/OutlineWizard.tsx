@@ -91,7 +91,8 @@ export default function OutlineWizard() {
   const notify = (kind: 'ok' | 'err', text: string) => setToast({ kind, text });
 
   // 反馈①⑥：资产导入编排（一键导入不跳转 + ids 累计供创建作品自动绑定）
-  const { busy, assets, importState, importAll, createCards, createWorldbookOnly } = useWizardImports(notify, clearDraft);
+  const { busy, assets, importState, importAll, createCards, createWorldbookOnly, recordCreated } =
+    useWizardImports(notify, clearDraft);
 
   /** 粘贴即探测：编号展板条目 ≥3 → 批量人设导入模式；否则保留旧抽取路径（草稿同步 localStorage） */
   const onOutlineChange = (value: string) => {
@@ -233,13 +234,12 @@ export default function OutlineWizard() {
           <SheetImportPanel key={source} sheet={sheet} onFinished={(ok, failed) => {
             notify(
               failed.length > 0 ? 'err' : 'ok',
-              failed.length > 0 ? `成功 ${ok} 张，失败：${failed.join('、')}` : `已生成 ${ok} 张角色卡，正在跳转资产库…`,
+              failed.length > 0 ? `成功 ${ok} 张，失败：${failed.join('、')}` : `已生成 ${ok} 张角色卡（未跳转，可继续创建作品并导入大纲）`,
             );
             if (failed.length === 0) {
-              clearDraft(); // 全部导入成功：草稿使命完成
-              window.setTimeout(() => navigate('/library'), 800);
+              clearDraft(); // 全部导入成功：草稿使命完成（不跳转，反馈①同款语义）
             }
-          }} />
+          }} onImported={(created) => { void recordCreated({ ...created, characterNames: [], worldbookNames: [] }); }} />
           <AiSourceSwitch active={source} hasRule={ruleSheet !== null} hasLlm={llmSheet !== null} onSwitch={setSource} />
           {ruleSheet !== null && !llmSheet && (
             <AiRetryHint tokenHint={tokenHint} loading={aiLoading} onRun={() => void runAiExtract()} />

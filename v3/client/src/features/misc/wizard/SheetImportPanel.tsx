@@ -19,9 +19,11 @@ interface Props {
   sheet: SheetDocument;
   /** ok 为成功数；failed 非空时父级不自动跳转（面板展示汇总报告） */
   onFinished: (ok: number, failed: string[]) => void;
+  /** 反馈⑥：本次导入创建的资产 ids 回传（向导累计并在作品已存在时自动 PATCH 绑定） */
+  onImported?: (created: { characterIds: string[]; worldbookIds: string[] }) => void;
 }
 
-export default function SheetImportPanel({ sheet, onFinished }: Props) {
+export default function SheetImportPanel({ sheet, onFinished, onImported }: Props) {
   const entries = sheet.entries;
   const [checked, setChecked] = useState<boolean[]>(() => entries.map(() => true));
   const [busy, setBusy] = useState(false);
@@ -49,13 +51,15 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
     setReport(null);
     setProgress({ done: 0, total: picked.length });
     const failed: CharacterSheetEntry[] = [];
+    const createdIds: string[] = [];
     let ok = 0;
     for (const entry of picked) {
       try {
-        await apiFetch('/api/characters', {
+        const created = await apiFetch<{ id: string }>('/api/characters', {
           method: 'POST',
           body: JSON.stringify({ name: entry.name, card: buildSheetCardDraft(entry) }),
         });
+        createdIds.push(created.id);
         ok += 1;
       } catch {
         failed.push(entry);
@@ -66,6 +70,7 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
     setProgress(null);
     setReport({ ok, failed: failed.map((f) => f.name) });
     setFailedEntries(failed);
+    if (createdIds.length > 0) onImported?.({ characterIds: createdIds, worldbookIds: [] });
     if (failed.length === 0) onFinished(ok, []);
     else if (ok > 0) setNote(`已导入 ${ok} 张，失败 ${failed.length} 张（可重试仅导入失败项）`);
     else setNote('全部导入失败，请检查后端服务');
@@ -75,7 +80,11 @@ export default function SheetImportPanel({ sheet, onFinished }: Props) {
     setBusy(true);
     try {
       const draft = buildSheetWorldbookDraft(sheet);
-      await apiFetch('/api/worldbooks', { method: 'POST', body: JSON.stringify(draft) });
+      const created = await apiFetch<{ id: string }>('/api/worldbooks', {
+        method: 'POST',
+        body: JSON.stringify(draft),
+      });
+      onImported?.({ characterIds: [], worldbookIds: [created.id] });
       onFinished(0, []);
     } catch (err) {
       setNote(err instanceof Error ? err.message : '世界书生成失败');

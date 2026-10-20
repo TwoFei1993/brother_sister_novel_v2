@@ -122,5 +122,12 @@ export function useWizardImports(notify: Notify, onImported?: () => void) {
     if (ok) notify('ok', '已生成世界书（未跳转）');
   };
 
-  return { busy, assets, importState, importAll, createCards, createWorldbookOnly };
+  /** 反馈⑥（展板路径）：SheetImportPanel 等外部导入点回传本次创建的 ids——
+   *  累计进 assets（时序A：创建作品时携带）+ 作品已存在时立即 PATCH 绑定（时序B） */
+  const recordCreated = async (created: ImportedAssets): Promise<void> => {
+    setAssets((prev) => mergeAssets(prev, created));
+    await bindIfWorkExists(created);
+  };
+
+  return { busy, assets, importState, importAll, createCards, createWorldbookOnly, recordCreated };
 }
