@@ -44,6 +44,8 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
   const wb = useWorkbenchData(work);
   /** C 侧栏指令复填：非 null 时 CommandBar 注入输入框（消费后复位） */
   const [directiveSeed, setDirectiveSeed] = useState<string | null>(null);
+  /** 长上下文质量警示关闭标记（每次进作品页重新出现） */
+  const [driftWarnDismissed, setDriftWarnDismissed] = useState(false);
   /** 显示轨正则脚本（markdownOnly，§5.1②）：work 绑定资产，A/B 视图渲染前应用 */
   const [regexScripts, setRegexScripts] = useState<TavernRegexScript[]>([]);
 
@@ -248,6 +250,28 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
 
       {/* novel TTS 听书条（引擎常驻；A/B/C 三视图均显示，写作时也能随时听书；高亮由 ReadingView 读 tts store） */}
       {work.mode === 'novel' && <WorkTtsBar work={work} chapters={ttsChapters} />}
+
+      {/* 长上下文质量警示（深度测试实测：累积 6 章起出现句式重复/节奏退化，可手动关闭） */}
+      {work.mode === 'novel' && chapters.length >= 6 && !driftWarnDismissed && (
+        <div
+          role="status"
+          data-testid="drift-warning"
+          className="flex items-center gap-2 border-t border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+        >
+          <span className="min-w-0 flex-1">
+            ⚠ 已累积 {chapters.length} 章：实测长上下文连续生成可能出现质量退化（句式重复、节奏拖沓）。建议分卷创作或对单章 🎲 换一支对比。
+          </span>
+          <button
+            type="button"
+            aria-label="关闭警示"
+            data-testid="drift-warning-close"
+            onClick={() => setDriftWarnDismissed(true)}
+            className="shrink-0 rounded px-1 hover:bg-amber-500/20"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <CommandBar
         streaming={gen.streaming}

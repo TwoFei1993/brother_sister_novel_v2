@@ -62,6 +62,19 @@ const AI_CLICHE = [
 
 const count = (text, re) => (text.match(re) ?? []).length;
 
+/** 生成崩溃检测：最高频 4-gram 及其次数（正常文本 ≤5；重复循环会到数百上千） */
+function maxRepeat4Gram(content) {
+  const clean = content.replace(/\s/g, '');
+  const grams = new Map();
+  for (let i = 0; i + 4 <= clean.length; i++) {
+    const g = clean.slice(i, i + 4);
+    grams.set(g, (grams.get(g) ?? 0) + 1);
+  }
+  let best = { gram: '', n: 0 };
+  for (const [g, n] of grams) if (n > best.n) best = { gram: g, n };
+  return best;
+}
+
 function chapterMetrics(content) {
   const body = content.replace(/^#[^\n]*\n/, '').trim();
   const chars = body.replace(/\s/g, '').length;
@@ -80,6 +93,7 @@ function chapterMetrics(content) {
     if (n > 0) { clicheHits[w] = n; clicheTotal += n; }
   }
   const uniqueChars = new Set(body.replace(/\s/g, '')).size;
+  const repeat = maxRepeat4Gram(body);
   return {
     chars,
     sentences: lens.length,
@@ -90,6 +104,8 @@ function chapterMetrics(content) {
     clichePerKilo: +(clicheTotal / Math.max(0.5, chars / 1000)).toFixed(1),
     clicheHits,
     typeTokenRatio: +(uniqueChars / Math.max(1, chars)).toFixed(2),
+    maxRepeat: repeat,
+    collapsed: repeat.n >= 100, // 崩溃阈值：正常行文最高频 4-gram ≈15-36，重复循环 ≥1000 量级
     opening: body.slice(0, 24),
     formulaOpening: /是从[^，。。\n]{0,14}开始的|^.{0,6}的风是从/.test(body),
   };
@@ -107,27 +123,45 @@ async function login() {
   cookie = (res.headers.get('set-cookie') ?? '').split(';')[0];
 }
 
-async function judge(system, user, maxTokens = 900) {
-  const res = await fetch(`${BASE}/api/llm/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie },
-    body: JSON.stringify({
-      source: 'claude',
-      model: MODEL,
-      stream: false,
-      params: { max_tokens: maxTokens, temperature: 0.2 },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 120)}`);
-  const out = await res.json();
-  const text = out.text ?? '';
-  const m = /\{[\s\S]*\}/.exec(text);
-  if (!m) return { _raw: text.slice(0, 200) };
-  try { return JSON.parse(m[0]); } catch { return { _raw: text.slice(0, 300) }; }
+async function judge(system, user, maxTokens = 900, retries = 5) {
+  const backoff = [5000, 10000, 20000, 40000, 60000];
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(`${BASE}/api/llm/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          source: 'claude',
+          model: MODEL,
+          stream: false,
+          params: { max_tokens: maxTokens, temperature: 0.2 },
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }),
+      });
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      await new Promise((r) => setTimeout(r, backoff[attempt] ?? 60000));
+      continue;
+    }
+    if (res.ok) {
+      const out = await res.json();
+      const text = out.text ?? '';
+      const m = /\{[\s\S]*\}/.exec(text);
+      if (!m) return { _raw: text.slice(0, 200) };
+      try { return JSON.parse(m[0]); } catch { return { _raw: text.slice(0, 300) }; }
+    }
+    // 5xx/限流：长退避重试（上游间歇 500 窗口可达分钟级）；4xx 直接抛
+    if (res.status >= 500 && attempt < retries) {
+      process.stdout.write(` ⚠${res.status}重试${attempt + 1}…`);
+      await new Promise((r) => setTimeout(r, backoff[attempt] ?? 60000));
+      continue;
+    }
+    throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 120)}`);
+  }
 }
 
 const CHAPTER_RUBRIC = `你是资深中文网文编辑，按行业标准严格评审单章质量。只依据文本本身，不打人情分。
@@ -176,10 +210,23 @@ if (doJudge) {
   await login();
   for (const c of chapters) {
     process.stdout.write(`评审第 ${c.index} 章…`);
-    const j = await judge(
-      CHAPTER_RUBRIC,
-      `【剧情指令】${c.directive || '（无，自由续写）'}\n【本章正文】\n${c.content.slice(0, 6000)}`,
-    );
+    // 长章送「头 4000 + 尾 2500」：评委能看到开篇与收尾（节奏/贴合才公平），中段标注省略
+    const body = c.content.length > 7000
+      ? `${c.content.slice(0, 4000)}\n\n【……中段略……】\n\n${c.content.slice(-2500)}`
+      : c.content;
+    let j;
+    try {
+      j = await judge(CHAPTER_RUBRIC, `【剧情指令】${c.directive || '（无，自由续写）'}\n【本章正文】\n${body}`, 1100);
+      if (j._raw !== undefined) {
+        // JSON 截断/格式坏：重问一次
+        j = await judge(CHAPTER_RUBRIC, `【剧情指令】${c.directive || '（无）'}\n【本章正文】\n${body}\n\n（上一次输出 JSON 不完整。这次只输出 JSON 本体，务必以 } 结尾）`, 1100);
+      }
+    } catch (err) {
+      // 单章评审失败不中断全书：记错继续（报告标注）
+      chapterJudges.push({ index: c.index, _error: String(err.message).slice(0, 80) });
+      console.log(` 评审失败：${String(err.message).slice(0, 60)}`);
+      continue;
+    }
     chapterJudges.push({ index: c.index, ...j });
     console.log(` 叙事${j.叙事} 人物${j.人物} 文笔${j.文笔} 节奏${j.节奏} 贴合${j.贴合}`);
   }
@@ -213,6 +260,7 @@ const lines = [
   `| 章均句长 / 波动 | ${chapters[0].metrics.meanSentenceLen} / ${chapters.map((c) => c.metrics.sentenceLenSd).join(', ')} |`,
   `| 对话占比区间 | ${Math.min(...chapters.map((c) => c.metrics.dialogueRatio))} ~ ${Math.max(...chapters.map((c) => c.metrics.dialogueRatio))} |`,
   `| 跨章签名句式（「X 是从…开始的」类开头） | ${formulaCount}/${chapters.length} 章 |`,
+  `| 重复循环崩溃章数 | ${chapters.filter((c) => c.metrics.collapsed).length}/${chapters.length} 章 |`,
   ...(doJudge
     ? [`| 叙事/人物/文笔/节奏/贴合（均分） | ${avg('叙事')} / ${avg('人物')} / ${avg('文笔')} / ${avg('节奏')} / ${avg('贴合')} |`]
     : []),
@@ -222,11 +270,12 @@ const lines = [
   '',
   '## 二、逐章明细',
   '',
-  '| 章 | 字数 | 句长±波动 | 对话比 | AI腔/千字 | 签名开头 |' + (doJudge ? ' 叙事/人物/文笔/节奏/贴合 |' : ''),
-  '| --- | --- | --- | --- | --- | --- |' + (doJudge ? ' --- |' : ''),
+  '| 章 | 字数 | 句长±波动 | 对话比 | AI腔/千字 | 重复循环 | 签名开头 |' + (doJudge ? ' 叙事/人物/文笔/节奏/贴合 |' : ''),
+  '| --- | --- | --- | --- | --- | --- | --- |' + (doJudge ? ' --- |' : ''),
   ...chapters.map((c) => {
     const j = chapterJudges.find((x) => x.index === c.index);
-    return `| ${c.index} | ${c.len} | ${c.metrics.meanSentenceLen}±${c.metrics.sentenceLenSd} | ${c.metrics.dialogueRatio} | ${c.metrics.clichePerKilo} | ${c.metrics.formulaOpening ? '⚠ 是' : '否'} |` + (doJudge ? ` ${j?.叙事 ?? '?'} / ${j?.人物 ?? '?'} / ${j?.文笔 ?? '?'} / ${j?.节奏 ?? '?'} / ${j?.贴合 ?? '?'} |` : '');
+    const rep = c.metrics.collapsed ? `⚠「${c.metrics.maxRepeat.gram}」×${c.metrics.maxRepeat.n}` : '否';
+    return `| ${c.index} | ${c.len} | ${c.metrics.meanSentenceLen}±${c.metrics.sentenceLenSd} | ${c.metrics.dialogueRatio} | ${c.metrics.clichePerKilo} | ${rep} | ${c.metrics.formulaOpening ? '⚠ 是' : '否'} |` + (doJudge ? ` ${j?.叙事 ?? '?'} / ${j?.人物 ?? '?'} / ${j?.文笔 ?? '?'} / ${j?.节奏 ?? '?'} / ${j?.贴合 ?? '?'} |` : '');
   }),
   '',
   '## 三、跨章开头句式（重复套路观察）',

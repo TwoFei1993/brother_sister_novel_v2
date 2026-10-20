@@ -143,7 +143,7 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
           <section className="border-t border-[hsl(var(--border-soft))] pt-4">
             <p className="mb-1 text-sm font-medium">生成目标</p>
             <p className="mb-3 text-xs text-[hsl(var(--fg-muted))]">
-              字数注入每章提示词；连写按钮按目标章节数自动续写（改动下一章起生效）
+              字数注入每章提示词；⚡连写每次写 3 章（写到目标章数即停；改动下一章起生效）
             </p>
             <div className="flex items-center gap-3">
               <label htmlFor="chapter-words" className="w-24 shrink-0 text-sm">
@@ -174,7 +174,7 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
                 data-testid="chapter-count"
                 className="h-9 w-24 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
               />
-              <span className="text-xs text-[hsl(var(--fg-muted))]">章（⚡连写到本章数即停）</span>
+              <span className="text-xs text-[hsl(var(--fg-muted))]">章（连写上界；⚡每次写 3 章）</span>
             </div>
           </section>
 

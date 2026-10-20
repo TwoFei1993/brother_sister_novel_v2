@@ -2,7 +2,7 @@
  * 底部指挥条（B 视图，设计 §7.1）：指令输入 + ▶续写 + ⚡连写 + 🎲换一支 +「继续」/ 停止
  *
  * - ▶续写：指令可空（空 = 无剧情指令自由续写）
- * - ⚡连写：从下一章自动写到目标章节数（作品设置可改），第一章用输入框指令、后续自由发挥
+ * - ⚡连写：每次续写 3 章（BATCH_CHUNK_SIZE，写到目标章数即停），第一章用输入框指令、后续自由发挥
  * - 🎲换一支：最后一章多候选时 ◀▶ 切换（PATCH swipeId）；仅一支时 = swipe 重生成（追加候选）
  * -「继续」：断流/停止后 partialKept=true 出现，以半成品重组上下文再发起（§9.2）
  * - 生成中：▶ 变 ⏹ 停止（连写时附进度 3/50）；输入与换一支禁用
@@ -124,7 +124,7 @@ export default function CommandBar({
               onClick={submitBatch}
               disabled={disabled || busy}
               data-testid="batch-btn"
-              title="一键连写：从下一章自动写到目标章节数（作品设置中可改），第一章用当前指令、后续 AI 自由发挥；随时可停止"
+              title="一键连写：每次续写 3 章（写到目标章数即停），第一章用当前指令、后续 AI 自由发挥；随时可停止"
               className={`${btnBase} border border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10`}
             >
               ⚡ 连写

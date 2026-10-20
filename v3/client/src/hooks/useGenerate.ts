@@ -15,6 +15,7 @@ import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
 import { buildGenerateBody } from '../api/llm';
+import { isCollapsedText } from '../engine/prompt/novel/collapse-detect';
 import { useGenerationStore } from '../stores/generation';
 import { useWorkStore } from '../stores/work';
 
@@ -53,6 +54,10 @@ export interface BatchProgress {
   done: number;
   total: number;
 }
+
+/** 每次 ⚡连写 的章数：深度测试实测长批次（10+ 章连续）第 6 章起出现重复循环退化，
+ *  短批次控风险；仍受目标章节数上界约束（写到 target 即停） */
+export const BATCH_CHUNK_SIZE = 3;
 
 export interface UseGenerateResult {
   streaming: boolean;
@@ -150,27 +155,42 @@ export function useGenerate(): UseGenerateResult {
   /** 元信息残章自动重试后缀（Sudachi 类思维链预设偶发：整轮输出只有思考没有正文） */
   const META_RETRY_SUFFIX =
     '\n\n（系统重试：上一次输出只有思考没有正文，视为无效。这次请跳过一切思考与提纲，直接输出完整正文。）';
-  /** 是否「正常完成但产物为元信息残章」——仅 finalize 成功返回的消息参与判定；
-   *  run 返回 null（流中错误/用户停止/防重入）不算残章，交由上层终止/提示，绝不重试；
+  /** 重复循环崩溃自动重试后缀（深度测试实测：长上下文连写中后段单短语重复上千次）
+   *  指令要点对照酒馆社区 anti-slop 实践（autonovel ANTI-SLOP / antislop-sampler 的提示词层方案） */
+  const COLLAPSE_RETRY_SUFFIX =
+    '\n\n（系统重试：上一次输出在中后段陷入同一短语的机械重复，属无效输出。这次必须：每写一段都推进剧情，' +
+    '禁止用重复描写填充篇幅；同一个比喻/意象全文最多出现一次；不要复用任何章节的开篇句式；' +
+    '句式长短交错，连续三句长句后必须接短句；写完剧情指令要求的事件再收尾。）';
+  /** 无效输出判定：返回需要重试的原因——仅 finalize 成功返回的消息参与判定；
+   *  run 返回 null（流中错误/用户停止/防重入）不算无效，交由上层终止/提示，绝不重试；
    *  content 非字符串（异常数据）视为正常消息，不误触发重试 */
-  const isMetaOnly = (m: Message | null): boolean => {
-    if (m === null) return false;
+  const invalidReasonOf = (m: Message | null): 'meta' | 'collapse' | null => {
+    if (m === null) return null;
     const c = m.content;
-    return typeof c === 'string' && (!c.trim() || c.startsWith(META_ONLY_PLACEHOLDER));
+    if (typeof c !== 'string') return null;
+    if (!c.trim() || c.startsWith(META_ONLY_PLACEHOLDER)) return 'meta';
+    if (isCollapsedText(c)) return 'collapse';
+    return null;
+  };
+  const RETRY_SUFFIX: Record<'meta' | 'collapse', string> = {
+    meta: META_RETRY_SUFFIX,
+    collapse: COLLAPSE_RETRY_SUFFIX,
   };
 
   const generateChapter = useCallback(
     async (work: Work, messages: Message[], directive: string) => {
       let msg = await run(work, messages, directive, { targetId: crypto.randomUUID(), initialBuffer: '' });
-      if (isMetaOnly(msg)) {
+      const reason = invalidReasonOf(msg);
+      if (msg && reason) {
+        // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词，不入库 metadata）
         msg = await run(work, messages, directive, {
           targetId: crypto.randomUUID(),
           initialBuffer: '',
-          promptDirective: directive + META_RETRY_SUFFIX, // 后缀只进提示词，不入库 metadata
+          promptDirective: directive + RETRY_SUFFIX[reason],
         });
       }
-      // 重试一次后仍是残章（或本次即失败）：返回 null——占位章不入库、不上架（batch 以 null 终止）
-      return isMetaOnly(msg) ? null : msg;
+      // 重试一次后仍无效（或本次即失败）：返回 null——占位/崩溃章不入库、不上架（batch 以 null 终止）
+      return invalidReasonOf(msg) ? null : msg;
     },
     [run],
   );
@@ -196,18 +216,20 @@ export function useGenerate(): UseGenerateResult {
         initialBuffer: '',
         swipeTarget: target,
       });
-      if (isMetaOnly(msg)) {
+      const reason = invalidReasonOf(msg);
+      if (msg && reason) {
         msg = await run(work, historyBeforeTarget(messages, target.id), directive, {
           targetId: target.id,
           initialBuffer: '',
           swipeTarget: target,
-          promptDirective: directive + META_RETRY_SUFFIX, // 后缀只进提示词，不入库 metadata
+          promptDirective: directive + RETRY_SUFFIX[reason], // 后缀只进提示词，不入库 metadata
         });
       }
-      // 重试一次后仍是残章（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
-      return isMetaOnly(msg) ? null : msg;
+      // 重试一次后仍无效（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
+      return invalidReasonOf(msg) ? null : msg;
     },
     [run],
+
   );
 
   const stop = useCallback(() => {
@@ -215,8 +237,9 @@ export function useGenerate(): UseGenerateResult {
     abortRef.current?.abort();
   }, []);
 
-  /** 一键连写：循环单章生成直到目标章节数；出错/用户停止即停，已入库章节保留。
-   *  每轮从 work store 读最新 messages（上一章已 upsertLocal），规避闭包陈旧。 */
+  /** 一键连写：每轮默认写 3 章（深度测试实测：长批次质量退化风险高——第 6 章起
+   *  出现重复循环崩溃，短批次既控制风险又保留批量效率）；写到目标章数即停；
+   *  出错/用户停止即停，已入库章节保留。每轮从 work store 读最新 messages。 */
   const runBatch = useCallback(
     async (work: Work, firstDirective: string): Promise<void> => {
       const total = work.settings.desiredChapterCount;
@@ -224,7 +247,7 @@ export function useGenerate(): UseGenerateResult {
       batchCancelRef.current = false;
       try {
         let first = true;
-        for (;;) {
+        for (let done = 0; done < BATCH_CHUNK_SIZE; done++) {
           const messages = useWorkStore.getState().messages;
           if (remainingChapters(messages, total) <= 0 || batchCancelRef.current) break;
           setBatch({ done: nextChapterIndex(messages) - 1, total });
