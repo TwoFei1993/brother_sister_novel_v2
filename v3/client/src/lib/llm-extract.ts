@@ -121,8 +121,15 @@ export async function llmExtract<T = unknown>(
  * 2) 展板路径：条目数 <3 && 文本含 ≥3 个「序号+分隔符+｜」疑似条目头（展板变体格式）。
  * 规则成功（≥3 条）或文本过短时不兜底（规则优先原则）。
  */
-export function shouldFallbackToLLM(ruleCount: number, textLength: number, suspectHeads = 0): boolean {
+export function shouldFallbackToLLM(
+  ruleCount: number,
+  textLength: number,
+  suspectHeads = 0,
+  /** 普通大纲路径的背景抽取是否成功（真实文档实测：有人物无背景=规则结果贫瘠，也应兜底） */
+  backgroundOk = true,
+): boolean {
   if (ruleCount === 0 && textLength > 500) return true;
+  if (textLength > 500 && !backgroundOk) return true; // 有人物但背景缺失：规则结果贫瘠
   return ruleCount < 3 && suspectHeads >= 3;
 }
 

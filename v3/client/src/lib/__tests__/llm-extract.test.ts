@@ -183,3 +183,15 @@ describe('estimateTokenKilo token 粗估', () => {
     expect(estimateTokenKilo(0)).toBe(1);
   });
 });
+
+describe('shouldFallbackToLLM 背景判定（真实用户 docx 实测反馈）', () => {
+  it('有人物但背景缺失的长文档 → 触发兜底（2 行巨段 docx 案例）', async () => {
+    const { shouldFallbackToLLM } = await import('../llm-extract');
+    expect(shouldFallbackToLLM(1, 16378, 0, false)).toBe(true); // 规则只抽到 1 人、无背景
+  });
+
+  it('人物与背景齐备 → 不触发', async () => {
+    const { shouldFallbackToLLM } = await import('../llm-extract');
+    expect(shouldFallbackToLLM(3, 2000, 0, true)).toBe(false);
+  });
+});

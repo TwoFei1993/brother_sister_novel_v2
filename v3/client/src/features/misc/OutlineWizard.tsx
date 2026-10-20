@@ -83,7 +83,9 @@ export default function OutlineWizard() {
   const ruleCount = ruleResult
     ? ruleResult.characters.length + (ruleResult.background ? 1 : 0) + (ruleResult.conflict ? 1 : 0)
     : 0;
-  const fallbackNeeded = ruleResult !== null && !llmResult && shouldFallbackToLLM(ruleCount, outline.length, suspectHeads);
+  const fallbackNeeded =
+    ruleResult !== null && !llmResult &&
+    shouldFallbackToLLM(ruleCount, outline.length, suspectHeads, Boolean(ruleResult.background));
   /** 展板形态（规则 sheet 已识别 或 疑似展板变体）→ AI 走展板 prompt；否则普通大纲 prompt */
   const useSheetPrompt = ruleSheet !== null || suspectHeads >= 3;
   const tokenHint = estimateTokenKilo(outline.length);
