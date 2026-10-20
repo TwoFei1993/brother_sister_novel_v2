@@ -30,6 +30,7 @@ import { suggestBookTitles } from '../../lib/export';
 import { useSettingsStore } from '../../stores/settings';
 import SheetImportPanel from './wizard/SheetImportPanel';
 import OutlinePreview from './wizard/OutlinePreview';
+import DocImport from './wizard/DocImport';
 import { AiErrorBox, AiRetryHint, AiSourceSwitch, LlmFallbackBar, type AiErrorState } from './wizard/LlmFallback';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
@@ -238,14 +239,17 @@ export default function OutlineWizard() {
           className="w-full rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-sm leading-relaxed outline-none focus:border-[hsl(var(--accent))]"
         />
         {!sheet && (
-          <button
-            type="button"
-            onClick={onExtract}
-            disabled={!outline.trim()}
-            className="mt-2 min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
-          >
-            智能抽取
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onExtract}
+              disabled={!outline.trim()}
+              className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
+            >
+              智能抽取
+            </button>
+            <DocImport hasContent={outline.trim() !== ''} onText={onOutlineChange} />
+          </div>
         )}
       </section>
 

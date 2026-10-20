@@ -20,6 +20,7 @@ import { httpLogger, logger } from './middleware/logger';
 import { HttpError, formatZodError } from './middleware/validate';
 import { coreRouter } from './routes/core';
 import { dataDir } from './routes/core/paths';
+import { extractRouter } from './routes/extract';
 import { libraryRouter } from './routes/library';
 import { llmRouter } from './routes/llm';
 import { worksRouter } from './routes/works';
@@ -91,6 +92,7 @@ export function createApp(): Express {
   app.use('/api', libraryRouter); // library/ 角色卡·世界书·预设·正则
   app.use('/api', worksRouter);   // works/ 作品 CRUD + 消息流（messages 子路由 Task 8）
   app.use('/api', llmRouter);     // llm/ 生成代理（SSE）+ 探活 + tokenize（Task 17）
+  app.use('/api/extract', extractRouter); // extract/ Word 文档文本提取（向导导入）
   // ---- 后续任务预留挂载位 ----
 
   app.use(notFound);
