@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 
 import {
   ASSET_META, describeAsset, deleteAsset, duplicatePreset, exportAsset, getAsset, importAsset, listAssets,
-  renamePreset,
+  renameAsset,
   type AssetType, type LibraryAssetRef,
 } from '../../api/library';
 
@@ -106,12 +106,12 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
     }
   };
 
-  /** 重命名预设（仅 presets）：prompt 复用原值，空输入/取消不动 */
+  /** 重命名（全资产，反馈②）：prompt 复用原值，空输入/取消不动 */
   const onRename = async (id: string, name: string) => {
-    const next = window.prompt('重命名预设', name)?.trim();
+    const next = window.prompt(`重命名${label}`, name)?.trim();
     if (!next || next === name) return;
     try {
-      await renamePreset(id, next);
+      await renameAsset(type, id, next);
       notify('ok', `已重命名为「${next}」`);
       await reload();
     } catch (err) {
@@ -213,26 +213,25 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
                 编辑
               </button>
               {type === 'presets' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void onDuplicate(it.id, it.name)}
-                    data-testid="asset-copy"
-                    title="完整复制一份（含全部提示词与启用排序）"
-                    className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-                  >
-                    复制
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onRename(it.id, it.name)}
-                    data-testid="asset-rename"
-                    className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-                  >
-                    重命名
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => void onDuplicate(it.id, it.name)}
+                  data-testid="asset-copy"
+                  title="完整复制一份（含全部提示词与启用排序）"
+                  className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
+                >
+                  复制
+                </button>
               )}
+              <button
+                type="button"
+                onClick={() => void onRename(it.id, it.name)}
+                data-testid="asset-rename"
+                title="重命名资产（列表与绑定显示名同步更新）"
+                className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
+              >
+                重命名
+              </button>
               {type === 'characters' && (
                 <button
                   type="button"

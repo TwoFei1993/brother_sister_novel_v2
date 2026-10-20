@@ -1,11 +1,12 @@
 /**
- * 底部指挥条（B 视图，设计 §7.1）：指令输入 + ▶续写 + ⚡连写 + 🎲换一支 +「继续」/ 停止
+ * 底部指挥条（B 视图，设计 §7.1）：指令输入 + ▶续写 + ⚡连写 + 📖按大纲生成 + 🎲换一支 +「继续」/ 停止
  *
  * - ▶续写：指令可空（空 = 无剧情指令自由续写）
  * - ⚡连写：每次续写 3 章（BATCH_CHUNK_SIZE，写到目标章数即停），第一章用输入框指令、后续自由发挥
+ * - 📖按大纲生成（反馈⑤）：作品导入章节大纲后出现，从下一章起逐章按大纲写到覆盖的最大章号
  * - 🎲换一支：最后一章多候选时 ◀▶ 切换（PATCH swipeId）；仅一支时 = swipe 重生成（追加候选）
  * -「继续」：断流/停止后 partialKept=true 出现，以半成品重组上下文再发起（§9.2）
- * - 生成中：▶ 变 ⏹ 停止（连写时附进度 3/50）；输入与换一支禁用
+ * - 生成中：▶ 变 ⏹ 停止（连写/大纲时附进度 3/50 或 按大纲 x/y）；输入与换一支禁用
  */
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
@@ -23,11 +24,15 @@ interface CommandBarProps {
   disabled: boolean;
   /** 换一支动作进行中（重生成期间 🎲 禁用） */
   busy: boolean;
-  /** 连写进度（如 "3/50"；null = 非连写） */
+  /** 连写/大纲进度（如 "3/50" / "按大纲 2/7"；null = 空闲） */
   batchProgress: string | null;
+  /** 作品已导入章节大纲（chapterOutlines 非空）→ 显示 📖按大纲生成 */
+  canOutline: boolean;
   onGenerate: (directive: string) => void;
   /** ⚡连写：携带输入框当前指令作第一章指令（后续章空指令自由发挥） */
   onBatch: (directive: string) => void;
+  /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号 */
+  onByOutline: () => void;
   onToggleSwipe: (delta: 1 | -1) => void;
   /** 🎲 恒为重roll：同指令追加新候选并切到最新（多候选时也可用，与 ◀▶ 切换互补） */
   onRerollLast: () => void;
@@ -49,8 +54,10 @@ export default function CommandBar({
   disabled,
   busy,
   batchProgress,
+  canOutline,
   onGenerate,
   onBatch,
+  onByOutline,
   onToggleSwipe,
   onRerollLast,
   onContinue,
@@ -129,6 +136,18 @@ export default function CommandBar({
             >
               ⚡ 连写
             </button>
+            {canOutline && (
+              <button
+                type="button"
+                onClick={onByOutline}
+                disabled={disabled || busy}
+                data-testid="outline-btn"
+                title="按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动跟随本章要点），随时可停止"
+                className={`${btnBase} border border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10`}
+              >
+                📖 按大纲生成
+              </button>
+            )}
             <FieldHint
               tapToExpand
               text="续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。连写：点一次自动连写到目标章节数，中途点停止即停。"

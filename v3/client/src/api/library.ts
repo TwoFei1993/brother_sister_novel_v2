@@ -79,9 +79,9 @@ export async function duplicatePreset(id: string, name: string): Promise<Library
   return { id: created.id, name: created.name };
 }
 
-/** 预设重命名：PATCH 顶层 name（列表/绑定显示名取自浅列表的顶层字段） */
-export async function renamePreset(id: string, name: string): Promise<void> {
-  await apiFetch(`/api/presets/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+/** 通用重命名（反馈②，四类资产）：PATCH 顶层 name（crud 工厂浅合并；列表/绑定显示名取自浅列表字段） */
+export async function renameAsset(type: AssetType, id: string, name: string): Promise<void> {
+  await apiFetch(`/api/${type}/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
 }
 
 // ---------- 导入 / 导出 ----------

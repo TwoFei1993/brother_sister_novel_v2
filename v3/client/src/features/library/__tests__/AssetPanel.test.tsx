@@ -1,13 +1,14 @@
 /**
- * AssetPanel 预设行操作测试（api 层模块级 mock，不触网）
- * 覆盖：复制（携「 副本」新名 + 列表重拉）/ 重命名（prompt 输入回车改名）/ 取消不动
+ * AssetPanel 行操作测试（api 层模块级 mock，不触网）
+ * 覆盖：复制（携「 副本」新名 + 列表重拉）/ 全资产重命名（反馈②：四类 prompt 改名走
+ * renameAsset 携类型）/ 取消不动 / 非预设不渲染复制
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  deleteAsset, describeAsset, duplicatePreset, exportAsset, getAsset, importAsset, listAssets, renamePreset,
+  deleteAsset, describeAsset, duplicatePreset, exportAsset, getAsset, importAsset, listAssets, renameAsset,
   type AssetType, type LibraryAssetRef,
 } from '../../../api/library';
 
@@ -26,13 +27,13 @@ vi.mock('../../../api/library', async (importOriginal) => {
     deleteAsset: vi.fn(async () => undefined),
     describeAsset: actual.describeAsset,
     duplicatePreset: vi.fn(async (id: string, name: string) => ({ id: 'p-copy', name })),
-    renamePreset: vi.fn(async () => undefined),
+    renameAsset: vi.fn(async () => undefined),
   };
 });
 
 const listAssetsMock = vi.mocked(listAssets);
 const duplicatePresetMock = vi.mocked(duplicatePreset);
-const renamePresetMock = vi.mocked(renamePreset);
+const renameAssetMock = vi.mocked(renameAsset);
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -63,7 +64,7 @@ const q = (c: HTMLElement, id: string): HTMLElement => {
 beforeEach(() => {
   listAssetsMock.mockReset().mockResolvedValue(refs);
   duplicatePresetMock.mockClear();
-  renamePresetMock.mockClear();
+  renameAssetMock.mockClear();
   notify.mockClear();
 });
 
@@ -88,14 +89,14 @@ describe('AssetPanel 预设复制/重命名', () => {
     expect(listAssetsMock).toHaveBeenCalledTimes(2); // 初始 + 复制后重拉
   });
 
-  it('重命名：prompt 输入新名 → renamePreset 携 trimmed 新名', async () => {
+  it('重命名：prompt 输入新名 → renameAsset 携类型与 trimmed 新名', async () => {
     vi.spyOn(window, 'prompt').mockReturnValue('  新名字  ');
     const c = await mountPanel();
     await act(async () => {
       q(c, 'asset-rename').click();
     });
 
-    expect(renamePresetMock).toHaveBeenCalledWith('p1', '新名字');
+    expect(renameAssetMock).toHaveBeenCalledWith('presets', 'p1', '新名字');
     expect(notify).toHaveBeenCalledWith('ok', expect.stringContaining('已重命名'));
   });
 
@@ -106,15 +107,34 @@ describe('AssetPanel 预设复制/重命名', () => {
       q(c, 'asset-rename').click();
     });
 
-    expect(renamePresetMock).not.toHaveBeenCalled();
+    expect(renameAssetMock).not.toHaveBeenCalled();
   });
 
-  it('非预设类型不渲染复制/重命名按钮', async () => {
+  it('非预设类型不渲染复制按钮，但保留重命名（反馈②）', async () => {
     listAssetsMock.mockResolvedValue([{ id: 'w1', name: '主世界书' }]);
     const c = await mountPanel('worldbooks');
     expect(c.querySelector('[data-testid="asset-copy"]')).toBeNull();
-    expect(c.querySelector('[data-testid="asset-rename"]')).toBeNull();
+    expect(c.querySelector('[data-testid="asset-rename"]')).not.toBeNull();
   });
+
+  it.each([
+    ['characters', 'c1', '女主卡'],
+    ['worldbooks', 'w1', '主世界书'],
+    ['regex-scripts', 'r1', '美化正则'],
+  ] as [AssetType, string, string][])(
+    '全资产重命名（反馈②）：%s 点改名 → renameAsset 携类型与 id',
+    async (type, id, name) => {
+      listAssetsMock.mockResolvedValue([{ id, name }]);
+      vi.spyOn(window, 'prompt').mockReturnValue(`${name}·新`);
+      const c = await mountPanel(type);
+      await act(async () => {
+        q(c, 'asset-rename').click();
+      });
+
+      expect(renameAssetMock).toHaveBeenCalledWith(type, id, `${name}·新`);
+      expect(notify).toHaveBeenCalledWith('ok', expect.stringContaining('已重命名'));
+    },
+  );
 
   it('复制失败：err 通知且不重拉', async () => {
     duplicatePresetMock.mockRejectedValueOnce(new Error('磁盘已满'));

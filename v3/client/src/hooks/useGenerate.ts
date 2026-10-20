@@ -23,10 +23,10 @@ import {
   MAX_SWIPES,
   buildContinueDirective,
   historyBeforeTarget,
-  nextChapterIndex,
-  remainingChapters,
   swipeLimitError,
+  type BatchProgress,
 } from './generation-flow';
+import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { runGenerationStream } from './generation-runtime';
 import { META_ONLY_PLACEHOLDER } from '../engine/prompt/postprocess';
 import {
@@ -49,15 +49,7 @@ interface RunOptions {
   promptDirective?: string;
 }
 
-/** 连写批次进度（null = 空闲）：done=已写到的最大章号，total=目标章节数 */
-export interface BatchProgress {
-  done: number;
-  total: number;
-}
-
-/** 每次 ⚡连写 的章数：深度测试实测长批次（10+ 章连续）第 6 章起出现重复循环退化，
- *  短批次控风险；仍受目标章节数上界约束（写到 target 即停） */
-export const BATCH_CHUNK_SIZE = 3;
+/** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
 
 export interface UseGenerateResult {
   streaming: boolean;
@@ -73,7 +65,9 @@ export interface UseGenerateResult {
   swipeRegenerate: (work: Work, messages: Message[], target: Message) => Promise<Message | null>;
   /** 一键连写：从下一章自动写到目标章节数（第一章用传入指令、后续空指令自由发挥） */
   runBatch: (work: Work, firstDirective: string) => Promise<void>;
-  /** 连写进度（null = 空闲；CommandBar 停止按钮进度文案消费） */
+  /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动注入本章大纲要点） */
+  runByOutline: (work: Work, messages: Message[]) => Promise<void>;
+  /** 批量进度（null = 空闲；CommandBar 停止按钮进度文案消费） */
   batch: BatchProgress | null;
   /** 停止当前生成与连写循环（已产出部分保留在界面，「继续」可用） */
   stop: () => void;
@@ -237,30 +231,19 @@ export function useGenerate(): UseGenerateResult {
     abortRef.current?.abort();
   }, []);
 
-  /** 一键连写：每轮默认写 3 章（深度测试实测：长批次质量退化风险高——第 6 章起
-   *  出现重复循环崩溃，短批次既控制风险又保留批量效率）；写到目标章数即停；
-   *  出错/用户停止即停，已入库章节保留。每轮从 work store 读最新 messages。 */
+  /** 一键连写：从下一章自动写到目标章节数（循环编排在 generation-batch.runChunkLoop） */
   const runBatch = useCallback(
-    async (work: Work, firstDirective: string): Promise<void> => {
-      const total = work.settings.desiredChapterCount;
-      if (useGenerationStore.getState().streaming) return; // 防重入（单章生成中不可发起连写）
-      batchCancelRef.current = false;
-      try {
-        let first = true;
-        for (let done = 0; done < BATCH_CHUNK_SIZE; done++) {
-          const messages = useWorkStore.getState().messages;
-          if (remainingChapters(messages, total) <= 0 || batchCancelRef.current) break;
-          setBatch({ done: nextChapterIndex(messages) - 1, total });
-          const msg = await generateChapter(work, messages, first ? firstDirective : '');
-          first = false;
-          if (msg) useWorkStore.getState().upsertLocal(msg);
-          if (!msg || batchCancelRef.current) break; // 出错/停止即停（error 已进 store 提示）
-        }
-      } finally {
-        setBatch(null);
-        batchCancelRef.current = false;
-      }
-    },
+    (work: Work, firstDirective: string): Promise<void> =>
+      runChunkLoop(work, firstDirective, generateChapter, batchCancelRef, setBatch),
+    [generateChapter],
+  );
+
+  /** 📖按大纲生成（反馈⑤）：从下一章起按 chapterOutlines 逐章写到覆盖的最大章号
+   *  （循环编排在 generation-batch.runOutlineLoop；每章 directive 固定「按本章大纲写」，
+   *  本章要点由 scanAndAssemble 按章号自动注入） */
+  const runByOutline = useCallback(
+    (work: Work, messages: Message[]): Promise<void> =>
+      runOutlineLoop(work, messages, generateChapter, batchCancelRef, setBatch),
     [generateChapter],
   );
 
@@ -276,6 +259,7 @@ export function useGenerate(): UseGenerateResult {
     continueFromPartial,
     swipeRegenerate,
     runBatch,
+    runByOutline,
     batch,
     stop,
     clearError,

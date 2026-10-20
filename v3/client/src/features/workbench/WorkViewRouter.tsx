@@ -14,6 +14,7 @@ import type { Work, ViewPreference } from '@shared/work';
 
 import { patchMessage } from '../../api/works';
 import { exportTxt } from '../../lib/export';
+import { batchProgressText } from '../../hooks/generation-flow';
 import { loadRegexScripts } from '../../hooks/generation-pipeline';
 import type { UseGenerateResult } from '../../hooks/useGenerate';
 import { useWorkbenchData } from '../../hooks/useWorkbenchData';
@@ -280,9 +281,11 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
         swipePosition={lastChapter ? `${lastChapter.swipeId + 1}/${lastChapter.swipes.length}` : null}
         disabled={false}
         busy={gen.streaming}
-        batchProgress={gen.batch ? `${gen.batch.done}/${gen.batch.total}` : null}
+        batchProgress={gen.batch ? batchProgressText(gen.batch) : null}
+        canOutline={(work.settings.chapterOutlines?.length ?? 0) > 0}
         onGenerate={(d) => void handleGenerate(d)}
         onBatch={(d) => void gen.runBatch(work, d)}
+        onByOutline={() => void gen.runByOutline(work, messages)}
         onToggleSwipe={(d) => void handleToggleSwipe(d)}
         onRerollLast={() => void handleRerollLast()}
         onContinue={() => void handleContinue()}

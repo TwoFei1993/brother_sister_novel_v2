@@ -1,6 +1,6 @@
 /**
  * CommandBar 组件状态测试（jsdom + createRoot）
- * 覆盖：非生成态（▶续写/🎲换一支/◀▶候选切换）/ 生成态（⏹停止）/ partialKept「继续」。
+ * 覆盖：非生成态（▶续写/⚡连写/📖按大纲/🎲换一支/◀▶候选切换）/ 生成态（⏹停止+进度）/ partialKept「继续」。
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -25,8 +25,10 @@ async function renderBar(props: Partial<Parameters<typeof CommandBar>[0]> = {}):
     disabled: false,
     busy: false,
     batchProgress: null,
+    canOutline: false,
     onGenerate: () => undefined,
     onBatch: () => undefined,
+    onByOutline: () => undefined,
     onToggleSwipe: () => undefined,
     onRerollLast: () => undefined,
     onContinue: () => undefined,
@@ -110,6 +112,28 @@ describe('CommandBar 状态', () => {
   it('连写中：停止按钮显示进度（⏹ 停止 3/50）', async () => {
     const c = await renderBar({ streaming: true, batchProgress: '3/50' });
     expect(c.querySelector('[data-testid="stop-btn"]')?.textContent).toContain('3/50');
+  });
+
+  it('📖按大纲生成（反馈⑤）：canOutline=true 显示按钮，点击回调 onByOutline', async () => {
+    const onByOutline = vi.fn();
+    const c = await renderBar({ canOutline: true, onByOutline });
+    const btn = c.querySelector<HTMLButtonElement>('[data-testid="outline-btn"]');
+    expect(btn?.textContent).toContain('按大纲生成');
+    await act(async () => {
+      btn!.click();
+    });
+    expect(onByOutline).toHaveBeenCalledTimes(1);
+  });
+
+  it('无大纲（canOutline=false）不渲染 📖 按钮', async () => {
+    const c = await renderBar({ canOutline: false });
+    expect(c.querySelector('[data-testid="outline-btn"]')).toBeNull();
+  });
+
+  it('按大纲生成中：停止按钮显示大纲进度（⏹ 停止 按大纲 2/7）', async () => {
+    const c = await renderBar({ streaming: true, batchProgress: '按大纲 2/7' });
+    expect(c.querySelector('[data-testid="stop-btn"]')?.textContent).toContain('按大纲 2/7');
+    expect(c.querySelector('[data-testid="outline-btn"]')).toBeNull(); // 生成态非生成区整体隐藏
   });
 
   it('移动端折行布局（审计 H2）：容器 flex-wrap，输入框 basis-full 独占一行 / md 起回落同行', async () => {
