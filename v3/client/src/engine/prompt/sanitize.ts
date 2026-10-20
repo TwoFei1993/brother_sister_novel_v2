@@ -32,15 +32,46 @@ const OPTION_LINE_RE = /^[ \t]*[A-H][.、．][ \t]*\S/;
 /** 单行是否为列表项（短横线/星号/圆点/数字编号起始） */
 const LIST_ITEM_RE = /^\s*(?:[-*•·]|\d+[.、)]|[（(]\d+[)])\s+/;
 
+/** 思考块提取产物：thinking=剥离出的思维流（无则 null）；content=去掉思考块的正文 */
+export interface ThinkingSplit {
+  thinking: string | null;
+  content: string;
+}
+
+/**
+ * 思考块提取（用户反馈⑨：思维流不再直接丢弃，捕获后折叠展示供排查生成问题）：
+ * 成对 `<think>…</think>` / `<thinking>…</thinking>` 与流中断产生的未闭合尾部思考块
+ * 的**内容**被收集（标签本身不保留；多个块按序以空行拼接），其余正文原样返回。
+ * sanitizeOutput 复用本函数保持剥离行为——内容去哪由调用方决定（extra.rawThinking）。
+ */
+export function extractThinking(raw: string): ThinkingSplit {
+  const parts: string[] = [];
+  let content = raw.replace(
+    /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi,
+    (_m, inner: string) => {
+      const t = inner.trim();
+      if (t) parts.push(t);
+      return '';
+    },
+  );
+  const open = content.match(/<think(?:ing)?>([\s\S]*)$/i);
+  if (open) {
+    const t = (open[1] ?? '').trim();
+    if (t) parts.push(t);
+    content = content.slice(0, open.index);
+  }
+  return { thinking: parts.length ? parts.join('\n\n') : null, content };
+}
+
 /**
  * 内置卫生层（不依赖用户绑定正则，所有生成共用）：
- * 1. 思考块剥离：成对 `<think>/<thinking>…</…>` 与流中断产生的未闭合尾部思考块；
+ * 1. 思考块剥离：成对 `<think>/<thinking>…</…>` 与流中断产生的未闭合尾部思考块
+ *    （内容经 extractThinking 可单独取出，本函数只负责从正文剥离）；
  * 2. 名字前缀剥离：模型模仿对话格式在正文开头写「名字：」；
  * 3. 嵌套标题行清理：首行章节标题之外的 `#` 标题行。
  */
 export function sanitizeOutput(raw: string, speakerName?: string): string {
-  let out = raw.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
-  out = out.replace(/<think(?:ing)?>[\s\S]*$/i, '');
+  let out = extractThinking(raw).content;
   if (speakerName) {
     const escaped = speakerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     out = out.replace(new RegExp(`^\\s*${escaped}\\s*[:：]\\s*`), '');

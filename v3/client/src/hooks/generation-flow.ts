@@ -33,9 +33,9 @@ export function shouldRetry(error: GenerationError, chunksReceived: number, atte
   return RETRYABLE_CODES.has(error.code);
 }
 
-/** 重试退避（指数）：1s → 3s */
+/** 重试退避：5s → 15s（实测上游 529 过载窗口常达数十秒，原 1s/3s 的重试只会连续撞墙） */
 export function retryDelayMs(attempt: number): number {
-  return attempt === 1 ? 3000 : 1000;
+  return attempt === 1 ? 5000 : 15000;
 }
 
 /** 可中断 sleep（退避等待；signal 触发即以 AbortError 拒绝） */
@@ -73,6 +73,42 @@ export function remainingChapters(messages: Message[], targetCount: number): num
   return Math.max(0, targetCount - (nextChapterIndex(messages) - 1));
 }
 
+/** 每次 ⚡连写 的章数：深度测试实测长批次（10+ 章连续）第 6 章起出现重复循环退化，
+ *  短批次控风险；仍受目标章节数上界约束（写到 target 即停） */
+export const BATCH_CHUNK_SIZE = 3;
+
+/** 批量生成进度（null = 空闲）：done=已完成章数（chunk 语义=已写到的最大章号），total=目标章数 */
+export interface BatchProgress {
+  done: number;
+  total: number;
+  /** chunk=⚡连写（缺省）；outline=📖按大纲 */
+  mode?: 'chunk' | 'outline';
+}
+
+/** 批量进度文案（⏹ 停止按钮消费；大纲模式带「按大纲」前缀与连写区分） */
+export function batchProgressText(b: BatchProgress): string {
+  return b.mode === 'outline' ? `按大纲 ${b.done}/${b.total}` : `${b.done}/${b.total}`;
+}
+
+/** 📖按大纲生成的固定指令：本章要点由 scanAndAssemble 的 chapterOutlineDirective 按章号自动注入 */
+export const OUTLINE_DIRECTIVE = '按本章大纲写';
+
+/**
+ * 📖按大纲生成计划（反馈⑤）：从「下一章」起写到 chapterOutlines 覆盖的最大章号
+ * （区别于 desiredChapterCount——大纲写完即停，不凑目标章数）。
+ * 无大纲（空/缺省）或下一章已超过最大章号（大纲覆盖完）→ null（无可写）。
+ */
+export function outlineRunPlan(
+  messages: Message[],
+  outlines: readonly { index: number }[] | undefined,
+): { start: number; end: number; total: number } | null {
+  const maxIndex = outlines?.reduce((mx, o) => Math.max(mx, o.index), 0) ?? 0;
+  if (maxIndex <= 0) return null;
+  const start = nextChapterIndex(messages);
+  if (start > maxIndex) return null;
+  return { start, end: maxIndex, total: maxIndex - start + 1 };
+}
+
 /** 错误统一转义：SSE error 帧对象 / ApiError / AbortError / 未知 Error */
 export function toGenerationError(err: unknown): GenerationError {
   if (err instanceof ApiError) return { code: err.code, message: err.message };
@@ -108,6 +144,8 @@ export interface ChapterMessageInput {
   generationMs: number;
   statusSnapshot?: Record<string, string | number>;
   activatedEntries?: string[];
+  /** 模型思考流原文（用户反馈⑨；审计进 extra.rawThinking，前端折叠展示） */
+  rawThinking?: string;
 }
 
 /** 构造入库消息（§4.2）：assistant /「小说家」/ swipes=[content] / chapter 元数据 */
@@ -118,6 +156,7 @@ export function buildChapterMessage(input: ChapterMessageInput): Message {
     generationMs: input.generationMs,
     ...(input.statusSnapshot ? { statusSnapshot: input.statusSnapshot } : {}),
     ...(input.activatedEntries ? { activatedEntries: input.activatedEntries } : {}),
+    ...(input.rawThinking ? { rawThinking: input.rawThinking } : {}),
   };
   return {
     id: crypto.randomUUID(),

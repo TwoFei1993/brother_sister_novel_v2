@@ -16,7 +16,7 @@ import type { TavernRegexScript } from '@shared/tavern';
 import type { MacroEnv } from '../types';
 import { stripChatPreamble } from './novel/chat-preamble';
 import { getRegexedString } from './regex';
-import { sanitizeOutput } from './sanitize';
+import { extractThinking, sanitizeOutput } from './sanitize';
 
 // ---- 净化器公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
 export {
@@ -24,12 +24,13 @@ export {
   presentableNovel,
   splitOutline,
   sanitizeOutput,
+  extractThinking,
   stripLooseThinking,
   stripTailMeta,
   META_ONLY_PLACEHOLDER,
 } from './sanitize';
 export { stripChatPreamble, isChatterLine } from './novel/chat-preamble';
-export type { SplitOutline } from './sanitize';
+export type { SplitOutline, ThinkingSplit } from './sanitize';
 
 /** 首行标题行：`# 第N章 xxx` 或 `# xxx`（# 后须有内容，防误伤空行） */
 const TITLE_LINE_RE = /^#[ \t]*(\S[^\n]*)/;
@@ -123,13 +124,18 @@ export interface PostprocessResult {
   content: string;
   title: string;
   statusSnapshot?: Record<string, string | number>;
+  /** 思考块内容（用户反馈⑨；多个块拼接。无思考块时为 undefined——入库不落空串） */
+  thinking?: string;
 }
 
 /**
  * 后处理总入口（纯函数）：
- * 内置卫生层（思考块/名字前缀/嵌套标题）→ 正则显示清理 → 状态块解析剥离 → 章节标题解析。
+ * 思考块提取（反馈⑨：内容透传给调用方折叠展示）→ 内置卫生层（名字前缀/嵌套标题等，
+ * 思考块在 sanitizeOutput 内部同样被剥离）→ 正则显示清理 → 状态块解析剥离 → 章节标题解析。
  */
 export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): PostprocessResult {
+  // 先行提取思考块内容（sanitizeOutput 只负责剥离，内容由此透传入库 extra.rawThinking）
+  const { thinking } = extractThinking(raw);
   // 内置卫生层：与用户正则无关，所有生成共用（质量测试 T3/T4 发现的思考块与名字前缀残留）
   const sanitized = sanitizeOutput(raw, opts.speakerName);
   // novel 入库轨闲聊前导剥离（对 System 寒暄/思考结束标记/指令回显等，见 chat-preamble.ts）
@@ -148,5 +154,5 @@ export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): Pos
     opts.directive,
     opts.chapterIndex ?? 0,
   );
-  return { content, title, statusSnapshot };
+  return { content, title, statusSnapshot, ...(thinking ? { thinking } : {}) };
 }

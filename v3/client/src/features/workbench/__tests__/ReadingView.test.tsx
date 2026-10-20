@@ -142,3 +142,34 @@ describe('ReadingView 流式与分页', () => {
     expect(container.textContent).toContain('向上滚动加载更早章节');
   });
 });
+
+describe('ReadingView 思考折叠块（反馈⑨）', () => {
+  it('extra.rawThinking 非空时章节头渲染💭折叠块：默认收起、点击展开显示思考文本', async () => {
+    const m = chapterMsg('c1', 1, '第1章 试炼之门', '晨光刺破云层。');
+    m.extra = { rawThinking: '先铺环境再写人物出场' };
+    const container = await renderView({ messages: [m] });
+    const block = container.querySelector('[data-testid="thinking-block"]');
+    expect(block).not.toBeNull();
+    expect(container.textContent).toContain('思考过程');
+    expect(container.querySelector('[data-testid="thinking-content"]')).toBeNull(); // 默认收起
+    await act(async () => {
+      (block!.querySelector('[data-testid="thinking-toggle"]') as HTMLButtonElement).click();
+    });
+    expect(container.querySelector('[data-testid="thinking-content"]')?.textContent).toBe(
+      '先铺环境再写人物出场',
+    );
+  });
+
+  it('XSS 向量纯文本转义展示（不产生元素）；无 rawThinking 的章节不渲染折叠块', async () => {
+    const m = chapterMsg('c1', 1, '第1章', '正文。');
+    m.extra = { rawThinking: '<img src=x onerror=alert(1)>' };
+    const container = await renderView({ messages: [m] });
+    await act(async () => {
+      (container.querySelector('[data-testid="thinking-toggle"]') as HTMLButtonElement).click();
+    });
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('[data-testid="thinking-content"]')?.textContent).toContain('<img');
+    const clean = await renderView({ messages: [chapterMsg('c2', 2, '第2章', '正文二。')] });
+    expect(clean.querySelector('[data-testid="thinking-block"]')).toBeNull();
+  });
+});

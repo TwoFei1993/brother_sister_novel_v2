@@ -285,3 +285,70 @@ describe('上游错误翻译（设计 §9.1）', () => {
     expect(res.body.code).toBe('LLM_NET');
   });
 });
+
+describe('上游空闲超时（反馈⑩：chunk 持续到达不误报）', () => {
+  it('慢流：chunk 间隔 100ms < 空闲超时 200ms、总时长 ~1s 超过旧总时长语义 → 完整收到不超时', async () => {
+    process.env.LLM_UPSTREAM_TIMEOUT_MS = '200';
+    await withUpstream(
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        let i = 0;
+        const timer = setInterval(() => {
+          if (i >= 10) {
+            clearInterval(timer);
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return;
+          }
+          res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `第${i}段` } }] })}\n\n`);
+          i += 1;
+        }, 100);
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send(GEN_BODY);
+        expect(res.status).toBe(200);
+        const frames = sseFrames(res.text);
+        expect(JSON.parse(frames[0]!).text).toBe('第0段');
+        expect(JSON.parse(frames[9]!).text).toBe('第9段');
+        expect(frames.at(-1)).toBe('[DONE]');
+        expect(res.text).not.toContain('LLM_TIMEOUT');
+      },
+    );
+  });
+
+  it('总时长硬顶：chunk 持续到达（不触发空闲超时）但超过硬顶 → LLM_TIMEOUT error 帧', async () => {
+    process.env.LLM_UPSTREAM_TIMEOUT_MS = '500'; // 空闲 500ms，chunk 每 30ms → 不触发
+    process.env.LLM_UPSTREAM_TOTAL_TIMEOUT_MS = '300';
+    await withUpstream(
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        const timer = setInterval(() => {
+          if (res.writableEnded || res.destroyed) {
+            clearInterval(timer);
+            return;
+          }
+          res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'x' } }] })}\n\n`);
+        }, 30);
+        res.on('close', () => clearInterval(timer));
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send(GEN_BODY);
+        expect(res.status).toBe(200);
+        const last = JSON.parse(sseFrames(res.text).at(-1)!);
+        expect(last.error.code).toBe('LLM_TIMEOUT');
+        expect(last.error.message).toContain('硬顶');
+        expect(res.text).not.toContain('[DONE]');
+      },
+    );
+  });
+});

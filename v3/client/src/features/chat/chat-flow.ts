@@ -15,7 +15,7 @@ import type { Message, MessageExtra } from '@shared/message';
 import { CHAT_REPLY_LENGTH_RANGE, DEFAULT_CHAT_REPLY_LENGTH, type ChatReplyLength, type Work } from '@shared/work';
 
 import type { MacroEnv } from '../../engine/types';
-import { META_ONLY_PLACEHOLDER, parseStatusBlock, presentable } from '../../engine/prompt/postprocess';
+import { META_ONLY_PLACEHOLDER, extractThinking, parseStatusBlock, presentable } from '../../engine/prompt/postprocess';
 import { getRegexedString } from '../../engine/prompt/regex';
 import type { ChatMember } from '../../engine/prompt/chat/activation';
 import type { GenerateMessage } from '../../api/llm';
@@ -192,6 +192,8 @@ export interface ChatFinalizeInput {
  *  交上层（useChatGenerate）带守卫后缀自动重试一次——不再以角色名义入库占位提示。 */
 export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<ChatTurn> {
   const raw = useGenerationStore.getState().buffer;
+  // 思考流捕获（用户反馈⑨）：剥离的内容存 extra.rawThinking 供气泡折叠展示
+  const { thinking } = extractThinking(raw);
   // 完整净化链（与 novel/显示层同源）：无标签思维流+尾部元信息+内置卫生层（预设片段 <Aniplex>、
   // 思维块、名字前缀等质检T4/对话实测泄露形态全覆盖）
   const hygiened = presentable(raw, input.speaker.name, input.otherNames);
@@ -208,6 +210,7 @@ export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<
     generationMs: Date.now() - input.startedAt,
     ...(statusSnapshot ? { statusSnapshot } : {}),
     ...(input.activatedIds.length ? { activatedEntries: input.activatedIds } : {}),
+    ...(thinking ? { rawThinking: thinking } : {}),
   };
   // 整轮输出只有思考/元信息：不入库（对齐 novel 语义），store 收束后交上层自动重试
   const metaOnly = !content.trim() || content.startsWith(META_ONLY_PLACEHOLDER);

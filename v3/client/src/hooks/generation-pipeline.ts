@@ -18,7 +18,7 @@ import { tokenizeMessages, type GenerateMessage } from '../api/llm';
 import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
-import { META_ONLY_PLACEHOLDER, postprocessMessage } from '../engine/prompt/postprocess';
+import { META_ONLY_PLACEHOLDER, extractThinking, postprocessMessage } from '../engine/prompt/postprocess';
 import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
 import { chapterOutlineDirective } from '../lib/outline/chapters';
 import { scanWorldInfo } from '../engine/worldbook';
@@ -254,6 +254,8 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
   const { work, directive, swipeTarget, assets, env, prefs, startedAt, pending } = input;
   const raw = useGenerationStore.getState().buffer;
   const chapterIndex = nextChapterIndex(input.messages);
+  // 思考流捕获（用户反馈⑨）：sanitize 只剥离，内容存 extra.rawThinking 供前端折叠展示
+  const { thinking } = extractThinking(raw);
   const pp = postprocessMessage(raw, {
     directive: directive || undefined,
     chapterIndex: chapterIndex - 1,
@@ -267,6 +269,7 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
     model: prefs.model || undefined,
     tokenCount: input.promptTokens,
     generationMs,
+    ...(thinking ? { rawThinking: thinking } : {}),
   };
   // 净化后一无所有 = 整轮输出只有思考/元信息：落占位提示（上层 isMetaOnly 据此自动重试一次）
   const bodyContent = pp.content.trim() ? pp.content : META_ONLY_PLACEHOLDER;
@@ -281,6 +284,7 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
         generationMs,
         statusSnapshot: pp.statusSnapshot,
         activatedEntries: input.activatedIds,
+        rawThinking: thinking ?? undefined,
       });
   const metaOnly = !pp.content.trim(); // 整轮输出只有思考/元信息：不入库，交由上层自动重试
   if (!metaOnly) {

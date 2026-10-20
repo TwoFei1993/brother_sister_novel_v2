@@ -180,3 +180,29 @@ describe('runChatWithMetaRetry（D7：残章自动重试一次）', () => {
     expect(turn!.assistant.content).toContain('一起吃');
   });
 });
+
+describe('思考流落库（反馈⑨：rawThinking 进 extra 供折叠展示）', () => {
+  beforeEach(() => {
+    useGenerationStore.getState().reset();
+    calls = [];
+    stubMessagesPost();
+  });
+
+  it('buffer 含思考块 → rawThinking 存进 assistant.extra，正文不含思考', async () => {
+    const { turn, posts } = await finalizeWith('<think>想想兄妹今晚吃什么</think>哥哥点点头：「好啊，一起吃。」');
+    expect(turn.metaOnly).toBeUndefined();
+    expect(turn.assistant.extra.rawThinking).toBe('想想兄妹今晚吃什么');
+    expect(turn.assistant.content).not.toContain('想想');
+    expect(turn.assistant.content).toContain('一起吃');
+    expect(posts).toBe(2);
+    const stored = JSON.parse(String(calls.find((c) => JSON.parse(String(c.init.body)).id === turn.assistant.id)!.init.body)) as {
+      extra: { rawThinking?: string };
+    };
+    expect(stored.extra.rawThinking).toBe('想想兄妹今晚吃什么');
+  });
+
+  it('无思考块 → extra 无 rawThinking 字段', async () => {
+    const { turn } = await finalizeWith('今晚吃火锅，我来下菜。');
+    expect(turn.assistant.extra.rawThinking).toBeUndefined();
+  });
+});

@@ -120,3 +120,26 @@ describe('ChatBubbles markdown 渲染（审计 H1）', () => {
     expect(c.textContent).toContain('**这不是粗体**');
   });
 });
+
+describe('MessageBubble 思考折叠块（反馈⑨）', () => {
+  it('extra.rawThinking 非空时气泡内渲染折叠块：默认收起、展开为纯文本转义内容', async () => {
+    const m = assistantMsg('哥哥点点头：「好啊。」');
+    m.extra = { rawThinking: '<think>保持温柔的语气</think>' };
+    const c = await renderEl(<MessageBubble message={m} canSwipe={false} canRegenerate={false} />);
+    expect(c.querySelector('[data-testid="thinking-block"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="thinking-content"]')).toBeNull(); // 默认收起
+    await act(async () => {
+      (c.querySelector('[data-testid="thinking-toggle"]') as HTMLButtonElement).click();
+    });
+    expect(c.querySelector('[data-testid="thinking-content"]')?.textContent).toContain('保持温柔的语气');
+    // 正文照常渲染，思考不入正文
+    expect(c.querySelector('[data-testid="chat-bubble"]')!.textContent).toContain('好啊');
+  });
+
+  it('无 rawThinking 不渲染折叠块', async () => {
+    const c = await renderEl(
+      <MessageBubble message={assistantMsg('普通回复')} canSwipe={false} canRegenerate={false} />,
+    );
+    expect(c.querySelector('[data-testid="thinking-block"]')).toBeNull();
+  });
+});

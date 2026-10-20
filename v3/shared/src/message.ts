@@ -29,6 +29,8 @@ export const MessageExtraSchema = z
     statusSnapshot: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
     /** 本次生成激活的世界书条目 uid 审计 */
     activatedEntries: z.array(z.string()).optional(),
+    /** 模型思考流原文（用户反馈⑨：从 <think>/<thinking> 块捕获，前端折叠展示；仅审计不进正文） */
+    rawThinking: z.string().optional(),
   })
   .strict();
 export type MessageExtra = z.infer<typeof MessageExtraSchema>;

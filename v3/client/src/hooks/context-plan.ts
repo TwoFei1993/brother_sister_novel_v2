@@ -109,7 +109,7 @@ export function withNovelOutputGuard(messages: GenerateMessage[], targetWords: n
     {
       role: 'user' as const,
       content:
-        `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`,
+        `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文第一行先输出「# 第N章 标题」标题行再写正文；正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`,
     },
   ];
 }

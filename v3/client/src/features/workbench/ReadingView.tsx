@@ -17,6 +17,7 @@ import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
 import { presentableNovel, splitOutline } from '../../engine/prompt/postprocess';
+import ThinkingBlock from '../../components/ThinkingBlock';
 import { applyDisplayRegex, MARKDOWN_CLASS } from '../../lib/reading/markdown';
 import { readingColors, useReadingPrefs, FONT_SIZES, LINE_HEIGHTS, READING_MODES } from '../../lib/reading/readingPrefs';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
@@ -201,6 +202,8 @@ export default function ReadingView({
                 <h2 className="mb-5 mt-2 border-l-[3px] border-[hsl(var(--accent))] pl-2.5 text-2xl leading-snug font-bold">
                   {m.chapter.title}
                 </h2>
+                {/* 思考过程折叠块（反馈⑨）：入库时捕获的思维流，默认收起不干扰阅读 */}
+                {m.extra.rawThinking && <ThinkingBlock thinking={m.extra.rawThinking} />}
                 {outline && <OutlineBlock outline={outline} regexScripts={regexScripts} />}
                 {paras ? (
                   <div className={MARKDOWN_CLASS}>

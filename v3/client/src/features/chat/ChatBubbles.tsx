@@ -12,6 +12,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import type { TavernRegexScript } from '@shared/tavern';
 
 import { presentable } from '../../engine/prompt/postprocess';
+import ThinkingBlock from '../../components/ThinkingBlock';
 import { applyDisplayRegex } from '../../lib/reading/markdown';
 import { sanitizeMarkdownSource } from '../../lib/sanitize';
 
@@ -66,7 +67,16 @@ export function MessageBubble({
   onRegenerate,
   onSpeak,
 }: {
-  message: { role: string; name?: string; content: string; id: string; swipes: string[]; swipeId: number };
+  message: {
+    role: string;
+    name?: string;
+    content: string;
+    id: string;
+    swipes: string[];
+    swipeId: number;
+    /** extra.rawThinking 非空时渲染「💭 思考过程」折叠块（反馈⑨；结构子集，Message 可直接传入） */
+    extra?: { rawThinking?: string };
+  };
   canSwipe: boolean;
   canRegenerate: boolean;
   /** 显示轨正则脚本（markdownOnly，work 绑定资产；与 novel 视图同源） */
@@ -91,6 +101,8 @@ export function MessageBubble({
       <div className="ml-2 max-w-[80%]">
         <p className="mb-0.5 text-xs text-[hsl(var(--fg-muted))]">{message.name}</p>
         <div className="rounded-2xl rounded-tl-sm bg-[hsl(var(--surface))] px-3 py-2 text-sm">
+          {/* 思考过程折叠块（反馈⑨）：默认收起；TTS 朗读仍基于净化后的 content，天然不含思考 */}
+          {message.extra?.rawThinking && <ThinkingBlock thinking={message.extra.rawThinking} />}
           <BubbleMarkdown text={content} regexScripts={regexScripts} />
         </div>
         {(canSwipe || canRegenerate || onSpeak) && (

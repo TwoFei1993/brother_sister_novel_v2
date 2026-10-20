@@ -116,4 +116,5 @@ beforeEach(async () => {
 
 afterEach(() => {
   delete process.env.LLM_UPSTREAM_TIMEOUT_MS;
+  delete process.env.LLM_UPSTREAM_TOTAL_TIMEOUT_MS;
 });

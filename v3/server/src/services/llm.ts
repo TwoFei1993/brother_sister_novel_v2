@@ -56,10 +56,21 @@ export type StreamEvent =
   | { kind: 'done' }
   | { kind: 'error'; code: LlmErrorCode; message: string };
 
-/** 上游超时：默认 120s，测试经 env 注入短时限 */
+/**
+ * 上游**空闲**超时（反馈⑩）：默认 120s，测试经 env 注入短时限。
+ * 语义 = 相邻两次上游数据之间的最大间隔（每收到一个 chunk 即重置），
+ * 而非请求总时长——MiniMax 等长文生成常超 120s 但流式 chunk 一直在正常到达，
+ * 按总时长计时会误杀正常生成。完全无数据的真挂起仍按此超时中止。
+ */
 function upstreamTimeoutMs(): number {
   const n = Number(process.env.LLM_UPSTREAM_TIMEOUT_MS);
   return Number.isFinite(n) && n > 0 ? n : 120_000;
+}
+
+/** 上游**总时长**硬顶：默认 10 分钟，测试经 env 注入。防对端持续发心跳/碎帧导致的死循环。 */
+function upstreamTotalTimeoutMs(): number {
+  const n = Number(process.env.LLM_UPSTREAM_TOTAL_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 600_000;
 }
 
 /** 读 secrets.json 明文（LLM 调用需要原文；对外接口只回掩码，见 routes/core/secrets.ts） */
@@ -111,8 +122,25 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
     throw new LlmError('LLM_NOKEY', '该通道尚未配置密钥，请先到设置页填写');
   }
 
+  // 双超时（反馈⑩）：idle=空闲超时（每收到上游数据重置，长文流式不误杀）；
+  // total=总时长硬顶（防持续碎帧/心跳死循环）。任一触发即中止上游并报 LLM_TIMEOUT。
+  const idleMs = upstreamTimeoutMs();
+  const totalMs = upstreamTotalTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), upstreamTimeoutMs());
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let timeoutKind: 'idle' | 'total' | null = null;
+  const armIdle = (): void => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      timeoutKind = 'idle';
+      controller.abort();
+    }, idleMs);
+  };
+  const totalTimer = setTimeout(() => {
+    timeoutKind = 'total';
+    controller.abort();
+  }, totalMs);
+  armIdle();
   // 外部中止信号（客户端断开）并入同一 controller：任一触发即中止上游请求（review #6）
   const onExternalAbort = (): void => controller.abort();
   if (input.signal?.aborted) controller.abort();
@@ -144,6 +172,7 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
     if (!res.body) throw new LlmError('LLM_NET', '上游未返回可读的响应体');
 
     for await (const payload of sseDataLines(res.body)) {
+      armIdle(); // 收到上游数据即重置空闲计时（反馈⑩核心：chunk 持续到达就不算超时）
       if (payload === '[DONE]') break;
       let json: Record<string, unknown>;
       try {
@@ -160,7 +189,14 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
     }
     yield { kind: 'done' };
   } catch (e) {
-    const err = toLlmError(e);
+    // 超时中止按触发方区分语义（人话错误消息）；客户端断开（外部 abort）不走此分支，
+    // 仍由 toLlmError 归类为 LLM_TIMEOUT（现状行为不变）
+    const err =
+      timeoutKind === 'idle'
+        ? new LlmError('LLM_TIMEOUT', `上游已 ${Math.round(idleMs / 1000)} 秒没有任何数据返回，已中止（空闲超时）`)
+        : timeoutKind === 'total'
+          ? new LlmError('LLM_TIMEOUT', `上游生成总时长超过 ${Math.round(totalMs / 60000)} 分钟硬顶，已中止`)
+          : toLlmError(e);
     if (err.code === 'LLM_NET' || err.code === 'LLM_UPSTREAM') {
       err.message = redact(err.message, secrets);
     }
@@ -170,7 +206,8 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
       throw err;
     }
   } finally {
-    clearTimeout(timer);
+    clearTimeout(idleTimer);
+    clearTimeout(totalTimer);
     input.signal?.removeEventListener('abort', onExternalAbort);
   }
 }

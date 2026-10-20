@@ -7,7 +7,13 @@ import { describe, expect, it } from 'vitest';
 
 import type { TavernRegexScript } from '@shared/tavern';
 
-import { parseChapterTitle, parseStatusBlock, postprocessMessage } from '../prompt/postprocess';
+import {
+  extractThinking,
+  parseChapterTitle,
+  parseStatusBlock,
+  postprocessMessage,
+  sanitizeOutput,
+} from '../prompt/postprocess';
 
 /** 正则脚本快捷构造：ai_output（placement 2）双 false = 全时轨道 */
 function makeScript(overrides: Partial<TavernRegexScript> = {}): TavernRegexScript {
@@ -97,5 +103,40 @@ describe('postprocessMessage 串联', () => {
     expect(result.title).toBe('第2章 试炼');
     expect(result.content).toBe('正文内容。');
     expect(result.statusSnapshot).toEqual({ HP: 88 });
+  });
+});
+
+describe('extractThinking（反馈⑨：思考流捕获供折叠展示）', () => {
+  it('成对 <think>…</think> 块：内容提出、标签不保留、正文干净', () => {
+    const { thinking, content } = extractThinking('<think>先铺雨夜氛围</think>正文第一句。');
+    expect(thinking).toBe('先铺雨夜氛围');
+    expect(content).toBe('正文第一句。');
+  });
+
+  it('<thinking> 变体与流中断的未闭合尾块同样提取', () => {
+    expect(extractThinking('<thinking>构思A</thinking>正文。')).toEqual({ thinking: '构思A', content: '正文。' });
+    const open = extractThinking('正文开头。<think>写到一半断了');
+    expect(open.thinking).toBe('写到一半断了');
+    expect(open.content).toBe('正文开头。');
+  });
+
+  it('多个思考块按序拼接；无思考块返回 null 且正文原样', () => {
+    const multi = extractThinking('<think>甲</think>中段<thinking>乙</thinking>尾段。');
+    expect(multi.thinking).toBe('甲\n\n乙');
+    expect(multi.content).toBe('中段尾段。');
+    const none = extractThinking('纯正文，没有任何思考块。');
+    expect(none.thinking).toBeNull();
+    expect(none.content).toBe('纯正文，没有任何思考块。');
+  });
+
+  it('postprocessMessage 透传 thinking 且 content 不含思考（extra.rawThinking 的数据源）', () => {
+    const r = postprocessMessage('<think>提纲：雨夜逃亡</think># 第3章 遗迹之门\n正文。', {});
+    expect(r.thinking).toBe('提纲：雨夜逃亡');
+    expect(r.title).toBe('第3章 遗迹之门');
+    expect(r.content).toBe('正文。');
+  });
+
+  it('sanitizeOutput 保持剥离行为：含思考块的正文净化后无残留', () => {
+    expect(sanitizeOutput('<think>悄悄话</think>小说家：雨夜逃亡。', '小说家')).toBe('雨夜逃亡。');
   });
 });
