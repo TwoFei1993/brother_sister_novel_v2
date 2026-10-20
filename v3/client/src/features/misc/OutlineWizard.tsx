@@ -1,12 +1,24 @@
 /**
  * 大纲向导（最小版，Task 32）：粘贴网文大纲 → 正则抽取预览（人物/背景/势力/矛盾）
  * → 一键生成角色卡与世界书草稿（POST /api/characters、/api/worldbooks 直接入库）
- * → 成功跳 /library。路由 /wizard（App.tsx）；导航入口由协调者统一挂载。
+ * → 成功跳 /library。路由 /wizard（App.tsx）。
+ * LLM 兜底：规则抽取效果不佳时可切换 AI 结构化解析（lib/llm-extract），结果与
+ * 规则结果可切换对比；展板形态走 SheetImportPanel 复用，普通大纲进入可编辑预览。
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { apiFetch } from '../../api/client';
+import {
+  buildCharacterSheetPrompt,
+  buildOutlinePrompt,
+  countSuspectEntryHeads,
+  estimateTokenKilo,
+  llmExtract,
+  outlineFromLlm,
+  sheetEntriesFromLlm,
+  shouldFallbackToLLM,
+} from '../../lib/llm-extract';
 import { parseSheetDocument, type SheetDocument } from '../../lib/outline-sheet';
 import {
   buildCardDraft,
@@ -15,7 +27,10 @@ import {
   type ExtractedOutline,
 } from '../../lib/outline-wizard';
 import { suggestBookTitles } from '../../lib/export';
+import { useSettingsStore } from '../../stores/settings';
 import SheetImportPanel from './wizard/SheetImportPanel';
+import OutlinePreview from './wizard/OutlinePreview';
+import { AiErrorBox, AiRetryHint, AiSourceSwitch, LlmFallbackBar, type AiErrorState } from './wizard/LlmFallback';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
 
@@ -45,21 +60,46 @@ export default function OutlineWizard() {
   const navigate = useNavigate();
   const initial = useMemo(loadDraft, []);
   const [outline, setOutline] = useState(initial.outline);
-  const [extracted, setExtracted] = useState<ExtractedOutline | null>(null);
-  const [sheet, setSheet] = useState<SheetDocument | null>(initial.sheet);
+  const [ruleResult, setRuleResult] = useState<ExtractedOutline | null>(null);
+  const [llmResult, setLlmResult] = useState<ExtractedOutline | null>(null);
+  const [ruleSheet, setRuleSheet] = useState<SheetDocument | null>(initial.sheet);
+  const [llmSheet, setLlmSheet] = useState<SheetDocument | null>(null);
+  const [source, setSource] = useState<'rule' | 'llm'>('rule');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<AiErrorState | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
+  const llmPrefs = useSettingsStore((s) => s.llmPrefs);
+
+  // 派生：当前生效结果（来源可切换对比——规则 / AI）
+  const extracted = source === 'llm' && llmResult ? llmResult : ruleResult;
+  const sheet = source === 'llm' && llmSheet ? llmSheet : ruleSheet;
+
   const titles = useMemo(() => (extracted ? suggestBookTitles(outline) : []), [extracted, outline]);
+
+  // 兜底判定（规则优先）：规则要素过少且文本够长，或展板变体疑似条目未被识别
+  const suspectHeads = useMemo(() => countSuspectEntryHeads(outline), [outline]);
+  const ruleCount = ruleResult
+    ? ruleResult.characters.length + (ruleResult.background ? 1 : 0) + (ruleResult.conflict ? 1 : 0)
+    : 0;
+  const fallbackNeeded = ruleResult !== null && !llmResult && shouldFallbackToLLM(ruleCount, outline.length, suspectHeads);
+  /** 展板形态（规则 sheet 已识别 或 疑似展板变体）→ AI 走展板 prompt；否则普通大纲 prompt */
+  const useSheetPrompt = ruleSheet !== null || suspectHeads >= 3;
+  const tokenHint = estimateTokenKilo(outline.length);
 
   const notify = (kind: 'ok' | 'err', text: string) => setToast({ kind, text });
 
   /** 粘贴即探测：编号展板条目 ≥3 → 批量人设导入模式；否则保留旧抽取路径（草稿同步 localStorage） */
   const onOutlineChange = (value: string) => {
     setOutline(value);
-    setExtracted(null);
+    setRuleResult(null);
+    setLlmResult(null);
+    setLlmSheet(null);
+    setSource('rule');
+    setAiError(null);
     const doc = parseSheetDocument(value);
-    setSheet(doc.entries.length >= 3 ? doc : null);
+    setRuleSheet(doc.entries.length >= 3 ? doc : null);
     try {
       localStorage.setItem(WIZARD_DRAFT_KEY, value);
     } catch {
@@ -69,9 +109,48 @@ export default function OutlineWizard() {
 
   const onExtract = () => {
     const out = extractFromOutline(outline);
-    setExtracted(out);
+    setRuleResult(out);
+    setSource('rule');
     const found = out.characters.length + (out.background ? 1 : 0) + (out.conflict ? 1 : 0);
     notify(found > 0 ? 'ok' : 'err', found > 0 ? `识别出 ${out.characters.length} 位人物及设定要素` : '未识别出有效要素，请检查大纲格式（如"哥哥（名字）：特质"）');
+  };
+
+  /** AI 解析（LLM 兜底）：成功后与规则结果并存，可切换对比；失败保留 raw 供排查 */
+  const runAiExtract = async (): Promise<void> => {
+    if (aiLoading || !outline.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const prompt = useSheetPrompt ? buildCharacterSheetPrompt(outline) : buildOutlinePrompt(outline);
+      const { parsed, raw } = await llmExtract(outline, prompt, llmPrefs);
+      if (parsed === null) {
+        setAiError({ message: '返回内容无法解析为结构化 JSON，可重试或检查模型配置', raw });
+        return;
+      }
+      if (useSheetPrompt) {
+        const entries = sheetEntriesFromLlm(parsed);
+        if (entries.length === 0) {
+          setAiError({ message: '解析结果中没有可用的角色条目', raw });
+          return;
+        }
+        setLlmSheet({ entries, meta: { negative: '', template: '' } });
+        setSource('llm');
+        notify('ok', `AI 解析完成：识别 ${entries.length} 位角色`);
+      } else {
+        const out = outlineFromLlm(parsed);
+        if (!out) {
+          setAiError({ message: '解析结果为空', raw });
+          return;
+        }
+        setLlmResult(out);
+        setSource('llm');
+        notify('ok', `AI 解析完成：识别 ${out.characters.length} 位人物及设定要素`);
+      }
+    } catch (err) {
+      setAiError({ message: err instanceof Error ? err.message : 'AI 解析请求失败', raw: '' });
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const postJson = async (path: string, body: unknown): Promise<void> => {
@@ -168,10 +247,18 @@ export default function OutlineWizard() {
         )}
       </section>
 
+      {!sheet && ruleResult !== null && (
+        <div className="mb-3 flex flex-col gap-2">
+          {fallbackNeeded && <LlmFallbackBar ruleCount={ruleCount} tokenHint={tokenHint} loading={aiLoading} onRun={() => void runAiExtract()} />}
+          {!fallbackNeeded && <AiRetryHint tokenHint={tokenHint} loading={aiLoading} onRun={() => void runAiExtract()} />}
+          {aiError && <AiErrorBox error={aiError} />}
+          <AiSourceSwitch active={source} hasRule={ruleResult !== null} hasLlm={llmResult !== null} onSwitch={setSource} />
+        </div>
+      )}
+
       {sheet && (
-        <SheetImportPanel
-          sheet={sheet}
-          onFinished={(ok, failed) => {
+        <div className="flex flex-col gap-2">
+          <SheetImportPanel key={source} sheet={sheet} onFinished={(ok, failed) => {
             notify(
               failed.length > 0 ? 'err' : 'ok',
               failed.length > 0 ? `成功 ${ok} 张，失败：${failed.join('、')}` : `已生成 ${ok} 张角色卡，正在跳转资产库…`,
@@ -180,74 +267,27 @@ export default function OutlineWizard() {
               clearDraft(); // 全部导入成功：草稿使命完成
               window.setTimeout(() => navigate('/library'), 800);
             }
-          }}
-        />
+          }} />
+          <AiSourceSwitch active={source} hasRule={ruleSheet !== null} hasLlm={llmSheet !== null} onSwitch={setSource} />
+          {ruleSheet !== null && !llmSheet && (
+            <AiRetryHint tokenHint={tokenHint} loading={aiLoading} onRun={() => void runAiExtract()} />
+          )}
+          {aiError && <AiErrorBox error={aiError} />}
+        </div>
       )}
 
       {!sheet && extracted && (
-        <section aria-label="抽取预览" className="flex flex-col gap-3">
-          {extracted.characters.length > 0 && (
-            <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3">
-              <p className="mb-2 text-sm font-medium">人物（{extracted.characters.length}）</p>
-              <ul className="flex flex-col gap-2">
-                {extracted.characters.map((c) => (
-                  <li key={c.name} className="rounded-lg border border-[hsl(var(--border-soft))] px-3 py-2 text-xs">
-                    <p className="text-sm font-medium">
-                      {c.name}
-                      {c.role !== c.name && <span className="ml-2 text-[hsl(var(--fg-muted))]">（{c.role}）</span>}
-                    </p>
-                    {c.traits.length > 0 && (
-                      <p className="mt-1 text-[hsl(var(--fg-muted))]">{c.traits.join(' · ')}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {extracted.background && (
-            <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-xs">
-              <p className="mb-1 text-sm font-medium">背景</p>
-              <p className="text-[hsl(var(--fg-muted))]">{extracted.background}</p>
-            </div>
-          )}
-          {extracted.factions.length > 0 && (
-            <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-xs">
-              <p className="mb-1 text-sm font-medium">势力</p>
-              <p className="text-[hsl(var(--fg-muted))]">{extracted.factions.join('；')}</p>
-            </div>
-          )}
-          {extracted.conflict && (
-            <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-xs">
-              <p className="mb-1 text-sm font-medium">核心矛盾</p>
-              <p className="text-[hsl(var(--fg-muted))]">{extracted.conflict}</p>
-            </div>
-          )}
-          {titles.length > 0 && (
-            <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-xs">
-              <p className="mb-1 text-sm font-medium">书名建议</p>
-              <p className="text-[hsl(var(--fg-muted))]">{titles.join(' / ')}</p>
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void onCreateCards()}
-              disabled={busy}
-              className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
-            >
-              生成角色卡草稿
-            </button>
-            <button
-              type="button"
-              onClick={() => void onCreateWorldbook()}
-              disabled={busy}
-              className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))] disabled:opacity-40"
-            >
-              生成世界书草稿
-            </button>
-          </div>
-        </section>
+        <OutlinePreview
+          extracted={extracted}
+          editable={source === 'llm'}
+          titles={titles}
+          busy={busy}
+          onChange={(next) => {
+            if (source === 'llm') setLlmResult(next);
+          }}
+          onCreateCards={() => void onCreateCards()}
+          onCreateWorldbook={() => void onCreateWorldbook()}
+        />
       )}
     </main>
   );
