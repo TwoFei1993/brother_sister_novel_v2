@@ -246,6 +246,8 @@ export interface FinalizeInput {
   promptTokens: number;
   activatedIds: string[];
   startedAt: number;
+  /** 无效输出重试覆盖语义：重跑携带首次消息 id，落库行按 messageId 幂等覆盖 */
+  messageId?: string;
   pending: PendingVars;
 }
 
@@ -285,6 +287,8 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
         statusSnapshot: pp.statusSnapshot,
         activatedEntries: input.activatedIds,
         rawThinking: thinking ?? undefined,
+        // 无效输出重试覆盖语义：重跑时携带首次消息 id，按 messageId 幂等覆盖落库行
+        ...(input.messageId ? { id: input.messageId } : {}),
       });
   const metaOnly = !pp.content.trim(); // 整轮输出只有思考/元信息：不入库，交由上层自动重试
   if (!metaOnly) {

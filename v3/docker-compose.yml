@@ -1,0 +1,50 @@
+# 本地 Docker 演练编排（上线前测试）
+#
+# 用法：bash scripts/rehearsal.sh   # 构建 → 起服务 → API 冒烟 → 重启验证持久化
+# 单独起停：docker compose up -d --build / docker compose down（加 -v 清空数据卷）
+#
+# 组成：
+#   app      —— 生产镜像（多阶段 Dockerfile：client 构建产物 + API 同源 :3001）
+#   mock-llm —— OpenAI 兼容假上游（scripts/mock-llm.mjs，:3100）：演练无需真实密钥，
+#               在 设置→LLM 接入 选 openai 通道（或冒烟脚本自动写入 secrets）即走通全链路
+#
+# 入口：http://localhost:3011 ｜ 密码：ACCESS_PASSWORD（默认 rehearsal123）
+# 数据卷 rehearsal-data 持久化 /app/data（作品/资产/secrets）；down -v 才会清空
+
+name: novel-rehearsal
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: novel-workshop-v3:rehearsal
+    container_name: novel-rehearsal-app
+    ports:
+      - '3011:3001'
+    environment:
+      ACCESS_PASSWORD: ${ACCESS_PASSWORD:-rehearsal123}
+    volumes:
+      - rehearsal-data:/app/data
+      - rehearsal-logs:/app/logs
+    depends_on:
+      mock-llm:
+        condition: service_started
+    restart: unless-stopped
+
+  mock-llm:
+    image: node:20-alpine
+    container_name: novel-rehearsal-mock
+    working_dir: /mock
+    volumes:
+      - ./scripts/mock-llm.mjs:/mock/mock-llm.mjs:ro
+      - mock-llm-logs:/mock/logs
+    command: ['node', '/mock/mock-llm.mjs', '3100']
+    ports:
+      - '3110:3100'
+    restart: unless-stopped
+
+volumes:
+  rehearsal-data:
+  rehearsal-logs:
+  mock-llm-logs:

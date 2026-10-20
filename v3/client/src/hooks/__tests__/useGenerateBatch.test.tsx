@@ -158,6 +158,38 @@ describe('useGenerate.runBatch（一键连写）', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('连写每批上限 3 章（BATCH_CHUNK_SIZE）：desired=10 首批只写 3 章，重复点击续写 4-10', async () => {
+    stubBatchRoute();
+    await renderHook();
+    const work = workFixture(10);
+
+    await act(async () => {
+      await latest!.runBatch(work, '首章指令');
+    });
+    expect(generateBodies).toHaveLength(3); // 单批上限，不一口气写满 10 章
+
+    await act(async () => {
+      await latest!.runBatch(work, '');
+    });
+    expect(generateBodies).toHaveLength(6); // 第二批 4-6
+
+    await act(async () => {
+      await latest!.runBatch(work, '');
+    });
+    expect(generateBodies).toHaveLength(9); // 第三批 7-9
+
+    await act(async () => {
+      await latest!.runBatch(work, '');
+    });
+    expect(generateBodies).toHaveLength(10); // 最后只剩第 10 章
+
+    await act(async () => {
+      await latest!.runBatch(work, '');
+    });
+    expect(generateBodies).toHaveLength(10); // 达标后零请求
+    expect(useGenerationStore.getState().error).toBeNull();
+  });
+
   it('中途 stop()：当前章中止（不入库）且不再发起下一章，batch 归 null', async () => {
     // 第一章流挂起不关闭（模拟长生成）；abort 时主动 error（真实 fetch 中止时读取会拒绝）
     vi.stubGlobal(

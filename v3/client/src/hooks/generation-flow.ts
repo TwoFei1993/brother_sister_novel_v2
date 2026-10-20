@@ -139,6 +139,8 @@ export interface ChapterMessageInput {
   chapterIndex: number;
   directive?: string;
   model?: string;
+  /** 指定消息 id（重生成覆盖语义：重试携带首次消息 id，按 messageId 幂等覆盖落库行）；缺省新生成 */
+  id?: string;
   /** tokenize 实测的提示词 token 数（审计进 extra.tokenCount） */
   promptTokens: number;
   generationMs: number;
@@ -159,7 +161,7 @@ export function buildChapterMessage(input: ChapterMessageInput): Message {
     ...(input.rawThinking ? { rawThinking: input.rawThinking } : {}),
   };
   return {
-    id: crypto.randomUUID(),
+    id: input.id ?? crypto.randomUUID(),
     role: 'assistant',
     name: '小说家',
     content: input.content,

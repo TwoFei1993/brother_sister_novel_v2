@@ -47,6 +47,8 @@ interface RunOptions {
   swipeTarget?: Message;
   /** 重试等场景：只替换提示词尾的指令文本（wire）；入库的 directive 元数据仍用干净原指令 */
   promptDirective?: string;
+  /** 无效输出重试：携带首次消息 id，落库行按 messageId 幂等覆盖（不产生重复章节行） */
+  persistMessageId?: string;
 }
 
 /** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
@@ -136,6 +138,8 @@ export function useGenerate(): UseGenerateResult {
                 activatedIds: fitted.activatedIds,
                 startedAt,
                 pending,
+                // 无效输出重试：落库行按首次消息 id 幂等覆盖（重试不产生重复章节行）
+                ...(opts.persistMessageId ? { messageId: opts.persistMessageId } : {}),
               });
               setLastTruncated(fitted.truncated);
               return msg;
@@ -173,17 +177,22 @@ export function useGenerate(): UseGenerateResult {
 
   const generateChapter = useCallback(
     async (work: Work, messages: Message[], directive: string) => {
-      let msg = await run(work, messages, directive, { targetId: crypto.randomUUID(), initialBuffer: '' });
+      // 重试复用同一 targetId：入库按 messageId 幂等 upsert，重试结果覆盖首次无效行
+      //（否则首次残章/崩溃行以孤儿形式留在库里，重载后出现垃圾章节）
+      const targetId = crypto.randomUUID();
+      let msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
       const reason = invalidReasonOf(msg);
       if (msg && reason) {
-        // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词，不入库 metadata）
+        // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；落库按首次消息 id 幂等覆盖）
         msg = await run(work, messages, directive, {
-          targetId: crypto.randomUUID(),
+          targetId,
           initialBuffer: '',
           promptDirective: directive + RETRY_SUFFIX[reason],
+          persistMessageId: msg.id,
         });
       }
-      // 重试一次后仍无效（或本次即失败）：返回 null——占位/崩溃章不入库、不上架（batch 以 null 终止）
+      // 重试一次后仍无效（或本次即失败）：返回 null——调用方不上架（batch 以 null 终止）；
+      // 库中该 id 行已被末次输出覆盖，不产生重复章节行
       return invalidReasonOf(msg) ? null : msg;
     },
     [run],
