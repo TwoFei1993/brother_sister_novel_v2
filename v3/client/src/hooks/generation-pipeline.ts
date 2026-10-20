@@ -1,7 +1,6 @@
 /**
  * 生成流编排辅助（novel/chat 共用管线层，设计 §5.1 / §3.2 / §9.2）
- * loadAssembleAssets → buildMacroEnv → scanAndAssemble（总装+预算校验，末轮经 AssembleTail
- * 参数化）→ finalizeGeneration（novel 入库收束；chat 成对收尾见 features/chat/chat-flow.ts）。
+ * loadAssembleAssets → buildMacroEnv → scanAndAssemble（总装+预算校验）→ finalizeGeneration（novel 入库收束；chat 见 chat-flow）。
  * 允许依赖 api 层与 store（getState）；不含 React hook。兜底预设与预算规划（EMPTY_PRESET/
  * planContext/守卫与 hint 构造/FittedPrompt 等）见 context-plan.ts（本模块 re-export 兼容）。
  */
@@ -21,6 +20,7 @@ import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, postprocessMessage } from '../engine/prompt/postprocess';
 import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
+import { chapterOutlineDirective } from '../lib/outline/chapters';
 import { scanWorldInfo } from '../engine/worldbook';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
@@ -35,14 +35,8 @@ import {
 
 // ---- 上下文规划层公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
 export {
-  EMPTY_PRESET,
-  SCAN_SETTINGS,
-  buildChatMainPrompt,
-  buildFallbackPreset,
-  novelGuardPlan,
-  planContext,
-  summarizeDropped,
-  withNovelOutputGuard,
+  EMPTY_PRESET, SCAN_SETTINGS, buildChatMainPrompt, buildFallbackPreset,
+  novelGuardPlan, planContext, summarizeDropped, withNovelOutputGuard,
 } from './context-plan';
 
 import {
@@ -166,8 +160,12 @@ export async function scanAndAssemble(
   }
 
   let history = plan.kept;
-  // novel 每章目标字数：兜底主提示词与末尾写作要求共用（不进世界书扫描池，避免「字数」误激活条目）
-  const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS;
+  const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS; // 兜底主提示词与末尾写作要求共用
+  // 章节大纲联动（一键导入大纲）：第 N 章有预设大纲时 directive 末尾追加本章要点（仅进提示词，入库 directive 保持原指令）
+  const outlineHint =
+    tail.kind === 'directive'
+      ? chapterOutlineDirective(work.settings.chapterOutlines, nextChapterIndex(messages))
+      : '';
   // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）
   const guardPlan =
     tail.kind === 'directive'
@@ -184,7 +182,7 @@ export async function scanAndAssemble(
       ...(summary ? { summary } : {}),
       history,
       ...(tail.kind === 'directive'
-        ? { directive: tail.text, chapterRequirement: buildChapterRequirement(targetWords) }
+        ? { directive: tail.text + outlineHint, chapterRequirement: buildChapterRequirement(targetWords) }
         : { userMessage: tail.text }),
       macroEnv: env,
       budgetTokens: budget,

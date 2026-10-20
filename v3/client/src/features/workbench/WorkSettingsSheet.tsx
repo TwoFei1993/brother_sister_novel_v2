@@ -10,8 +10,10 @@ import { useEffect, useState } from 'react';
 
 import { updateWork } from '../../api/works';
 import { listCharacters, listPresets, listWorldbooks, type LibraryAssetRef } from '../../api/library';
+import { parseChapterOutlines, toChapterOutlineItems } from '../../lib/outline/chapters';
 import { DEFAULT_TARGET_CHAPTER_WORDS, type Work } from '@shared/work';
 import VoiceMapEditor from '../tts/VoiceMapEditor';
+import DocImport from '../misc/wizard/DocImport';
 
 import WorkBindingsEditor from './dialog/WorkBindingsEditor';
 import StyleClonePanel from './dialog/StyleClonePanel';
@@ -38,6 +40,10 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
   const [allowOverride, setAllowOverride] = useState(work.allowCardOverride !== false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 章节大纲（一键导入大纲）：粘贴/Word 导入 → 解析 → PATCH settings.chapterOutlines（乐观锁）
+  const [outlineText, setOutlineText] = useState('');
+  const [outlineBusy, setOutlineBusy] = useState(false);
+  const [outlineMsg, setOutlineMsg] = useState('');
   const [assets, setAssets] = useState<{
     characters: LibraryAssetRef[];
     worldbooks: LibraryAssetRef[];
@@ -56,6 +62,30 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
       alive = false;
     };
   }, []);
+
+  /** 章节大纲导入：识别 <3 章提示；成功 PATCH chapterOutlines 并回传新 Work 同步 store */
+  async function importOutlines(): Promise<void> {
+    const chapters = parseChapterOutlines(outlineText);
+    if (chapters.length < 3) {
+      setOutlineMsg('未识别到章节大纲（需 ≥3 处「第N章」结构）');
+      return;
+    }
+    setOutlineBusy(true);
+    setOutlineMsg('');
+    try {
+      const next = await updateWork(work.id, {
+        revision: work.revision,
+        settings: { ...work.settings, chapterOutlines: toChapterOutlineItems(chapters) },
+      });
+      setOutlineText('');
+      setOutlineMsg(`已导入 ${chapters.length} 章大纲，生成对应章节时自动跟随其要点`);
+      onSaved(next);
+    } catch (err) {
+      setOutlineMsg(err instanceof Error ? err.message : '保存失败，请重试');
+    } finally {
+      setOutlineBusy(false);
+    }
+  }
 
   async function save(): Promise<void> {
     setSaving(true);
@@ -176,6 +206,41 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
               />
               <span className="text-xs text-[hsl(var(--fg-muted))]">章（连写上界；⚡每次写 3 章）</span>
             </div>
+          </section>
+
+          <section className="border-t border-[hsl(var(--border-soft))] pt-4">
+            <p className="mb-1 text-sm font-medium">章节大纲</p>
+            <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]">
+              {work.settings.chapterOutlines?.length
+                ? `已导入 ${work.settings.chapterOutlines.length} 章（再次导入将整体覆盖）`
+                : '粘贴或导入含「第N章」的大纲，生成对应章节时自动跟随其剧情要点'}
+            </p>
+            <textarea
+              aria-label="章节大纲文本"
+              data-testid="chapter-outline-text"
+              value={outlineText}
+              onChange={(e) => setOutlineText(e.target.value)}
+              rows={4}
+              placeholder={'第1章 落地嫡长，方寸藏天机\n剧情：女主胎穿…\n第2章 …'}
+              className="w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void importOutlines()}
+                disabled={!outlineText.trim() || outlineBusy}
+                data-testid="chapter-outline-import"
+                className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
+              >
+                {outlineBusy ? '解析中…' : '解析并保存'}
+              </button>
+              <DocImport hasContent={outlineText.trim() !== ''} onText={setOutlineText} />
+            </div>
+            {outlineMsg && (
+              <p data-testid="chapter-outline-msg" className="mt-2 text-xs text-[hsl(var(--fg-muted))]">
+                {outlineMsg}
+              </p>
+            )}
           </section>
 
           <section className="flex items-center justify-between gap-3">

@@ -13,7 +13,7 @@ import {
   buildSheetWorldbookDraft,
   type CharacterSheetEntry,
   type SheetDocument,
-} from '../../../lib/outline-sheet';
+} from '../../../lib/outline/sheet';
 
 interface Props {
   sheet: SheetDocument;

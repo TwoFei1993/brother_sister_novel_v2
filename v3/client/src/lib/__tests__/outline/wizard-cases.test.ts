@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { extractFromOutline } from '../outline-wizard';
+import { extractFromOutline } from '../../outline/wizard';
 
 /** A1 标准【】分段 */
 const A1 = `【背景】大炎王朝末年，魔气侵染九州大地，人族在绝境中艰难求存。

@@ -4,13 +4,13 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { extractFromOutline } from '../outline-wizard';
+import { extractFromOutline } from '../../outline/wizard';
 import {
   buildSheetCardDraft,
   buildSheetWorldbookDraft,
   parseCharacterSheet,
   parseSheetDocument,
-} from '../outline-sheet';
+} from '../../outline/sheet';
 
 /** 仿制人设展板缩样：头部版式与尾部画质词为跨条目重复模板，06 尾词与描述同行 */
 const SHEET = `【全局统一】通用负面提示词：低分辨率， 模糊重影， 多余肢体， 文字水印， 画面过曝。

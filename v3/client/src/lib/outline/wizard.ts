@@ -1,11 +1,11 @@
 /**
- * 大纲向导（Task 32）：粘贴网文大纲 → 正则抽取人物/背景/能力/势力/矛盾 →
- * 一键生成角色卡（V2）与世界书草稿。抽取算法移植旧站
+ * 大纲向导（Task 32）：粘贴网文大纲 → 正则抽取人物/背景/能力/金手指/势力/矛盾 →
+ * 卡片与世界书草稿构建见 ./draft。抽取算法移植旧站
  * SettingsPanel.autoFillFromOutline（重写为强类型），并修正其两处已知缺陷：
  * 1) 小节序号后无空格（"二、主要人物"）时旧站切界失败；
  * 2) 人物行（"哥哥：…"）不是小节边界，导致背景/矛盾抽取吞并后续段落。
  */
-import type { TavernCardV2, TavernWorldInfoEntry, TavernWorldInfoFile } from '@shared/tavern';
+import type { ChapterOutline } from './chapters';
 
 // ---------- 类型 ----------
 
@@ -21,8 +21,12 @@ export interface ExtractedOutline {
   background: string;
   /** 哥哥/妹妹等金手指描述 */
   abilities: string[];
+  /** 全作金手指/特殊能力（Word 导入实测：独立「金手指：」字段，非角色专属） */
+  ability?: string;
   factions: string[];
   conflict: string;
+  /** 章节级大纲（AI 兜底路径抽取；规则路径由 parseChapterOutlines 独立产出） */
+  chapters?: ChapterOutline[];
 }
 
 // ---------- 正则基建（对照旧站） ----------
@@ -49,7 +53,7 @@ function normalizeOutline(text: string): string {
  * 在旧站基础上：序号后空白改为可省（"二、主要人物"），新增人物行、【】标记与
  * 常见字段词（核心矛盾/势力格局等——无空行无序号排版的字段行也是小节边界，A8 回归）。
  */
-const SECTION_END = String.raw`(?:\n\n|\n(?=\s*[#＃【●★☆►▶◆■□▪▸·•※]|\s*\d+[.、)）]|\s*[-—–─━]\s|\s*[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|\s*[一二三四五六七八九十]+[.、：:]|\s*(?:主要人物|人物设定|人物简介|角色设定|哥哥|妹妹|兄长|男主|女主|核心矛盾|主线冲突|核心冲突|主要矛盾|中心冲突|主线剧情|势力格局|势力分布|势力设定|主要势力|故事背景|时代背景|世界背景|背景说明))|$)`;
+const SECTION_END = String.raw`(?:\n\n|\n(?=\s*[#＃【●★☆►▶◆■□▪▸·•※]|\s*\d+[.、)）]|\s*[-—–─━]\s|\s*[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|\s*[一二三四五六七八九十]+[.、：:]|\s*(?:主要人物|人物设定|人物简介|角色设定|哥哥|妹妹|兄长|男主|女主|主角|核心矛盾|主线冲突|核心冲突|主要矛盾|主要冲突|中心冲突|主线剧情|势力格局|势力分布|势力设定|主要势力|故事背景|时代背景|世界背景|背景说明|金手指|特殊能力|异能|外挂|能力|剧情|看点|爽点|小冲突|梗概))|$)`;
 
 /**
  * 关键字后取一段文本，直到下个小节边界（过短视为未命中）。
@@ -193,6 +197,15 @@ export function extractFromOutline(text: string): ExtractedOutline {
   );
   if (sAbility) abilities.push(sAbility);
 
+  // 全作金手指/特殊能力（Word 导入实测补充）：字段名贴近行首锚定，防「隐藏金手指」等正文提及误截
+  const ability = extract(
+    [
+      new RegExp(String.raw`(?:^|\n)\s*[【\[]?\s*(?:金手指|特殊能力|异能|外挂)\s*(?:[】\]]|[：:、，,])\s*([\s\S]{3,}?)${SECTION_END}`),
+    ],
+    normalized,
+    200,
+  );
+
   const factionsText = extract(
     [
       new RegExp(String.raw`(?:势力分布|势力格局|阵营分布|主要势力|派系|门派分布)[：:、，,]?\s*(.{3,}?)${SECTION_END}`),
@@ -209,107 +222,12 @@ export function extractFromOutline(text: string): ExtractedOutline {
   const conflict = extract(
     [
       // 捕获用 [\s\S] 允许跨行（无后续边界时吞到文尾由 maxLen 截断，A8 回归）
-      new RegExp(String.raw`(?:核心矛盾|主线冲突|核心冲突|主要矛盾|中心冲突)[：:、，,】]?\s*([\s\S]{3,}?)${SECTION_END}`),
+      new RegExp(String.raw`(?:核心矛盾|主线冲突|核心冲突|主要矛盾|主要冲突|中心冲突)[：:、，,】]?\s*([\s\S]{3,}?)${SECTION_END}`),
       new RegExp(String.raw`(?:主线剧情)[：:、，,]\s*([\s\S]{3,}?)${SECTION_END}`),
     ],
     normalized,
     300,
   );
 
-  return { characters: scanCharacters(normalized), background, abilities, factions, conflict };
-}
-
-// ---------- 草稿构建 ----------
-
-/** 人物 → 酒馆 V2 角色卡草稿（身份/特质/背景/矛盾拼装进 description） */
-export function buildCardDraft(extracted: ExtractedOutline, name: string): TavernCardV2 {
-  const ch = extracted.characters.find((c) => c.name === name);
-  const role = ch?.role ?? '';
-  const traits = ch?.traits ?? [];
-  const lines: string[] = [];
-  if (role && role !== name) lines.push(`{{char}}的身份是${role}。`);
-  if (traits.length > 0) lines.push(`性格与特质：${traits.join('、')}。`);
-  if (extracted.background) lines.push(`世界背景：${extracted.background}`);
-  if (extracted.conflict) lines.push(`核心矛盾：${extracted.conflict}`);
-
-  return {
-    spec: 'chara_card_v2',
-    spec_version: '2.0',
-    data: {
-      name: name || '未命名角色',
-      description: lines.join('\n'),
-      personality: traits.join('；'),
-      scenario: extracted.background,
-      first_mes: '',
-      mes_example: '',
-      creator_notes: '由大纲向导自动生成',
-      creator: '',
-      character_version: '',
-      tags: ['outline-wizard'],
-      alternate_greetings: [],
-      system_prompt: '',
-      post_history_instructions: '',
-    },
-  };
-}
-
-/** 世界书条目骨架（constant 恒注入，酒馆 newWorldInfoEntry 惯例字段）；outline-sheet 复用 */
-export function constantEntry(uid: number, comment: string, content: string, keys: string[]): TavernWorldInfoEntry {
-  return {
-    uid,
-    key: keys,
-    keysecondary: [],
-    comment,
-    content,
-    constant: true,
-    vectorized: false,
-    selective: false,
-    selectiveLogic: 0,
-    addMemo: true,
-    order: 100,
-    position: 0,
-    disable: false,
-    excludeRecursion: false,
-    preventRecursion: false,
-    delayUntilRecursion: false,
-    probability: 100,
-    useProbability: true,
-    depth: 4,
-    group: '',
-    groupOverride: false,
-    groupWeight: 100,
-    automationId: '',
-    role: null,
-    sticky: 0,
-    cooldown: 0,
-    delay: 0,
-  };
-}
-
-/** 势力文本切分为词级 key（2-6 字短语） */
-function factionKeys(text: string): string[] {
-  return text
-    .split(/[，,、。；;\s]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 2 && s.length <= 6)
-    .slice(0, 8);
-}
-
-/** 背景/势力/矛盾 → 世界书草稿（全部 constant 条目） */
-export function buildWorldbookDraft(extracted: ExtractedOutline): { name: string; raw: TavernWorldInfoFile } {
-  const entries: TavernWorldInfoEntry[] = [];
-  let uid = 0;
-  if (extracted.background) {
-    entries.push(constantEntry(uid++, '世界背景', extracted.background, ['世界', '背景', '大陆', '王朝']));
-  }
-  for (const faction of extracted.factions) {
-    entries.push(constantEntry(uid++, '势力', faction, factionKeys(faction).length > 0 ? factionKeys(faction) : ['势力']));
-  }
-  if (extracted.conflict) {
-    entries.push(constantEntry(uid++, '核心矛盾', extracted.conflict, ['矛盾', '冲突', '阴谋']));
-  }
-  return {
-    name: '大纲世界书',
-    raw: { entries: Object.fromEntries(entries.map((e) => [String(e.uid), e])) },
-  };
+  return { characters: scanCharacters(normalized), background, abilities, ...(ability ? { ability } : {}), factions, conflict };
 }

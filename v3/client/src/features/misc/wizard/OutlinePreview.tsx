@@ -3,7 +3,7 @@
  * 规则来源只读（与既有行为一致）；AI 来源（editable）字段可编辑修正后再生成的
  * 卡片与世界书使用修正后的值。编辑即时回调父级（onChange 更新 llmResult）。
  */
-import type { ExtractedOutline } from '../../../lib/outline-wizard';
+import type { ExtractedOutline } from '../../../lib/outline/wizard';
 
 interface Props {
   extracted: ExtractedOutline;
@@ -99,6 +99,35 @@ export default function OutlinePreview({
           ) : (
             <p className="text-[hsl(var(--fg-muted))]">{extracted.background}</p>
           )}
+        </div>
+      )}
+      {(extracted.ability || editable) && (
+        <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-xs">
+          <p className="mb-1 text-sm font-medium">金手指/特殊能力</p>
+          {editable ? (
+            <textarea
+              aria-label="金手指/特殊能力编辑"
+              value={extracted.ability ?? ''}
+              onChange={(e) => patch({ ability: e.target.value })}
+              rows={3}
+              className={inputCls}
+            />
+          ) : (
+            <p className="text-[hsl(var(--fg-muted))]">{extracted.ability}</p>
+          )}
+        </div>
+      )}
+      {(extracted.chapters?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3 text-xs">
+          <p className="mb-1 text-sm font-medium">章节大纲（识别到 {extracted.chapters?.length} 章）</p>
+          <ul className="flex flex-col gap-0.5 text-[hsl(var(--fg-muted))]">
+            {extracted.chapters?.slice(0, 5).map((c) => (
+              <li key={c.index}>
+                第{c.index}章 {c.title}
+              </li>
+            ))}
+            {(extracted.chapters?.length ?? 0) > 5 && <li>…等共 {extracted.chapters?.length} 章</li>}
+          </ul>
         </div>
       )}
       {extracted.factions.length > 0 && (

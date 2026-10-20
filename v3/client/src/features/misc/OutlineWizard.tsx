@@ -1,9 +1,8 @@
 /**
- * 大纲向导（最小版，Task 32）：粘贴网文大纲 → 正则抽取预览（人物/背景/势力/矛盾）
- * → 一键生成角色卡与世界书草稿（POST /api/characters、/api/worldbooks 直接入库）
- * → 成功跳 /library。路由 /wizard（App.tsx）。
- * LLM 兜底：规则抽取效果不佳时可切换 AI 结构化解析（lib/llm-extract），结果与
- * 规则结果可切换对比；展板形态走 SheetImportPanel 复用，普通大纲进入可编辑预览。
+ * 大纲向导（最小版，Task 32）：粘贴网文大纲 → 正则抽取预览（人物/背景/势力/矛盾）→
+ * 一键生成角色卡与世界书草稿 → 成功跳 /library。路由 /wizard（App.tsx）。
+ * LLM 兜底：效果不佳时可切换 AI 结构化解析（lib/outline/llm），结果可切换对比；
+ * 展板形态走 SheetImportPanel 复用；章节大纲识别走 ChapterOutlineImport（一键开写）。
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -18,18 +17,15 @@ import {
   outlineFromLlm,
   sheetEntriesFromLlm,
   shouldFallbackToLLM,
-} from '../../lib/llm-extract';
-import { parseSheetDocument, type SheetDocument } from '../../lib/outline-sheet';
-import {
-  buildCardDraft,
-  buildWorldbookDraft,
-  extractFromOutline,
-  type ExtractedOutline,
-} from '../../lib/outline-wizard';
+} from '../../lib/outline/llm';
+import { parseSheetDocument, type SheetDocument } from '../../lib/outline/sheet';
+import { extractFromOutline, type ExtractedOutline } from '../../lib/outline/wizard';
+import { buildCardDraft, buildWorldbookDraft } from '../../lib/outline/draft';
 import { suggestBookTitles } from '../../lib/export';
 import { useSettingsStore } from '../../stores/settings';
 import SheetImportPanel from './wizard/SheetImportPanel';
 import OutlinePreview from './wizard/OutlinePreview';
+import ChapterOutlineImport from './wizard/ChapterOutlineImport';
 import DocImport from './wizard/DocImport';
 import { AiErrorBox, AiRetryHint, AiSourceSwitch, LlmFallbackBar, type AiErrorState } from './wizard/LlmFallback';
 
@@ -252,6 +248,8 @@ export default function OutlineWizard() {
           </div>
         )}
       </section>
+
+      <ChapterOutlineImport outline={outline} suggestedTitle={titles[0] ?? ''} />
 
       {!sheet && ruleResult !== null && (
         <div className="mb-3 flex flex-col gap-2">

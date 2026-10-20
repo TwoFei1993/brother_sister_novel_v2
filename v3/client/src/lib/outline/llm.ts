@@ -1,14 +1,15 @@
 /**
- * 智能抽取 LLM 兜底（规则优先 + LLM 兜底）：outline-wizard / outline-sheet 的
+ * 智能抽取 LLM 兜底（规则优先 + LLM 兜底）：outline/wizard、outline/sheet 的
  * 正则抽取效果不佳时，调 LLM 做「结构化信息抽取」（system 明确不创作不改写），
  * 解析严格 JSON 并健壮容错（剥 ```json 围栏 / 前后杂文 / 截取首个 { 到最后一个 }）。
  * 仅做解析与映射，不触碰解析器本身；解析失败返回 null 并保留 raw 供界面排查。
  */
-import type { LlmPrefs } from '../stores/settings';
+import type { LlmPrefs } from '../../stores/settings';
 
-import { apiFetch } from '../api/client';
-import type { CharacterSheetEntry } from './outline-sheet';
-import type { ExtractedCharacter, ExtractedOutline } from './outline-wizard';
+import { apiFetch } from '../../api/client';
+import type { CharacterSheetEntry } from './sheet';
+import type { ChapterOutline } from './chapters';
+import type { ExtractedCharacter, ExtractedOutline } from './wizard';
 
 // ---------- 提示词 ----------
 
@@ -38,7 +39,7 @@ export function buildCharacterSheetPrompt(text: string): { system: string; user:
   return { system, user };
 }
 
-/** 普通大纲抽取：人物 / 背景 / 势力 / 矛盾 */
+/** 普通大纲抽取：人物 / 背景 / 势力 / 矛盾 / 金手指 / 章节大纲 */
 export function buildOutlinePrompt(text: string): { system: string; user: string } {
   const system =
     '你是严谨的中文文档结构化助手。你只做信息抽取：从原文中提取既有内容整理为字段，' +
@@ -50,8 +51,10 @@ export function buildOutlinePrompt(text: string): { system: string; user: string
     '- 只抽取原文实际存在的信息，不创作、不改写',
     '- characters[].name 取人名；role 取身份（如 哥哥/妹妹/男主）；personality 取性格与能力描述原文',
     '- background 取故事/世界背景原文；factions 取势力相关描述原文；conflict 取核心矛盾/冲突描述原文',
-    '- 原文未提及的字段输出空字符串，characters 未提及则为空数组',
-    '- 只输出 JSON：{"characters":[{"name":"…","role":"…","personality":"…"}],"background":"…","factions":"…","conflict":"…"}',
+    '- ability 取全作金手指/特殊能力设定原文（无则空字符串）',
+    '- chapters 按原文出现的「第N章」顺序抽取章级大纲：index 为章号数字，title 取章题，plot 取该章剧情要点；最多抽前 50 章，未提及则为空数组',
+    '- 原文未提及的字段输出空字符串，characters/chapters 未提及则为空数组',
+    '- 只输出 JSON：{"characters":[{"name":"…","role":"…","personality":"…"}],"background":"…","factions":"…","conflict":"…","ability":"…","chapters":[{"index":1,"title":"…","plot":"…"}]}',
     '',
     '待抽取大纲：',
     DOC_DELIM,
@@ -184,6 +187,25 @@ export function sheetEntriesFromLlm(parsed: unknown): CharacterSheetEntry[] {
   return out;
 }
 
+/** LLM 章节大纲条目上限（与提示词一致：只抽前 50 章） */
+const LLM_CHAPTER_MAX = 50;
+
+/** LLM chapters JSON → ChapterOutline[]（index 非正整数或 title 空的条目跳过） */
+function chaptersFromLlm(raw: unknown): ChapterOutline[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChapterOutline[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
+    const c = item as Record<string, unknown>;
+    const index = c['index'];
+    const title = asString(c['title']);
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 1 || !title) continue;
+    out.push({ index, title, plot: asString(c['plot']) });
+    if (out.length >= LLM_CHAPTER_MAX) break;
+  }
+  return out;
+}
+
 /** LLM 大纲 JSON → ExtractedOutline（personality 切特质；factions 整体一条；全空返回 null） */
 export function outlineFromLlm(parsed: unknown): ExtractedOutline | null {
   if (typeof parsed !== 'object' || parsed === null) return null;
@@ -202,13 +224,19 @@ export function outlineFromLlm(parsed: unknown): ExtractedOutline | null {
   const background = asString(rec['background']);
   const factionsText = asString(rec['factions']);
   const conflict = asString(rec['conflict']);
-  if (characters.length === 0 && !background && !factionsText && !conflict) return null;
+  const ability = asString(rec['ability']);
+  const chapters = chaptersFromLlm(rec['chapters']);
+  if (characters.length === 0 && !background && !factionsText && !conflict && !ability && chapters.length === 0) {
+    return null;
+  }
   return {
     characters: characters.slice(0, 12),
     background,
     abilities: [],
+    ...(ability ? { ability } : {}),
     factions: factionsText ? [factionsText] : [],
     conflict,
+    ...(chapters.length > 0 ? { chapters } : {}),
   };
 }
 

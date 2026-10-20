@@ -6,7 +6,7 @@
  */
 import type { TavernCardV2, TavernWorldInfoEntry, TavernWorldInfoFile } from '@shared/tavern';
 
-import { constantEntry } from './outline-wizard';
+import { constantEntry } from './draft';
 
 // ---------- 类型 ----------
 

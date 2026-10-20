@@ -21,7 +21,7 @@ export interface WorkSummary {
   stats?: WorkStats;
 }
 
-/** 新建作品入参（绑定三类资产 id；regexScriptIds/voiceMap/settings 暂走默认） */
+/** 新建作品入参（绑定三类资产 id；regexScriptIds/voiceMap 走默认；settings 可整体指定） */
 export interface CreateWorkInput {
   title: string;
   mode: WorkMode;
@@ -29,6 +29,8 @@ export interface CreateWorkInput {
   characterIds?: string[];
   worldbookIds?: string[];
   presetId?: string;
+  /** 完整设置对象（如向导「创建作品并导入大纲」携带 chapterOutlines/pastedOutline）；缺省走 defaultNovelSettings */
+  settings?: Work['settings'];
 }
 
 /** 改名入参：revision 取自最新全量 Work（409 冲突时调用方提示刷新） */

@@ -84,6 +84,16 @@ export const CHAT_REPLY_LENGTH_RANGE: Record<ChatReplyLength, { min: number; max
 /** novel 模式每章目标字数缺省值（缺省视为 3000；兜底主提示词与末尾写作要求共用） */
 export const DEFAULT_TARGET_CHAPTER_WORDS = 3000;
 
+/** 章节大纲条目（一键导入大纲，Word 实测反馈）：生成第 N 章时按 index 匹配注入本章要点 */
+export const ChapterOutlineItemSchema = z.object({
+  /** 章号（从 1 起） */
+  index: z.number().int(),
+  title: z.string(),
+  /** 剧情要点 */
+  plot: z.string(),
+});
+export type ChapterOutlineItem = z.infer<typeof ChapterOutlineItemSchema>;
+
 export const NovelSettingsSchema = z.strictObject({
   genre: GenreTypeSchema,
   subGenre: z.string(),
@@ -135,6 +145,8 @@ export const NovelSettingsSchema = z.strictObject({
   targetChapterWords: z.number().int().positive().optional(),
   /** 文风画像（文风复刻）：参考文字提炼的纯写法指令，非空时以最高优先级注入设定块 */
   styleGuide: z.string().optional(),
+  /** 章节大纲（一键导入大纲）：生成第 N 章时按 index 匹配把本章要点追加进指令；缺省视为无 */
+  chapterOutlines: z.array(ChapterOutlineItemSchema).optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 

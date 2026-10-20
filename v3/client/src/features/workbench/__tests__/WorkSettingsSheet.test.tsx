@@ -190,3 +190,60 @@ describe('WorkSettingsSheet 生成目标（每章字数/目标章节数）', () 
     );
   });
 });
+
+describe('WorkSettingsSheet 章节大纲导入（Word 实测反馈）', () => {
+  beforeEach(() => {
+    updateWorkMock.mockClear();
+  });
+
+  const setText = (el: HTMLTextAreaElement, value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+  const THREE = [
+    '第1章 落地嫡长',
+    '剧情：胎穿嫡长女，隐藏空间。',
+    '第2章 私囤万千',
+    '剧情：幼年囤积。',
+    '第3章 幼学启蒙',
+    '剧情：起步碾压。',
+  ].join('\n');
+
+  it('解析并保存：PATCH settings.chapterOutlines（乐观锁 revision），onSaved 同步', async () => {
+    const onSaved = vi.fn();
+    const c = await mountSheet(workFixture(['b1']), onSaved);
+    await setText(q(c, 'chapter-outline-text') as HTMLTextAreaElement, THREE);
+    await act(async () => {
+      q(c, 'chapter-outline-import').click();
+    });
+    await act(async () => {}); // 放掉 PATCH 微任务
+
+    expect(updateWorkMock).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({
+        revision: 3,
+        settings: expect.objectContaining({
+          chapterOutlines: [
+            { index: 1, title: '落地嫡长', plot: '胎穿嫡长女，隐藏空间。' },
+            { index: 2, title: '私囤万千', plot: '幼年囤积。' },
+            { index: 3, title: '幼学启蒙', plot: '起步碾压。' },
+          ],
+        }),
+      }),
+    );
+    expect(onSaved).toHaveBeenCalled();
+    expect(q(c, 'chapter-outline-msg').textContent).toContain('已导入 3 章大纲');
+  });
+
+  it('不足 3 章：提示未识别，不发起 PATCH', async () => {
+    const c = await mountSheet(workFixture(['b1']));
+    await setText(q(c, 'chapter-outline-text') as HTMLTextAreaElement, '第1章 孤章\n剧情：只有一章。');
+    await act(async () => {
+      q(c, 'chapter-outline-import').click();
+    });
+    expect(q(c, 'chapter-outline-msg').textContent).toContain('未识别到章节大纲');
+    expect(updateWorkMock).not.toHaveBeenCalled();
+  });
+});

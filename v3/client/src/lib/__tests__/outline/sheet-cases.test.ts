@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseCharacterSheet, parseSheetDocument } from '../outline-sheet';
+import { parseCharacterSheet, parseSheetDocument } from '../../outline/sheet';
 
 /** B1 标准格式：01. 名字｜身份 + prompt 段 + 自拟跨条目重复模板（无分部） */
 const B1 = `【全局统一】负面提示词：变形， 多指， 模糊， 水印。

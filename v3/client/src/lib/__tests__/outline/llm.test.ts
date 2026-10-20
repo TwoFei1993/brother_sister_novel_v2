@@ -15,8 +15,8 @@ import {
   parseJsonLoose,
   shouldFallbackToLLM,
   sheetEntriesFromLlm,
-} from '../llm-extract';
-import type { LlmPrefs } from '../../stores/settings';
+} from '../../outline/llm';
+import type { LlmPrefs } from '../../../stores/settings';
 
 const PREFS: LlmPrefs = { source: 'claude', model: 'MiniMax-M3' };
 
@@ -48,6 +48,14 @@ describe('提示词构建', () => {
     expect(user).toContain('"factions"');
     expect(user).toContain('"conflict"');
     expect(user).toContain('"personality"');
+  });
+
+  it('大纲 prompt：含 ability 与 chapters（前 50 章上限）字段（Word 实测反馈）', () => {
+    const { user } = buildOutlinePrompt('第1章 开局');
+    expect(user).toContain('"ability"');
+    expect(user).toContain('"chapters"');
+    expect(user).toContain('"index"');
+    expect(user).toContain('50');
   });
 });
 
@@ -174,6 +182,33 @@ describe('LLM 结果映射', () => {
     expect(outlineFromLlm({ characters: [], background: '', factions: '', conflict: '' })).toBeNull();
     expect(outlineFromLlm('not-object')).toBeNull();
   });
+
+  it('outlineFromLlm：ability 与 chapters 映射；非法条目跳过、50 章截断（Word 实测反馈）', () => {
+    const outline = outlineFromLlm({
+      characters: [],
+      background: '',
+      factions: '',
+      conflict: '',
+      ability: '空间灵泉，仅女主知晓',
+      chapters: [
+        { index: 1, title: '落地嫡长', plot: '胎穿嫡长女' },
+        { index: 'x', title: '坏条目', plot: '' },
+        { index: 0, title: '章号为零', plot: '' },
+        { index: 3, title: '', plot: '无题' },
+        { index: 2, title: '私囤万千', plot: '幼年囤积' },
+      ],
+    });
+    expect(outline?.ability).toBe('空间灵泉，仅女主知晓');
+    expect(outline?.chapters).toEqual([
+      { index: 1, title: '落地嫡长', plot: '胎穿嫡长女' },
+      { index: 2, title: '私囤万千', plot: '幼年囤积' },
+    ]);
+    // 仅 chapters 非空也视为有效抽取结果
+    const onlyChapters = outlineFromLlm({ characters: [], background: '', factions: '', conflict: '', chapters: [{ index: 1, title: 'a', plot: 'b' }] });
+    expect(onlyChapters?.chapters).toHaveLength(1);
+    const many = Array.from({ length: 60 }, (_, i) => ({ index: i + 1, title: `t${i}`, plot: 'p' }));
+    expect(outlineFromLlm({ chapters: many })?.chapters).toHaveLength(50);
+  });
 });
 
 describe('estimateTokenKilo token 粗估', () => {
@@ -186,12 +221,12 @@ describe('estimateTokenKilo token 粗估', () => {
 
 describe('shouldFallbackToLLM 背景判定（真实用户 docx 实测反馈）', () => {
   it('有人物但背景缺失的长文档 → 触发兜底（2 行巨段 docx 案例）', async () => {
-    const { shouldFallbackToLLM } = await import('../llm-extract');
+    const { shouldFallbackToLLM } = await import('../../outline/llm');
     expect(shouldFallbackToLLM(1, 16378, 0, false)).toBe(true); // 规则只抽到 1 人、无背景
   });
 
   it('人物与背景齐备 → 不触发', async () => {
-    const { shouldFallbackToLLM } = await import('../llm-extract');
+    const { shouldFallbackToLLM } = await import('../../outline/llm');
     expect(shouldFallbackToLLM(3, 2000, 0, true)).toBe(false);
   });
 });

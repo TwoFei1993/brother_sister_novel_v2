@@ -11,7 +11,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SheetImportPanel from '../wizard/SheetImportPanel';
-import type { SheetDocument } from '../../../lib/outline-sheet';
+import type { SheetDocument } from '../../../lib/outline/sheet';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

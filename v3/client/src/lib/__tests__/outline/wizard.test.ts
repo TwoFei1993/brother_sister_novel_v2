@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { buildCardDraft, buildWorldbookDraft, extractFromOutline } from '../outline-wizard';
+import { extractFromOutline } from '../../outline/wizard';
+import { buildCardDraft, buildWorldbookDraft } from '../../outline/draft';
 
 const SAMPLE = `《九州灵潮》
 
@@ -121,5 +122,48 @@ describe('势力字段提取边界（深度测试 D5 回归）', () => {
   it('正文句中「……刺客组织，总部位置成谜」不再误当字段截取', () => {
     const r = extractFromOutline('他与那刺客组织，总部位置成谜的地方相遇。');
     expect(r.factions).toEqual([]);
+  });
+});
+
+describe('全作金手指/特殊能力识别（Word 导入实测反馈）', () => {
+  /** 用户 docx 同构：字段独立成"行"（FEFF 规范化后），正文含「隐藏金手指」提及 */
+  const ABILITY_SAMPLE = [
+    '背景：穿成古代大家族嫡出大小姐，胎穿。',
+    '金手指：只影响小的事，可以进人也有灵泉的空间，有可让作物快速生长的土地。',
+    '主角：infj女主，喜欢囤积，未雨绸缪。',
+    '第1章 落地嫡长',
+    '剧情：女主胎穿清醒，隐藏金手指、奠定早熟人设。',
+  ].join('\n');
+
+  it('「金手指：」字段整段提取（正文「隐藏金手指」提及不误截）', () => {
+    const out = extractFromOutline(ABILITY_SAMPLE);
+    expect(out.ability).toContain('灵泉的空间');
+    expect(out.ability).toContain('快速生长的土地');
+    expect(out.ability).not.toContain('infj');
+  });
+
+  it('特殊能力/异能/外挂 变体字段名同样识别', () => {
+    expect(extractFromOutline('特殊能力：可时停十息。')?.ability).toContain('时停');
+    expect(extractFromOutline('异能：御风而行。')?.ability).toContain('御风');
+    expect(extractFromOutline('外挂：随身老爷爷。')?.ability).toContain('老爷爷');
+  });
+
+  it('无金手指字段：ability 缺省不产生空串条目', () => {
+    expect(extractFromOutline(SAMPLE).ability).toBeUndefined();
+  });
+
+  it('世界书草稿：ability 非空时生成「金手指/特殊能力」constant 条目', () => {
+    const draft = buildWorldbookDraft(extractFromOutline(ABILITY_SAMPLE));
+    const entries = Object.values(draft.raw.entries);
+    const abilityEntry = entries.find((e) => e.comment === '金手指/特殊能力');
+    expect(abilityEntry).toBeDefined();
+    expect(abilityEntry?.constant).toBe(true);
+    expect(abilityEntry?.content).toContain('灵泉的空间');
+    expect(abilityEntry?.key).toContain('金手指');
+  });
+
+  it('世界书草稿：无 ability 时不产生金手指条目（既有条目不受影响）', () => {
+    const draft = buildWorldbookDraft(extractFromOutline(SAMPLE));
+    expect(Object.values(draft.raw.entries).some((e) => e.comment === '金手指/特殊能力')).toBe(false);
   });
 });
