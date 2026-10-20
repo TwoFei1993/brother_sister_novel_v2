@@ -24,6 +24,7 @@ import { chapterOutlineDirective } from '../lib/outline/chapters';
 import { scanWorldInfo } from '../engine/worldbook';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
+import { useWorkStore } from '../stores/work';
 
 import {
   buildFallbackPreset,
@@ -207,9 +208,17 @@ export async function scanAndAssemble(
   }
 }
 
-/** 幂等入库（§9.2）：server 按 messageId 幂等 upsert（同 id 整行替换），重发安全、无 409 路径 */
+/** 幂等入库（§9.2）：server 按 messageId 幂等 upsert（同 id 整行替换），重发安全、无 409 路径。
+ *  入库会 bump 服务端 work.revision：随响应同步回 work store，避免本会话后续 PATCH（变量回写/视图偏好）乐观锁 409。 */
 export async function persistMessage(workId: string, message: Message): Promise<void> {
-  await apiFetch(`/api/works/${workId}/messages`, { method: 'POST', body: JSON.stringify(message) });
+  const res = await apiFetch<{ ok: boolean; revision?: number }>(`/api/works/${workId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(message),
+  });
+  const { work } = useWorkStore.getState();
+  if (work && work.id === workId && typeof res.revision === 'number' && res.revision > work.revision) {
+    useWorkStore.getState().setWork({ ...work, revision: res.revision });
+  }
 }
 
 /** 变量回写（引擎外持久化，best-effort）：作品级 PATCH work（带 revision），全局级 GET+merge+PUT config */

@@ -111,9 +111,9 @@ export async function listMessages(workId: string, query: MessagesQuery = {}): P
   return apiFetch<MessagesPage>(`/api/works/${workId}/messages?${toQueryString(query)}`);
 }
 
-/** 生成完成幂等入库（§9.2 upsert 可安全重试） */
-export async function upsertMessage(workId: string, message: Message): Promise<{ ok: boolean }> {
-  return apiFetch<{ ok: boolean }>(`/api/works/${workId}/messages`, {
+/** 生成完成幂等入库（§9.2 upsert 可安全重试）；server upsert 会 bump work.revision 并随响应返回 */
+export async function upsertMessage(workId: string, message: Message): Promise<{ ok: boolean; revision?: number }> {
+  return apiFetch<{ ok: boolean; revision?: number }>(`/api/works/${workId}/messages`, {
     method: 'POST',
     body: JSON.stringify(message),
   });

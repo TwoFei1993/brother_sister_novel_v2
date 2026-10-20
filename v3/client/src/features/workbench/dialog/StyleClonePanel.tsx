@@ -59,7 +59,7 @@ export default function StyleClonePanel({ work, onSaved }: StyleClonePanelProps)
         settings: { ...work.settings, styleGuide: truncated },
       });
       setGuide(truncated);
-      setProfile('');
+      if (value === profile) setProfile(''); // 仅在保存的就是分析预览本身时收起草稿，避免误清未保存的分析结果
       onSaved(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败，请重试');
