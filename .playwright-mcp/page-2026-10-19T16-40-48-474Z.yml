@@ -1,0 +1,30 @@
+- main [ref=f88e4]:
+  - generic [ref=f88e5]:
+    - link "返回书架" [ref=f88e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f88e7]
+  - status [ref=f88e2073]: 已导入「Default」，已为你切换到对应标签页
+  - navigation "资产分类" [ref=f88e8]:
+    - button "角色卡" [ref=f88e9]
+    - button "世界书" [ref=f88e10]
+    - button "预设" [ref=f88e11]
+    - button "正则脚本" [ref=f88e12]
+    - button "资源中心" [ref=f88e13]
+  - region "预设资产面板" [ref=f88e2074]:
+    - generic [ref=f88e2075]:
+      - button "导入预设" [ref=f88e2076]
+      - generic [ref=f88e2077]: 支持 .json 文件
+    - list [ref=f88e2078]:
+      - listitem [ref=f88e2079]:
+        - generic [ref=f88e2080]:
+          - generic [ref=f88e2081]:
+            - paragraph [ref=f88e2082]: Default
+            - paragraph [ref=f88e2083]:
+              - text: 提示词 12 条 · 启用 11
+              - generic [ref=f88e2084]: · 添加于 2026/10/20
+          - button "编辑" [ref=f88e2085]
+          - button "复制" [ref=f88e2086]
+          - button "重命名" [ref=f88e2087]
+          - button "导出 JSON" [ref=f88e2088]
+          - button "删除" [ref=f88e2089]

@@ -1,0 +1,22 @@
+- main [ref=f3e4]:
+  - generic [ref=f3e5]:
+    - link "返回书架" [ref=f3e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f3e7]
+  - navigation "资产分类" [ref=f3e8]:
+    - button "角色卡" [ref=f3e9]
+    - button "世界书" [ref=f3e10]
+    - button "预设" [ref=f3e11]
+    - button "正则脚本" [active] [ref=f3e12]
+    - button "资源中心" [ref=f3e13]
+  - region "正则脚本资产面板" [ref=f3e847]:
+    - generic [ref=f3e848]:
+      - paragraph [ref=f3e849]: 正则脚本是什么
+      - paragraph [ref=f3e850]: 自动文本处理规则（查找 → 替换），作用于三条轨道：只改显示（美化输出，不改动原文）/只改提示词（发给 AI 前清洗）/全部生效（两者都改）。
+      - paragraph [ref=f3e851]: 通常随社区预设或角色卡自动导入生效，无需手动编写。
+    - generic [ref=f3e852]:
+      - button "导入正则脚本" [ref=f3e853]
+      - generic [ref=f3e854]: 支持 .json 文件
+    - paragraph [ref=f3e855]: 暂无正则脚本，点击上方「导入正则脚本」上传酒馆格式文件
+    - list

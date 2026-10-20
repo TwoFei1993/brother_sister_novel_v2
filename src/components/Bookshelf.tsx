@@ -142,11 +142,13 @@ export function Bookshelf({ onOpenProject, onContinueProject, onNewProject }: Bo
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8 pr-8 h-9 w-full sm:w-52 text-xs"
+                aria-label="搜索书名或题材"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="清除搜索"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -251,7 +253,7 @@ export function Bookshelf({ onOpenProject, onContinueProject, onNewProject }: Bo
                     <div className="absolute -bottom-2 left-1 right-1 h-4 bg-black/20 blur-md rounded-full" />
                   </button>
 
-                  <div className="absolute -bottom-1 left-0 right-0 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute -bottom-1 left-0 right-0 flex justify-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <Button variant="secondary" size="icon" className="h-7 w-7 shadow-md"
                       onClick={() => onContinueProject(p)} title="续写">
                       <PenLine className="h-3 w-3" />

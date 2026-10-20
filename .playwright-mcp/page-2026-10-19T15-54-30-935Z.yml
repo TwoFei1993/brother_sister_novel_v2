@@ -1,0 +1,59 @@
+- main [ref=f78e3]:
+  - generic [ref=f78e4]:
+    - link "返回书架" [ref=f78e5] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "大纲向导" [level=1] [ref=f78e6]
+    - generic [ref=f78e7]: 粘贴大纲，一键生成角色卡与世界书草稿
+  - textbox "大纲文本" [ref=f78e9]:
+    - /placeholder: "粘贴网文大纲或「编号人设展板」文档，例如：\n一、故事背景：灵气复苏的大周王朝…\n哥哥（林昭）：天赋觉醒古龙血脉，性格沉稳…\n——或——\n01. 沈清晏｜镇国公府嫡长女（女主）\n正向 prompt：\n…（批量人设将自动识别）"
+    - text: 【全局统一】通用负面提示词：低分辨率， 模糊重影， 多余肢体， 文字水印。 【全局统一】固定版式模板：漫剧角色人物设定展板， 竖版构图， 角色居中， 顶部标题栏， 侧面坐姿。 第一部分：核心主角团 01. 沈青鸢｜镇北侯府嫡长女（女主，重生者） 正向 prompt： 漫剧角色人物设定展板， 竖版构图， 角色居中， 顶部标题栏， 侧面坐姿。 18 岁少女， 玄色劲装束腰， 剑眉星目， 性格飒爽果决。 国风淡彩厚涂漫画， 笔触细腻， 8K 高清， 展板。 02. 陆云舟｜寒门出身的年轻谋士（男主） 正向 prompt： 漫剧角色人物设定展板， 竖版构图， 角色居中， 顶部标题栏， 侧面坐姿。 24 岁青年， 青衫执卷， 眉目温润， 性格外圆内方。 国风淡彩厚涂漫画， 笔触细腻， 8K 高清， 展板。 第二部分：皇室成员 03. 萧承稷｜当朝太子 正向 prompt： 漫剧角色人物设定展板， 竖版构图， 角色居中， 顶部标题栏， 侧面坐姿。 26 岁储君， 玄金蟒袍， 姿仪威重， 城府极深。 国风淡彩厚涂漫画， 笔触细腻， 8K 高清， 展板。 04. 慕容徽｜当朝太后 正向 prompt： 漫剧角色人物设定展板， 竖版构图， 角色居中， 顶部标题栏， 侧面坐姿。 45 岁太后， 石青凤袍， 面容慈和， 手段狠戾。 国风淡彩厚涂漫画， 笔触细腻， 8K 高清， 展板。
+  - region "批量人设导入" [ref=f78e10]:
+    - generic [ref=f78e11]:
+      - text: 已识别批量人设展板：共
+      - strong [ref=f78e12]: "4"
+      - text: 位角色，默认全选，可逐条取消。
+    - generic [ref=f78e13]:
+      - generic [ref=f78e14]:
+        - checkbox "全选角色" [ref=f78e15]
+        - text: 全选（3/4）
+      - list [ref=f78e16]:
+        - listitem [ref=f78e17]:
+          - generic [ref=f78e18] [cursor=pointer]:
+            - generic [ref=f78e19]:
+              - checkbox "选择沈青鸢" [checked] [ref=f78e20]
+              - generic [ref=f78e21]: 沈青鸢
+              - generic [ref=f78e22]: 镇北侯府嫡长女（女主，重生者）
+              - generic [ref=f78e23]: 18岁
+              - generic [ref=f78e24]: 核心主角团
+            - generic [ref=f78e25]: 18 岁少女， 玄色劲装束腰， 剑眉星目， 性格飒爽果决。
+        - listitem [ref=f78e26]:
+          - generic [ref=f78e27] [cursor=pointer]:
+            - generic [ref=f78e28]:
+              - checkbox "选择陆云舟" [checked] [ref=f78e29]
+              - generic [ref=f78e30]: 陆云舟
+              - generic [ref=f78e31]: 寒门出身的年轻谋士（男主）
+              - generic [ref=f78e32]: 24岁
+              - generic [ref=f78e33]: 核心主角团
+            - generic [ref=f78e34]: 24 岁青年， 青衫执卷， 眉目温润， 性格外圆内方。
+        - listitem [ref=f78e35]:
+          - generic [ref=f78e36] [cursor=pointer]:
+            - generic [ref=f78e37]:
+              - checkbox "选择萧承稷" [checked] [ref=f78e38]
+              - generic [ref=f78e39]: 萧承稷
+              - generic [ref=f78e40]: 当朝太子
+              - generic [ref=f78e41]: 26岁
+              - generic [ref=f78e42]: 皇室成员
+            - generic [ref=f78e43]: 26 岁储君， 玄金蟒袍， 姿仪威重， 城府极深。
+        - listitem [ref=f78e44]:
+          - generic [ref=f78e45] [cursor=pointer]:
+            - generic [ref=f78e46]:
+              - checkbox "选择慕容徽" [active] [ref=f78e47]
+              - generic [ref=f78e48]: 慕容徽
+              - generic [ref=f78e49]: 当朝太后
+              - generic [ref=f78e50]: 45岁
+              - generic [ref=f78e51]: 皇室成员
+            - generic [ref=f78e52]: 45 岁太后， 石青凤袍， 面容慈和， 手段狠戾。
+    - generic [ref=f78e53]:
+      - button "生成 3 张角色卡" [ref=f78e56]
+      - button "分部与全局设定生成世界书" [ref=f78e55]

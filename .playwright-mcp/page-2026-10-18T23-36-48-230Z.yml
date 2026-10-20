@@ -1,0 +1,32 @@
+- generic [ref=f52e4]:
+  - banner [ref=f52e5]:
+    - button "返回书架" [ref=f52e6]: ←
+    - heading "魔法森林之约" [level=1] [ref=f52e7]
+    - button "作品设置" [ref=f52e8]: ⚙
+  - main [ref=f52e9]:
+    - generic [ref=f52e11]:
+      - generic [ref=f52e13]:
+        - generic [ref=f52e14]: 自动轮换
+        - button "S Seraphina" [ref=f52e16]:
+          - generic [ref=f52e17]: S
+          - generic [ref=f52e18]: Seraphina
+      - generic [ref=f52e20]:
+        - generic [ref=f52e22]:
+          - paragraph [ref=f52e23]: 用户
+          - generic [ref=f52e24]: 你好，Seraphina！这片森林就是你的家吗？
+        - generic [ref=f52e25]:
+          - generic [ref=f52e26]: S
+          - generic [ref=f52e27]:
+            - paragraph [ref=f52e28]: Seraphina
+            - generic [ref=f52e29]: "# 第3章 试炼之门 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。 妹妹攥住他的衣角，声音压得很低：\"**哥，门后有东西在看着我们。**\" 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。"
+            - generic [ref=f52e30]:
+              - generic [ref=f52e31]:
+                - button "◀" [ref=f52e32]
+                - generic [ref=f52e33]: 1/2
+                - button "▶" [ref=f52e34]
+              - button "↻ 重roll" [ref=f52e35]
+              - button "朗读 Seraphina 的消息" [active] [ref=f52e36]: 🔊
+      - generic [ref=f52e38]:
+        - textbox "对话输入" [ref=f52e39]:
+          - /placeholder: 输入消息…
+        - button "发送" [disabled] [ref=f52e40]

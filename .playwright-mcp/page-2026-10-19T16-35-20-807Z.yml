@@ -1,0 +1,38 @@
+- main [ref=f87e10]:
+  - navigation "全局导航" [ref=f87e11]:
+    - link "小说工坊" [ref=f87e12] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f87e13]:
+      - link "🗂 资产库" [ref=f87e14] [cursor=pointer]:
+        - /url: /library
+      - link "📝 大纲向导" [ref=f87e15] [cursor=pointer]:
+        - /url: /wizard
+      - link "⚙ 设置" [ref=f87e16] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=f87e17]:
+    - generic [ref=f87e18]:
+      - generic [ref=f87e19]:
+        - heading "我的书架" [level=1] [ref=f87e20]
+        - paragraph [ref=f87e21]: 共 0 部作品
+      - generic [ref=f87e22]:
+        - searchbox "按标题搜索作品" [ref=f87e23]
+        - combobox "排序方式" [ref=f87e24]:
+          - option "最近更新" [selected]
+          - option "章节数"
+          - option "标题"
+        - button "＋ 新建作品" [ref=f87e25]
+    - generic [ref=f87e26]:
+      - generic [aria-hidden] [ref=f87e27]: 📚
+      - paragraph [ref=f87e28]: 书架空空如也
+      - generic [ref=f87e29]:
+        - paragraph [ref=f87e30]: 三步开始第一本书
+        - list [ref=f87e31]:
+          - listitem [ref=f87e32]: ① 到「资源中心」导入或创建角色卡 / 世界书
+          - listitem [ref=f87e33]: ② 「新建作品」并绑定它们
+          - listitem [ref=f87e34]: ③ 进入写作台，输入剧情方向开始创作
+        - generic [ref=f87e35]:
+          - link "去资源中心" [ref=f87e36] [cursor=pointer]:
+            - /url: /library?tab=hub
+          - link "打开创作向导" [ref=f87e37] [cursor=pointer]:
+            - /url: /wizard
+          - button "＋ 新建作品" [ref=f87e38]

@@ -1,0 +1,7 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - heading "兄妹小说" [level=1] [ref=e5]
+    - paragraph [ref=e6]: 请输入访问密码
+    - textbox "访问密码" [active] [ref=e7]: dev123
+    - alert [ref=e9]: 密码错误，请重试
+    - button "进入书房" [ref=e8]

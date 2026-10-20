@@ -1,0 +1,111 @@
+- main [ref=f98e79]:
+  - generic [ref=f98e80]:
+    - link "返回书架" [ref=f98e81] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f98e82]
+  - navigation "资产分类" [ref=f98e83]:
+    - button "角色卡" [ref=f98e84]
+    - button "世界书" [ref=f98e85]
+    - button "预设" [ref=f98e86]
+    - button "正则脚本" [ref=f98e87]
+    - button "资源中心" [ref=f98e88]
+  - region "角色卡资产面板" [ref=f98e89]:
+    - generic [ref=f98e90]:
+      - button "导入角色卡" [ref=f98e91]
+      - generic [ref=f98e92]: 支持 .png,.json 文件（PNG 卡自动提取内嵌 JSON）
+      - generic [ref=f98e93]:
+        - text: 排序
+        - combobox "排序" [ref=f98e94]:
+          - option "最近添加" [selected]
+          - option "最早添加"
+          - option "按名称"
+    - list [ref=f98e95]:
+      - listitem [ref=f98e96]:
+        - generic [ref=f98e97]:
+          - generic [ref=f98e98]:
+            - paragraph [ref=f98e99]: 大周皇帝
+            - paragraph [ref=f98e100]:
+              - text: "{{char}}的身份是配角。 大周天子，表面昏聩实则深藏不露，暗中庇护林家遗孤。反向 prompt：无"
+              - generic [ref=f98e101]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e102]
+          - button "导出 PNG" [ref=f98e103]
+          - button "导出 JSON" [ref=f98e104]
+          - button "删除" [ref=f98e105]
+      - listitem [ref=f98e106]:
+        - generic [ref=f98e107]:
+          - generic [ref=f98e108]:
+            - paragraph [ref=f98e109]: 血衣楼主
+            - paragraph [ref=f98e110]:
+              - text: "{{char}}的身份是反派。 血衣楼之主，追杀林昭全家之人，真实身份成谜。反向 prompt：无"
+              - generic [ref=f98e111]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e112]
+          - button "导出 PNG" [ref=f98e113]
+          - button "导出 JSON" [ref=f98e114]
+          - button "删除" [ref=f98e115]
+      - listitem [ref=f98e116]:
+        - generic [ref=f98e117]:
+          - generic [ref=f98e118]:
+            - paragraph [ref=f98e119]: 玄机子
+            - paragraph [ref=f98e120]:
+              - text: "{{char}}的身份是师父。 青云观观主，占卜大师，嗜酒，关键时刻掉链子。反向 prompt：全知全能"
+              - generic [ref=f98e121]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e122]
+          - button "导出 PNG" [ref=f98e123]
+          - button "导出 JSON" [ref=f98e124]
+          - button "删除" [ref=f98e125]
+      - listitem [ref=f98e126]:
+        - generic [ref=f98e127]:
+          - generic [ref=f98e128]:
+            - paragraph [ref=f98e129]: 老锅阿鼎
+            - paragraph [ref=f98e130]:
+              - text: "{{char}}的身份是器灵。 上古灵厨遗物成精，毒舌，认林小满为主。反向 prompt：无"
+              - generic [ref=f98e131]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e132]
+          - button "导出 PNG" [ref=f98e133]
+          - button "导出 JSON" [ref=f98e134]
+          - button "删除" [ref=f98e135]
+      - listitem [ref=f98e136]:
+        - generic [ref=f98e137]:
+          - generic [ref=f98e138]:
+            - paragraph [ref=f98e139]: 沈青梧
+            - paragraph [ref=f98e140]:
+              - text: "{{char}}的身份是青梅竹马。 镇北侯独女，剑修，冷面热心，与林昭有婚约。反向 prompt：绿茶"
+              - generic [ref=f98e141]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e142]
+          - button "导出 PNG" [ref=f98e143]
+          - button "导出 JSON" [ref=f98e144]
+          - button "删除" [ref=f98e145]
+      - listitem [ref=f98e146]:
+        - generic [ref=f98e147]:
+          - generic [ref=f98e148]:
+            - paragraph [ref=f98e149]: 林小满
+            - paragraph [ref=f98e150]:
+              - text: "{{char}}的身份是妹妹（女主）。 十四岁，灵厨天赋，性格活泼贪吃，随身携带一口会说话的锅「阿鼎」。反向 promp…"
+              - generic [ref=f98e151]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e152]
+          - button "导出 PNG" [ref=f98e153]
+          - button "导出 JSON" [ref=f98e154]
+          - button "删除" [ref=f98e155]
+      - listitem [ref=f98e156]:
+        - generic [ref=f98e157]:
+          - generic [ref=f98e158]:
+            - paragraph [ref=f98e159]: 林昭
+            - paragraph [ref=f98e160]:
+              - text: "{{char}}的身份是哥哥（男主）。 古龙血脉觉醒者，十八岁，性格沉稳寡言，佩剑「霜降」，天生灵力亲和雷系。反向 pr…"
+              - generic [ref=f98e161]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e162]
+          - button "导出 PNG" [ref=f98e163]
+          - button "导出 JSON" [ref=f98e164]
+          - button "删除" [ref=f98e165]
+      - listitem [ref=f98e166]:
+        - generic [ref=f98e167]:
+          - generic [ref=f98e168]:
+            - paragraph [ref=f98e169]: Seraphina
+            - paragraph [ref=f98e170]:
+              - text: "[Seraphina's Personality= \"caring\", \"protective\", \"compassio…"
+              - generic [ref=f98e171]: · 添加于 2026/10/20
+          - button "编辑" [ref=f98e172]
+          - button "导出 PNG" [ref=f98e173]
+          - button "导出 JSON" [ref=f98e174]
+          - button "删除" [ref=f98e175]

@@ -1,0 +1,50 @@
+- main [ref=f46e10]:
+  - navigation "全局导航" [ref=f46e11]:
+    - link "小说工坊" [ref=f46e12] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f46e13]:
+      - link "🗂 资产库" [ref=f46e14] [cursor=pointer]:
+        - /url: /library
+      - link "📝 大纲向导" [ref=f46e15] [cursor=pointer]:
+        - /url: /wizard
+      - link "⚙ 设置" [ref=f46e16] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=f46e17]:
+    - generic [ref=f46e18]:
+      - generic [ref=f46e19]:
+        - heading "我的书架" [level=1] [ref=f46e20]
+        - paragraph [ref=f46e21]: 共 2 部作品
+      - generic [ref=f46e22]:
+        - searchbox "按标题搜索作品" [ref=f46e23]
+        - combobox "排序方式" [ref=f46e24]:
+          - option "最近更新" [selected]
+          - option "章节数"
+          - option "标题"
+        - button "＋ 新建作品" [ref=f46e25]
+    - generic [ref=f46e26]:
+      - generic [ref=f46e27]:
+        - button "打开作品 Eldoria 纪行" [ref=f46e28]:
+          - generic [ref=f46e30]: Eldoria 纪行
+          - generic [ref=f46e31]: 穿越重生
+        - generic [ref=f46e32]:
+          - button "续写 Eldoria 纪行" [ref=f46e33]: ✍
+          - button "重命名 Eldoria 纪行" [ref=f46e34]: ✎
+          - button "删除 Eldoria 纪行" [ref=f46e35]: ✕
+        - generic [ref=f46e36]:
+          - paragraph [ref=f46e37]:
+            - generic [ref=f46e38]: 互动小说
+            - text: 4 章
+          - paragraph [ref=f46e39]: 2026/10/19
+      - generic [ref=f46e40]:
+        - button "打开作品 魔法森林之约" [ref=f46e41]:
+          - generic [ref=f46e43]: 魔法森林之约
+          - generic [ref=f46e44]: 穿越重生
+        - generic [ref=f46e45]:
+          - button "续写 魔法森林之约" [ref=f46e46]: ✍
+          - button "重命名 魔法森林之约" [ref=f46e47]: ✎
+          - button "删除 魔法森林之约" [ref=f46e48]: ✕
+        - generic [ref=f46e49]:
+          - paragraph [ref=f46e50]:
+            - generic [ref=f46e51]: 对话写作
+            - text: 0 章
+          - paragraph [ref=f46e52]: 2026/10/19

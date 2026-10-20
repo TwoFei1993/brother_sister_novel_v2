@@ -1,0 +1,92 @@
+- main [ref=f87e10]:
+  - navigation "全局导航" [ref=f87e11]:
+    - link "小说工坊" [ref=f87e12] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f87e13]:
+      - link "🗂 资产库" [ref=f87e14] [cursor=pointer]:
+        - /url: /library
+      - link "📝 大纲向导" [ref=f87e15] [cursor=pointer]:
+        - /url: /wizard
+      - link "⚙ 设置" [ref=f87e16] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=f87e17]:
+    - generic [ref=f87e18]:
+      - generic [ref=f87e19]:
+        - heading "我的书架" [level=1] [ref=f87e20]
+        - paragraph [ref=f87e21]: 共 0 部作品
+      - generic [ref=f87e22]:
+        - searchbox "按标题搜索作品" [ref=f87e23]
+        - combobox "排序方式" [ref=f87e24]:
+          - option "最近更新" [selected]
+          - option "章节数"
+          - option "标题"
+        - button "＋ 新建作品" [ref=f87e25]
+    - generic [ref=f87e26]:
+      - generic [aria-hidden] [ref=f87e27]: 📚
+      - paragraph [ref=f87e28]: 书架空空如也
+      - generic [ref=f87e29]:
+        - paragraph [ref=f87e30]: 三步开始第一本书
+        - list [ref=f87e31]:
+          - listitem [ref=f87e32]: ① 到「资源中心」导入或创建角色卡 / 世界书
+          - listitem [ref=f87e33]: ② 「新建作品」并绑定它们
+          - listitem [ref=f87e34]: ③ 进入写作台，输入剧情方向开始创作
+        - generic [ref=f87e35]:
+          - link "去资源中心" [ref=f87e36] [cursor=pointer]:
+            - /url: /library?tab=hub
+          - link "打开创作向导" [ref=f87e37] [cursor=pointer]:
+            - /url: /wizard
+          - button "＋ 新建作品" [ref=f87e38]
+    - dialog "新建作品" [ref=f87e39]:
+      - heading "新建作品" [level=2] [ref=f87e40]
+      - generic [ref=f87e41]:
+        - generic [ref=f87e42]: 标题
+        - textbox "标题" [active] [ref=f87e43]:
+          - /placeholder: 给作品起个名字
+      - radiogroup "作品模式" [ref=f87e44]:
+        - generic [ref=f87e45]:
+          - text: 模式（创建后不可切换）
+          - button "说明：互动小说：你下达剧情指令，AI 按章续写，适合小说创作；对话写作：酒馆式角色扮演，以角色口吻逐条对话。" [ref=f87e47]:
+            - generic [aria-hidden] [ref=f87e48]: "?"
+        - generic [ref=f87e49]:
+          - radio "互动小说 指令驱动 · 章节续写" [checked] [ref=f87e50]:
+            - generic [ref=f87e51]: 互动小说
+            - generic [ref=f87e52]: 指令驱动 · 章节续写
+          - radio "对话写作 酒馆式角色扮演" [ref=f87e53]:
+            - generic [ref=f87e54]: 对话写作
+            - generic [ref=f87e55]: 酒馆式角色扮演
+      - generic [ref=f87e56]:
+        - generic [ref=f87e57]: 题材
+        - combobox "题材" [ref=f87e58]:
+          - option "穿越重生" [selected]
+          - option "星际科幻"
+          - option "末世求生"
+          - option "无限流"
+          - option "玄幻修仙"
+          - option "混合类型"
+          - option "自定义"
+      - group "绑定资源（可留空，稍后在作品内调整）" [ref=f87e59]:
+        - generic [ref=f87e61]:
+          - generic [ref=f87e63]:
+            - generic [ref=f87e64]:
+              - text: 角色卡
+              - generic "作品角色的设定来源：人设、开场白、对话示例都来自角色卡。可添加多张（多角色同台）；对话写作模式下按提及/轮换决定谁发言。" [ref=f87e65]:
+                - generic [aria-hidden] [ref=f87e66]: "?"
+            - combobox "角色卡 作品角色的设定来源：人设、开场白、对话示例都来自角色卡。可添加多张（多角色同台）；对话写作模式下按提及/轮换决定谁发言。" [ref=f87e68]:
+              - option "添加…" [selected]
+          - generic [ref=f87e70]:
+            - generic [ref=f87e71]:
+              - text: 世界书
+              - generic "世界观设定集：剧情关键词命中时自动注入对应设定（如地名、势力、规则）。可同时挂多本（人物书+世界书）。" [ref=f87e72]:
+                - generic [aria-hidden] [ref=f87e73]: "?"
+            - combobox "世界书 世界观设定集：剧情关键词命中时自动注入对应设定（如地名、势力、规则）。可同时挂多本（人物书+世界书）。" [ref=f87e75]:
+              - option "添加…" [selected]
+          - generic [ref=f87e77]:
+            - generic [ref=f87e78]:
+              - text: 预设
+              - generic "提示词编排方案：决定 AI 的写作风格与提示词装配顺序，推荐先从资源中心导入社区预设。" [ref=f87e79]:
+                - generic [aria-hidden] [ref=f87e80]: "?"
+            - combobox "预设 提示词编排方案：决定 AI 的写作风格与提示词装配顺序，推荐先从资源中心导入社区预设。" [ref=f87e82]:
+              - option "不绑定" [selected]
+      - generic [ref=f87e83]:
+        - button "取消" [ref=f87e84]
+        - button "创建作品" [disabled] [ref=f87e85]

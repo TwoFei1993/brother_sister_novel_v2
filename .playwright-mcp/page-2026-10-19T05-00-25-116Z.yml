@@ -1,0 +1,215 @@
+- main [ref=f3e4]:
+  - generic [ref=f3e5]:
+    - link "返回书架" [ref=f3e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f3e7]
+  - navigation "资产分类" [ref=f3e8]:
+    - button "角色卡" [ref=f3e9]
+    - button "世界书" [ref=f3e10]
+    - button "预设" [ref=f3e11]
+    - button "正则脚本" [ref=f3e12]
+    - button "资源中心" [ref=f3e13]
+  - region "世界书资产面板" [ref=f3e73]:
+    - generic [ref=f3e74]:
+      - button "导入世界书" [ref=f3e75]
+      - generic [ref=f3e76]: 支持 .json 文件
+    - list [ref=f3e77]:
+      - listitem [ref=f3e78]:
+        - generic [ref=f3e79]:
+          - generic [ref=f3e80]:
+            - paragraph [ref=f3e81]: 大纲世界书
+            - paragraph [ref=f3e82]: 共 3 条 · 世界背景
+          - button "编辑" [ref=f3e83]
+          - button "导出 JSON" [ref=f3e84]
+          - button "删除" [ref=f3e85]
+      - listitem [ref=f3e86]:
+        - generic [ref=f3e87]:
+          - generic [ref=f3e88]:
+            - paragraph [ref=f3e89]: 艾尔多利亚森林（中文示例）
+            - paragraph [ref=f3e90]: 共 4 条 · 艾尔多利亚（世界背景）
+          - button "编辑" [active] [ref=f3e91]
+          - button "导出 JSON" [ref=f3e92]
+          - button "删除" [ref=f3e93]
+      - listitem [ref=f3e94]:
+        - generic [ref=f3e95]:
+          - generic [ref=f3e96]:
+            - paragraph [ref=f3e97]: Sudachi-Next-DLC
+            - paragraph [ref=f3e98]: 共 3 条 · [initvar]初始化
+          - button "编辑" [ref=f3e99]
+          - button "导出 JSON" [ref=f3e100]
+          - button "删除" [ref=f3e101]
+  - generic [ref=f3e102]:
+    - generic [ref=f3e103]:
+      - button "关闭编辑器" [ref=f3e104]: ←
+      - heading "世界书 · 艾尔多利亚森林（中文示例）" [level=2] [ref=f3e105]
+      - button "保存" [disabled] [ref=f3e106]
+    - generic [ref=f3e108]:
+      - complementary "条目列表" [ref=f3e109]:
+        - generic [ref=f3e110]:
+          - button "新建条目" [ref=f3e111]
+          - button "说明：新建条目：添加一条空白世界书设定，填入触发关键词与内容后记得点右上角「保存」。" [ref=f3e113]:
+            - generic [aria-hidden] [ref=f3e114]: "?"
+        - list [ref=f3e115]:
+          - listitem [ref=f3e116]:
+            - generic [ref=f3e117]:
+              - checkbox "启用 艾尔多利亚（世界背景）" [checked] [ref=f3e118]
+              - button "艾尔多利亚（世界背景）" [ref=f3e119]
+              - generic "order 插入优先级" [ref=f3e120]: "100"
+              - generic [ref=f3e121]:
+                - button "上移 艾尔多利亚（世界背景）" [disabled] [ref=f3e122]: ▲
+                - button "下移 艾尔多利亚（世界背景）" [ref=f3e123]: ▼
+          - listitem [ref=f3e124]:
+            - generic [ref=f3e125]:
+              - checkbox "启用 影牙（敌对设定）" [checked] [ref=f3e126]
+              - button "影牙（敌对设定）" [ref=f3e127]
+              - generic "order 插入优先级" [ref=f3e128]: "100"
+              - generic [ref=f3e129]:
+                - button "上移 影牙（敌对设定）" [ref=f3e130]: ▲
+                - button "下移 影牙（敌对设定）" [ref=f3e131]: ▼
+          - listitem [ref=f3e132]:
+            - generic [ref=f3e133]:
+              - checkbox "启用 林间空地（安全区）" [checked] [ref=f3e134]
+              - button "林间空地（安全区）" [ref=f3e135]
+              - generic "order 插入优先级" [ref=f3e136]: "100"
+              - generic [ref=f3e137]:
+                - button "上移 林间空地（安全区）" [ref=f3e138]: ▲
+                - button "下移 林间空地（安全区）" [ref=f3e139]: ▼
+          - listitem [ref=f3e140]:
+            - generic [ref=f3e141]:
+              - checkbox "启用 守护者的力量" [checked] [ref=f3e142]
+              - button "守护者的力量" [ref=f3e143]
+              - generic "order 插入优先级" [ref=f3e144]: "100"
+              - generic [ref=f3e145]:
+                - button "上移 守护者的力量" [ref=f3e146]: ▲
+                - button "下移 守护者的力量" [disabled] [ref=f3e147]: ▼
+      - region "条目编辑" [ref=f3e148]:
+        - generic [ref=f3e149]:
+          - 'heading "编辑条目 #0" [level=3] [ref=f3e150]'
+          - button "删除条目" [ref=f3e151]
+        - generic [ref=f3e152]:
+          - generic [ref=f3e153]:
+            - generic [ref=f3e154]:
+              - text: 备注名
+              - generic "条目标题（酒馆 comment 字段），仅用于列表展示" [ref=f3e155]:
+                - generic [aria-hidden] [ref=f3e156]: "?"
+            - textbox "备注名 条目标题（酒馆 comment 字段），仅用于列表展示" [ref=f3e158]: 艾尔多利亚（世界背景）
+          - generic [ref=f3e159]:
+            - generic [ref=f3e160]:
+              - text: 主键
+              - generic "触发关键词：最近的对话文本中出现任一主键，该条目才会被注入；多个用逗号/回车分隔，支持 /正则/ 格式" [ref=f3e161]:
+                - generic [aria-hidden] [ref=f3e162]: "?"
+            - generic [ref=f3e164]:
+              - generic [ref=f3e165]:
+                - text: 艾尔多利亚
+                - button "删除键 艾尔多利亚" [ref=f3e166]: ×
+              - generic [ref=f3e167]:
+                - text: 森林
+                - button "删除键 森林" [ref=f3e168]: ×
+              - generic [ref=f3e169]:
+                - text: 魔法森林
+                - button "删除键 魔法森林" [ref=f3e170]: ×
+              - generic [ref=f3e171]:
+                - text: 林地
+                - button "删除键 林地" [ref=f3e172]: ×
+              - generic [ref=f3e173]:
+                - text: eldoria
+                - button "删除键 eldoria" [ref=f3e174]: ×
+              - textbox [ref=f3e175]
+          - generic [ref=f3e176]:
+            - generic [ref=f3e177]:
+              - text: 二级键
+              - generic "配合下方逻辑对主键做二次过滤（如要求主键与二级键同时命中）；留空则仅按主键判定" [ref=f3e178]:
+                - generic [aria-hidden] [ref=f3e179]: "?"
+            - textbox "输入后回车/逗号添加" [ref=f3e182]
+          - generic [ref=f3e183]:
+            - generic [ref=f3e184]:
+              - generic [ref=f3e185]:
+                - text: 二级键逻辑
+                - generic "四选项：任一匹配=主键命中且任一二级键命中；全部匹配=二级键全命中；任一/全部不匹配=主键命中但二级键不命中" [ref=f3e186]:
+                  - generic [aria-hidden] [ref=f3e187]: "?"
+              - combobox "二级键逻辑 四选项：任一匹配=主键命中且任一二级键命中；全部匹配=二级键全命中；任一/全部不匹配=主键命中但二级键不命中" [ref=f3e189]:
+                - option "任一匹配" [selected]
+                - option "任一不匹配"
+                - option "全部不匹配"
+                - option "全部匹配"
+            - generic [ref=f3e190]:
+              - generic [ref=f3e191]:
+                - text: 插入位置
+                - generic "AN/EM 位置由引擎映射到相近的前/后（设计 §5.2）" [ref=f3e192]:
+                  - generic [aria-hidden] [ref=f3e193]: "?"
+              - combobox "插入位置 AN/EM 位置由引擎映射到相近的前/后（设计 §5.2）" [ref=f3e195]:
+                - option "角色卡之前" [selected]
+                - option "角色卡之后"
+                - option "按深度注入"
+          - generic [ref=f3e196]:
+            - generic [ref=f3e197]:
+              - text: 内容
+              - generic "命中后注入提示词的正文" [ref=f3e198]:
+                - generic [aria-hidden] [ref=f3e199]: "?"
+            - textbox "内容 命中后注入提示词的正文" [ref=f3e201]: "{{user}}：「艾尔多利亚是什么地方？」 {{char}}：*塞拉菲娜转过身来，长裙在柔和的光线中微微闪烁，她朝你露出温和的微笑。*「艾尔多利亚就是这片森林的全部。这里是我的林间空地，是森林深处的宁静圣所。」*她示意你看看四周。*「我是这里的守护者，负责保护所有来此避难的人。森林深处危机四伏，但只要我在，就没人能伤到你。」*她琥珀色的眼眸里闪着怜惜的光。*「很多年来，我一直守护着来此避难的人们——但并不是所有存在都像我一样友善。」*她优雅地点点头，回到门口继续守望，身影散发着柔和的魔法微光。*「曾经的艾尔多利亚，是旅人和商队的乐土……直到『影牙』降临。」 {{user}}：「艾尔多利亚发生了什么？」 {{char}}：*塞拉菲娜轻叹一声，望向空地之外的森林深处。*「很久以前，这里是一片奇迹之地。起伏的草甸、广阔的湖泊、高耸入云的山脉。」*她的眼神变得悠远，怀念着逝去的时光。*「但影牙来了，黑暗取代了光明。湖水变得苦涩，山脉崩塌成废墟，猛兽在昔日旅人安然行走的地方游荡。」*她指尖轻点，一小朵雨云在你们头顶聚起，落下几滴清凉的雨。*「仍有些地方留存着光亮——绝望中的希望之种，被结界守护的庇护所，危险荒漠中的绿洲。」*她微笑着看向你，轻叹一声，握住你的手。*"
+          - generic [ref=f3e202]:
+            - generic [ref=f3e203] [cursor=pointer]:
+              - checkbox "常驻条目 开启后跳过关键词判定，每轮必定注入（constant）" [ref=f3e204]
+              - generic [ref=f3e205]:
+                - text: 常驻条目
+                - generic "开启后跳过关键词判定，每轮必定注入（constant）" [ref=f3e206]:
+                  - generic [aria-hidden] [ref=f3e207]: "?"
+            - generic [ref=f3e209] [cursor=pointer]:
+              - checkbox "禁用条目 开启后该条目不参与扫描（disable）" [ref=f3e210]
+              - generic [ref=f3e211]:
+                - text: 禁用条目
+                - generic "开启后该条目不参与扫描（disable）" [ref=f3e212]:
+                  - generic [aria-hidden] [ref=f3e213]: "?"
+          - generic [ref=f3e215]:
+            - generic [ref=f3e216]:
+              - generic [ref=f3e217]:
+                - text: 顺序 order
+                - generic "插入优先级：数值越大越靠前（同时命中多条时的排序权重）" [ref=f3e218]:
+                  - generic [aria-hidden] [ref=f3e219]: "?"
+              - spinbutton "顺序 order 插入优先级：数值越大越靠前（同时命中多条时的排序权重）" [ref=f3e221]: "100"
+            - generic [ref=f3e222]:
+              - generic [ref=f3e223]:
+                - text: 触发概率 %
+                - generic "每次扫描按概率触发（probability）" [ref=f3e224]:
+                  - generic [aria-hidden] [ref=f3e225]: "?"
+              - spinbutton "触发概率 % 每次扫描按概率触发（probability）" [ref=f3e227]: "100"
+          - group "扫描设置覆盖（留空 = 跟随全局）" [ref=f3e228]:
+            - generic [ref=f3e230]:
+              - generic [ref=f3e231]:
+                - generic [ref=f3e232]:
+                  - text: 扫描深度
+                  - generic "覆盖全局扫描深度：往回检查的聊天层数" [ref=f3e233]:
+                    - generic [aria-hidden] [ref=f3e234]: "?"
+                - spinbutton "扫描深度 覆盖全局扫描深度：往回检查的聊天层数" [ref=f3e236]
+              - generic [ref=f3e237]:
+                - generic [ref=f3e238]:
+                  - text: 区分大小写
+                  - generic "覆盖全局大小写敏感设置" [ref=f3e239]:
+                    - generic [aria-hidden] [ref=f3e240]: "?"
+                - combobox "区分大小写 覆盖全局大小写敏感设置" [ref=f3e242]:
+                  - option "跟随全局" [selected]
+                  - option "启用"
+                  - option "禁用"
+              - generic [ref=f3e243]:
+                - generic [ref=f3e244]:
+                  - text: 全词匹配
+                  - generic "覆盖全局全词匹配设置（仅对拉丁词生效）" [ref=f3e245]:
+                    - generic [aria-hidden] [ref=f3e246]: "?"
+                - combobox "全词匹配 覆盖全局全词匹配设置（仅对拉丁词生效）" [ref=f3e248]:
+                  - option "跟随全局" [selected]
+                  - option "启用"
+                  - option "禁用"
+          - generic [ref=f3e249]:
+            - generic [ref=f3e250] [cursor=pointer]:
+              - checkbox "不被递归扫描 本条目内容不再触发其他条目（excludeRecursion）" [ref=f3e251]
+              - generic [ref=f3e252]:
+                - text: 不被递归扫描
+                - generic "本条目内容不再触发其他条目（excludeRecursion）" [ref=f3e253]:
+                  - generic [aria-hidden] [ref=f3e254]: "?"
+            - generic [ref=f3e256] [cursor=pointer]:
+              - checkbox "不触发递归 本条目内容不进入后续递归扫描文本（preventRecursion）" [ref=f3e257]
+              - generic [ref=f3e258]:
+                - text: 不触发递归
+                - generic "本条目内容不进入后续递归扫描文本（preventRecursion）" [ref=f3e259]:
+                  - generic [aria-hidden] [ref=f3e260]: "?"

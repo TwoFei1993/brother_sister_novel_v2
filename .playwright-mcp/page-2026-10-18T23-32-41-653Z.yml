@@ -1,0 +1,67 @@
+- generic [ref=f50e4]:
+  - banner [ref=f50e5]:
+    - button "返回书架" [ref=f50e6]: ←
+    - heading "分声验收" [level=1] [ref=f50e7]
+    - tablist "视图切换" [ref=f50e8]:
+      - tab "💬" [ref=f50e9]
+      - tab "📖" [selected] [ref=f50e10]
+      - tab "🛠️" [ref=f50e11]
+    - button "章节目录" [ref=f50e12]: 📖
+    - button "作品设置" [active] [ref=f50e13]: ⚙
+  - main [ref=f50e14]:
+    - generic [ref=f50e15]:
+      - paragraph [ref=f50e16]: 《分声验收》
+      - paragraph [ref=f50e17]: 在下方输入剧情指令（可留空），点击「▶ 续写」开始创作第一章
+    - generic [ref=f50e19]:
+      - textbox "剧情指令" [ref=f50e20]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f50e21]
+      - button "🎲 换一支" [ref=f50e22]
+  - complementary "作品设置" [ref=f50e24]:
+    - generic [ref=f50e25]:
+      - heading "作品设置" [level=2] [ref=f50e26]
+      - button "✕" [ref=f50e27]
+    - generic [ref=f50e28]:
+      - generic [ref=f50e29]:
+        - generic [ref=f50e30]: 作者注释
+        - paragraph [ref=f50e31]: 按深度注入到上下文（倒数第 N 条消息处），适合放置剧情走向与文风要求
+        - textbox "作者注释" [ref=f50e32]:
+          - /placeholder: 例：本章起节奏加快，多写妹妹的心理活动…
+        - generic [ref=f50e33]:
+          - generic [ref=f50e34]: 注入深度
+          - spinbutton "注入深度" [ref=f50e35]: "4"
+          - generic [ref=f50e36]: 条（酒馆默认 4）
+      - generic [ref=f50e37]:
+        - generic [ref=f50e38]:
+          - paragraph [ref=f50e39]: 允许角色卡覆盖预设
+          - paragraph [ref=f50e40]: 开启后卡片 system_prompt / post_history_instructions 替换预设对应项（§4.4）
+        - switch [checked] [ref=f50e41]
+      - generic [ref=f50e43]:
+        - paragraph [ref=f50e44]: 绑定资产
+        - generic [ref=f50e45]:
+          - generic [ref=f50e46]:
+            - generic [ref=f50e47]: 角色卡
+            - generic [ref=f50e48]: （无）
+          - generic [ref=f50e49]:
+            - generic [ref=f50e50]: 世界书
+            - generic [ref=f50e51]: （无）
+          - generic [ref=f50e52]:
+            - generic [ref=f50e53]: 预设
+            - generic [ref=f50e54]: （未绑定，生成用内置空预设）
+      - region "TTS 分声绑定" [ref=f50e56]:
+        - generic [ref=f50e57]:
+          - heading "TTS 分声绑定" [level=3] [ref=f50e58]
+          - paragraph [ref=f50e59]: 为角色分配不同声音；正文中的对白段落按说话人自动选声，未设置的角色与旁白使用默认声。
+        - paragraph [ref=f50e60]: 本作品尚未绑定角色卡，仅旁白声生效。
+        - generic [ref=f50e61]:
+          - generic [ref=f50e62]: 旁白默认声
+          - combobox "旁白默认声音" [ref=f50e63]:
+            - option "跟随播放条（晓晓）" [selected]
+            - option "晓晓（女）"
+            - option "小艺（女）"
+            - option "小贝（女）"
+            - option "云希（男）"
+            - option "云健（男）"
+            - option "云扬（男）"
+        - button "保存绑定" [ref=f50e65]
+    - button "保存设置" [ref=f50e66]

@@ -1,0 +1,33 @@
+- main [ref=f3e4]:
+  - generic [ref=f3e5]:
+    - link "返回书架" [ref=f3e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f3e7]
+  - navigation "资产分类" [ref=f3e8]:
+    - button "角色卡" [ref=f3e9]
+    - button "世界书" [ref=f3e10]
+    - button "预设" [active] [ref=f3e11]
+    - button "正则脚本" [ref=f3e12]
+    - button "资源中心" [ref=f3e13]
+  - region "预设资产面板" [ref=f3e856]:
+    - generic [ref=f3e857]:
+      - button "导入预设" [ref=f3e858]
+      - generic [ref=f3e859]: 支持 .json 文件
+    - list [ref=f3e860]:
+      - listitem [ref=f3e861]:
+        - generic [ref=f3e862]:
+          - generic [ref=f3e863]:
+            - paragraph [ref=f3e864]: Sudachi-Next-Preset
+            - paragraph [ref=f3e865]: 提示词 181 条 · 启用 71
+          - button "编辑" [ref=f3e866]
+          - button "导出 JSON" [ref=f3e867]
+          - button "删除" [ref=f3e868]
+      - listitem [ref=f3e869]:
+        - generic [ref=f3e870]:
+          - generic [ref=f3e871]:
+            - paragraph [ref=f3e872]: Default
+            - paragraph [ref=f3e873]: 提示词 12 条 · 启用 11
+          - button "编辑" [ref=f3e874]
+          - button "导出 JSON" [ref=f3e875]
+          - button "删除" [ref=f3e876]

@@ -1,0 +1,509 @@
+- generic [ref=f91e4]:
+  - banner [ref=f91e5]:
+    - button "返回书架" [ref=f91e6]: ←
+    - heading "深测-试炼之门共 50 章" [level=1] [ref=f91e396]:
+      - text: 深测-试炼之门
+      - generic [ref=f91e31]: 共 50 章
+    - tablist "视图切换" [ref=f91e8]:
+      - tab "💬" [ref=f91e9]
+      - tab "📖" [active] [selected] [ref=f91e10]
+      - tab "🛠️" [ref=f91e11]
+    - button "章节目录" [ref=f91e1584]: 📖
+    - button "作品设置" [ref=f91e13]: ⚙
+  - main [ref=f91e14]:
+    - generic [ref=f91e1585]:
+      - generic [ref=f91e1586]:
+        - button "白天" [ref=f91e1587]
+        - button "夜间" [ref=f91e1588]
+        - button "护眼" [ref=f91e1589]
+        - button "深空" [ref=f91e1590]
+        - generic [ref=f91e1591]: "|"
+        - button "小" [ref=f91e1592]
+        - button "中" [ref=f91e1593]
+        - button "大" [ref=f91e1594]
+        - button "超大" [ref=f91e1595]
+        - generic [ref=f91e1596]: "|"
+        - button "紧凑" [ref=f91e1597]
+        - button "标准" [ref=f91e1598]
+        - button "宽松" [ref=f91e1599]
+        - button "导出文本" [ref=f91e1600]: ⬇ TXT
+      - generic [ref=f91e1602]:
+        - article [ref=f91e1603]:
+          - heading "第3章 试炼之门" [level=2] [ref=f91e1604]
+          - paragraph [ref=f91e1606]: 【深测改写】兄妹在石门前停下了脚步。幽蓝的光芒在裂缝中脉动，妹妹数着自己的心跳。
+        - article [ref=f91e1607]:
+          - heading "第4章 试炼之门" [level=2] [ref=f91e1608]
+          - generic [ref=f91e1609]:
+            - paragraph [ref=f91e1610]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1611]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1612]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1613]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1614]:
+          - heading "第5章 试炼之门" [level=2] [ref=f91e1615]
+          - generic [ref=f91e1616]:
+            - paragraph [ref=f91e1617]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1618]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1619]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1620]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1621]:
+          - heading "第6章 试炼之门" [level=2] [ref=f91e1622]
+          - generic [ref=f91e1623]:
+            - paragraph [ref=f91e1624]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1625]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1626]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1627]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1628]:
+          - heading "第7章 试炼之门" [level=2] [ref=f91e1629]
+          - generic [ref=f91e1630]:
+            - paragraph [ref=f91e1631]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1632]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1633]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1634]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1635]:
+          - heading "第8章 试炼之门" [level=2] [ref=f91e1636]
+          - generic [ref=f91e1637]:
+            - paragraph [ref=f91e1638]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1639]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1640]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1641]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1642]:
+          - heading "第9章 试炼之门" [level=2] [ref=f91e1643]
+          - generic [ref=f91e1644]:
+            - paragraph [ref=f91e1645]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1646]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1647]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1648]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1649]:
+          - heading "第10章 试炼之门" [level=2] [ref=f91e1650]
+          - generic [ref=f91e1651]:
+            - paragraph [ref=f91e1652]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1653]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1654]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1655]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1656]:
+          - heading "第11章 试炼之门" [level=2] [ref=f91e1657]
+          - generic [ref=f91e1658]:
+            - paragraph [ref=f91e1659]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1660]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1661]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1662]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1663]:
+          - heading "第12章 试炼之门" [level=2] [ref=f91e1664]
+          - generic [ref=f91e1665]:
+            - paragraph [ref=f91e1666]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1667]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1668]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1669]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1670]:
+          - heading "第13章 试炼之门" [level=2] [ref=f91e1671]
+          - generic [ref=f91e1672]:
+            - paragraph [ref=f91e1673]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1674]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1675]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1676]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1677]:
+          - heading "第14章 试炼之门" [level=2] [ref=f91e1678]
+          - generic [ref=f91e1679]:
+            - paragraph [ref=f91e1680]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1681]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1682]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1683]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1684]:
+          - heading "第15章 试炼之门" [level=2] [ref=f91e1685]
+          - generic [ref=f91e1686]:
+            - paragraph [ref=f91e1687]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1688]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1689]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1690]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1691]:
+          - heading "第16章 试炼之门" [level=2] [ref=f91e1692]
+          - generic [ref=f91e1693]:
+            - paragraph [ref=f91e1694]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1695]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1696]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1697]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1698]:
+          - heading "第17章 试炼之门" [level=2] [ref=f91e1699]
+          - generic [ref=f91e1700]:
+            - paragraph [ref=f91e1701]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1702]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1703]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1704]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1705]:
+          - heading "第18章 试炼之门" [level=2] [ref=f91e1706]
+          - generic [ref=f91e1707]:
+            - paragraph [ref=f91e1708]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1709]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1710]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1711]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1712]:
+          - heading "第19章 试炼之门" [level=2] [ref=f91e1713]
+          - generic [ref=f91e1714]:
+            - paragraph [ref=f91e1715]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1716]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1717]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1718]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1719]:
+          - heading "第20章 试炼之门" [level=2] [ref=f91e1720]
+          - generic [ref=f91e1721]:
+            - paragraph [ref=f91e1722]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1723]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1724]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1725]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1726]:
+          - heading "第21章 试炼之门" [level=2] [ref=f91e1727]
+          - generic [ref=f91e1728]:
+            - paragraph [ref=f91e1729]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1730]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1731]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1732]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1733]:
+          - heading "第22章 试炼之门" [level=2] [ref=f91e1734]
+          - generic [ref=f91e1735]:
+            - paragraph [ref=f91e1736]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1737]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1738]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1739]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1740]:
+          - heading "第23章 试炼之门" [level=2] [ref=f91e1741]
+          - generic [ref=f91e1742]:
+            - paragraph [ref=f91e1743]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1744]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1745]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1746]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1747]:
+          - heading "第24章 试炼之门" [level=2] [ref=f91e1748]
+          - generic [ref=f91e1749]:
+            - paragraph [ref=f91e1750]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1751]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1752]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1753]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1754]:
+          - heading "第25章 试炼之门" [level=2] [ref=f91e1755]
+          - generic [ref=f91e1756]:
+            - paragraph [ref=f91e1757]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1758]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1759]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1760]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1761]:
+          - heading "第26章 试炼之门" [level=2] [ref=f91e1762]
+          - generic [ref=f91e1763]:
+            - paragraph [ref=f91e1764]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1765]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1766]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1767]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1768]:
+          - heading "第27章 试炼之门" [level=2] [ref=f91e1769]
+          - generic [ref=f91e1770]:
+            - paragraph [ref=f91e1771]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1772]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1773]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1774]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1775]:
+          - heading "第28章 试炼之门" [level=2] [ref=f91e1776]
+          - generic [ref=f91e1777]:
+            - paragraph [ref=f91e1778]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1779]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1780]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1781]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1782]:
+          - heading "第29章 试炼之门" [level=2] [ref=f91e1783]
+          - generic [ref=f91e1784]:
+            - paragraph [ref=f91e1785]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1786]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1787]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1788]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1789]:
+          - heading "第30章 试炼之门" [level=2] [ref=f91e1790]
+          - generic [ref=f91e1791]:
+            - paragraph [ref=f91e1792]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1793]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1794]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1795]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1796]:
+          - heading "第31章 试炼之门" [level=2] [ref=f91e1797]
+          - generic [ref=f91e1798]:
+            - paragraph [ref=f91e1799]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1800]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1801]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1802]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1803]:
+          - heading "第32章 试炼之门" [level=2] [ref=f91e1804]
+          - generic [ref=f91e1805]:
+            - paragraph [ref=f91e1806]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1807]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1808]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1809]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1810]:
+          - heading "第33章 试炼之门" [level=2] [ref=f91e1811]
+          - generic [ref=f91e1812]:
+            - paragraph [ref=f91e1813]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1814]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1815]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1816]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1817]:
+          - heading "第34章 试炼之门" [level=2] [ref=f91e1818]
+          - generic [ref=f91e1819]:
+            - paragraph [ref=f91e1820]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1821]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1822]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1823]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1824]:
+          - heading "第35章 试炼之门" [level=2] [ref=f91e1825]
+          - generic [ref=f91e1826]:
+            - paragraph [ref=f91e1827]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1828]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1829]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1830]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1831]:
+          - heading "第36章 试炼之门" [level=2] [ref=f91e1832]
+          - generic [ref=f91e1833]:
+            - paragraph [ref=f91e1834]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1835]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1836]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1837]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1838]:
+          - heading "第37章 试炼之门" [level=2] [ref=f91e1839]
+          - generic [ref=f91e1840]:
+            - paragraph [ref=f91e1841]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1842]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1843]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1844]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1845]:
+          - heading "第38章 试炼之门" [level=2] [ref=f91e1846]
+          - generic [ref=f91e1847]:
+            - paragraph [ref=f91e1848]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1849]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1850]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1851]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1852]:
+          - heading "第39章 试炼之门" [level=2] [ref=f91e1853]
+          - generic [ref=f91e1854]:
+            - paragraph [ref=f91e1855]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1856]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1857]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1858]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1859]:
+          - heading "第40章 试炼之门" [level=2] [ref=f91e1860]
+          - generic [ref=f91e1861]:
+            - paragraph [ref=f91e1862]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1863]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1864]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1865]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1866]:
+          - heading "第41章 试炼之门" [level=2] [ref=f91e1867]
+          - generic [ref=f91e1868]:
+            - paragraph [ref=f91e1869]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1870]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1871]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1872]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1873]:
+          - heading "第42章 试炼之门" [level=2] [ref=f91e1874]
+          - generic [ref=f91e1875]:
+            - paragraph [ref=f91e1876]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1877]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1878]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1879]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1880]:
+          - heading "第43章 试炼之门" [level=2] [ref=f91e1881]
+          - generic [ref=f91e1882]:
+            - paragraph [ref=f91e1883]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1884]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1885]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1886]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1887]:
+          - heading "第44章 试炼之门" [level=2] [ref=f91e1888]
+          - generic [ref=f91e1889]:
+            - paragraph [ref=f91e1890]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1891]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1892]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1893]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1894]:
+          - heading "第45章 试炼之门" [level=2] [ref=f91e1895]
+          - generic [ref=f91e1896]:
+            - paragraph [ref=f91e1897]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1898]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1899]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1900]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1901]:
+          - heading "第46章 试炼之门" [level=2] [ref=f91e1902]
+          - generic [ref=f91e1903]:
+            - paragraph [ref=f91e1904]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1905]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1906]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1907]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1908]:
+          - heading "第47章 试炼之门" [level=2] [ref=f91e1909]
+          - generic [ref=f91e1910]:
+            - paragraph [ref=f91e1911]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1912]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1913]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1914]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1915]:
+          - heading "第48章 试炼之门" [level=2] [ref=f91e1916]
+          - generic [ref=f91e1917]:
+            - paragraph [ref=f91e1918]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1919]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1920]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1921]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1922]:
+          - heading "第49章 试炼之门" [level=2] [ref=f91e1923]
+          - generic [ref=f91e1924]:
+            - paragraph [ref=f91e1925]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1926]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1927]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1928]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1929]:
+          - heading "第50章 试炼之门" [level=2] [ref=f91e1930]
+          - generic [ref=f91e1931]:
+            - paragraph [ref=f91e1932]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1933]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1934]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1935]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1936]:
+          - heading "第51章 试炼之门" [level=2] [ref=f91e1937]
+          - generic [ref=f91e1938]:
+            - paragraph [ref=f91e1939]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1940]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1941]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1942]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f91e1943]:
+          - heading "第52章 试炼之门" [level=2] [ref=f91e1944]
+          - generic [ref=f91e1945]:
+            - paragraph [ref=f91e1946]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f91e1947]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f91e1948]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f91e1949]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+    - generic [ref=f91e100]:
+      - generic [ref=f91e101]:
+        - button "上一章" [disabled] [ref=f91e102]: ⏮
+        - button "播放" [ref=f91e103]: ▶
+        - button "停止" [ref=f91e104]: ⏹
+        - button "下一章" [disabled] [ref=f91e105]: ⏭
+      - generic [ref=f91e106]:
+        - generic [ref=f91e107]:
+          - generic [ref=f91e108]: 旁白声
+          - combobox "旁白声音" [ref=f91e109]:
+            - option "晓晓（女）" [selected]
+            - option "小艺（女）"
+            - option "小贝（女）"
+            - option "云希（男）"
+            - option "云健（男）"
+            - option "云扬（男）"
+        - generic [ref=f91e110]:
+          - generic [ref=f91e111]: 速度
+          - button "语速 0.8x" [ref=f91e112]: 0.8x
+          - button "语速 1x" [ref=f91e113]: 1x
+          - button "语速 1.2x" [ref=f91e114]: 1.2x
+          - button "语速 1.5x" [ref=f91e115]: 1.5x
+          - button "语速 1.8x" [ref=f91e116]: 1.8x
+          - button "语速 2x" [ref=f91e117]: 2x
+    - generic [ref=f91e19]:
+      - textbox "剧情指令" [ref=f91e1179]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f91e1180]
+      - button "⚡ 连写" [ref=f91e1181]
+      - button "说明：续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。连写：点一次自动连写到目标章节数，中途点停止即停。" [ref=f91e1183]:
+        - generic [aria-hidden] [ref=f91e1184]: "?"
+      - generic [ref=f91e1185]:
+        - button "◀" [ref=f91e1186]
+        - generic [ref=f91e1187]: 3/3
+        - button "▶" [ref=f91e1188]

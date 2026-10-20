@@ -1,0 +1,41 @@
+- main [ref=f3e4]:
+  - generic [ref=f3e5]:
+    - link "返回书架" [ref=f3e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f3e7]
+  - navigation "资产分类" [ref=f3e8]:
+    - button "角色卡" [ref=f3e9]
+    - button "世界书" [active] [ref=f3e10]
+    - button "预设" [ref=f3e11]
+    - button "正则脚本" [ref=f3e12]
+    - button "资源中心" [ref=f3e13]
+  - region "世界书资产面板" [ref=f3e73]:
+    - generic [ref=f3e74]:
+      - button "导入世界书" [ref=f3e75]
+      - generic [ref=f3e76]: 支持 .json 文件
+    - list [ref=f3e77]:
+      - listitem [ref=f3e78]:
+        - generic [ref=f3e79]:
+          - generic [ref=f3e80]:
+            - paragraph [ref=f3e81]: 大纲世界书
+            - paragraph [ref=f3e82]: 共 3 条 · 世界背景
+          - button "编辑" [ref=f3e83]
+          - button "导出 JSON" [ref=f3e84]
+          - button "删除" [ref=f3e85]
+      - listitem [ref=f3e86]:
+        - generic [ref=f3e87]:
+          - generic [ref=f3e88]:
+            - paragraph [ref=f3e89]: 艾尔多利亚森林（中文示例）
+            - paragraph [ref=f3e90]: 共 4 条 · 艾尔多利亚（世界背景）
+          - button "编辑" [ref=f3e91]
+          - button "导出 JSON" [ref=f3e92]
+          - button "删除" [ref=f3e93]
+      - listitem [ref=f3e94]:
+        - generic [ref=f3e95]:
+          - generic [ref=f3e96]:
+            - paragraph [ref=f3e97]: Sudachi-Next-DLC
+            - paragraph [ref=f3e98]: 共 3 条 · [initvar]初始化
+          - button "编辑" [ref=f3e99]
+          - button "导出 JSON" [ref=f3e100]
+          - button "删除" [ref=f3e101]

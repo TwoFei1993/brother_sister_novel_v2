@@ -1,0 +1,43 @@
+- main [ref=f99e12]:
+  - generic [ref=f99e13]:
+    - link "返回书架" [ref=f99e14] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f99e15]
+  - navigation "资产分类" [ref=f99e16]:
+    - button "角色卡" [ref=f99e17]
+    - button "世界书" [active] [ref=f99e18]
+    - button "预设" [ref=f99e19]
+    - button "正则脚本" [ref=f99e20]
+    - button "资源中心" [ref=f99e21]
+  - region "世界书资产面板" [ref=f99e22]:
+    - generic [ref=f99e23]:
+      - button "导入世界书" [ref=f99e24]
+      - generic [ref=f99e25]: 支持 .json 文件
+      - generic [ref=f99e26]:
+        - text: 排序
+        - combobox "排序" [ref=f99e27]:
+          - option "最近添加" [selected]
+          - option "最早添加"
+          - option "按名称"
+    - list [ref=f99e28]:
+      - listitem [ref=f99e29]:
+        - generic [ref=f99e30]:
+          - generic [ref=f99e31]:
+            - paragraph [ref=f99e32]: 大纲世界书
+            - paragraph [ref=f99e33]:
+              - text: 共 2 条 · 世界背景
+              - generic [ref=f99e34]: · 添加于 2026/10/20
+          - button "编辑" [ref=f99e35]
+          - button "导出 JSON" [ref=f99e36]
+          - button "删除" [ref=f99e37]
+      - listitem [ref=f99e38]:
+        - generic [ref=f99e39]:
+          - generic [ref=f99e40]:
+            - paragraph [ref=f99e41]: Eldoria
+            - paragraph [ref=f99e42]:
+              - text: 共 4 条 · 艾尔多利亚（世界背景）
+              - generic [ref=f99e43]: · 添加于 2026/10/20
+          - button "编辑" [ref=f99e44]
+          - button "导出 JSON" [ref=f99e45]
+          - button "删除" [ref=f99e46]

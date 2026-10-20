@@ -1,0 +1,73 @@
+- generic [ref=f67e56]:
+  - banner [ref=f67e57]:
+    - button "返回书架" [ref=f67e58]: ←
+    - heading "断流手测之作共 2 章" [level=1] [ref=f67e143]:
+      - text: 断流手测之作
+      - generic [ref=f67e76]: 共 2 章
+    - tablist "视图切换" [ref=f67e60]:
+      - tab "💬" [ref=f67e61]
+      - tab "📖" [selected] [ref=f67e62]
+      - tab "🛠️" [ref=f67e63]
+    - button "章节目录" [ref=f67e64]: 📖
+    - button "作品设置" [ref=f67e65]: ⚙
+  - main [ref=f67e66]:
+    - generic [ref=f67e77]:
+      - generic [ref=f67e78]:
+        - button "白天" [ref=f67e79]
+        - button "夜间" [ref=f67e80]
+        - button "护眼" [ref=f67e81]
+        - button "深空" [ref=f67e82]
+        - button "小" [ref=f67e83]
+        - button "中" [ref=f67e84]
+        - button "大" [ref=f67e85]
+        - button "超大" [ref=f67e86]
+        - button "紧凑" [ref=f67e87]
+        - button "标准" [ref=f67e88]
+        - button "宽松" [ref=f67e89]
+        - button "导出 TXT" [ref=f67e90]: ⬇ TXT
+      - generic [ref=f67e92]:
+        - article [ref=f67e93]:
+          - heading "第1章 试炼之门" [level=2] [ref=f67e94]
+          - generic [ref=f67e95]:
+            - paragraph [ref=f67e96]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f67e97]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f67e98]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f67e99]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+        - article [ref=f67e144]:
+          - heading "第1章 试炼之门" [level=2] [ref=f67e145]
+          - generic [ref=f67e146]:
+            - paragraph [ref=f67e147]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗# 第1章 试炼之门
+            - paragraph [ref=f67e148]: 晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒，仿佛沉睡千年的呼吸。
+            - paragraph [ref=f67e149]:
+              - text: 妹妹攥住他的衣角，声音压得很低："
+              - strong [ref=f67e150]: 哥，门后有东西在看着我们。
+              - text: "\""
+            - paragraph [ref=f67e151]: 他握紧手中的断剑，向前迈出一步。风停了，世界安静得只剩下两个人的心跳。
+    - generic [ref=f67e100]:
+      - generic [ref=f67e101]:
+        - button "上一章" [disabled] [ref=f67e102]: ⏮
+        - button "播放" [ref=f67e103]: ▶
+        - button "停止" [ref=f67e104]: ⏹
+        - button "下一章" [disabled] [ref=f67e105]: ⏭
+      - generic [ref=f67e106]:
+        - combobox "旁白声音" [ref=f67e108]:
+          - option "晓晓（女）" [selected]
+          - option "小艺（女）"
+          - option "小贝（女）"
+          - option "云希（男）"
+          - option "云健（男）"
+          - option "云扬（男）"
+        - generic [ref=f67e109]:
+          - button "语速 0.8x" [ref=f67e110]: 0.8x
+          - button "语速 1x" [ref=f67e111]: 1x
+          - button "语速 1.2x" [ref=f67e112]: 1.2x
+          - button "语速 1.5x" [ref=f67e113]: 1.5x
+          - button "语速 1.8x" [ref=f67e114]: 1.8x
+          - button "语速 2x" [ref=f67e115]: 2x
+    - generic [ref=f67e71]:
+      - textbox "剧情指令" [ref=f67e152]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f67e153]
+      - button "🎲 换一支" [ref=f67e154]

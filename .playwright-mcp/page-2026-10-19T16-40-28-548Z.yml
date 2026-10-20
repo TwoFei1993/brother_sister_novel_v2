@@ -1,0 +1,28 @@
+- main [ref=f88e4]:
+  - generic [ref=f88e5]:
+    - link "返回书架" [ref=f88e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f88e7]
+  - status [ref=f88e1382]: 已导入「Eldoria」，已为你切换到对应标签页
+  - navigation "资产分类" [ref=f88e8]:
+    - button "角色卡" [ref=f88e9]
+    - button "世界书" [ref=f88e10]
+    - button "预设" [ref=f88e11]
+    - button "正则脚本" [ref=f88e12]
+    - button "资源中心" [ref=f88e13]
+  - region "世界书资产面板" [ref=f88e1383]:
+    - generic [ref=f88e1384]:
+      - button "导入世界书" [ref=f88e1385]
+      - generic [ref=f88e1386]: 支持 .json 文件
+    - list [ref=f88e1387]:
+      - listitem [ref=f88e1388]:
+        - generic [ref=f88e1389]:
+          - generic [ref=f88e1390]:
+            - paragraph [ref=f88e1391]: Eldoria
+            - paragraph [ref=f88e1392]:
+              - text: 共 4 条 · 艾尔多利亚（世界背景）
+              - generic [ref=f88e1393]: · 添加于 2026/10/20
+          - button "编辑" [ref=f88e1394]
+          - button "导出 JSON" [ref=f88e1395]
+          - button "删除" [ref=f88e1396]

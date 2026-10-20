@@ -16,25 +16,31 @@ export function TopNav({ onLoadProject, isGenerating, onStop, onGoToBookshelf, s
   const [apiOpen, setApiOpen] = useState(false);
 
   return (
-    <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-50 pt-safe">
-      <div className="flex items-center gap-2">
-        <BookOpen className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-heading font-bold theme-glow-text">异界兄妹</h1>
-      </div>
-      <div className="flex items-center gap-1">
-        {isGenerating && (
-          <Button variant="destructive" size="sm" onClick={onStop} className="mr-2 gap-1">
-            <Square className="h-3 w-3" /> 停止
+    // 外层吃顶部安全区（异形屏状态栏不压内容），内层保持 48px 行高
+    <header
+      className="flex items-center justify-between px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-50"
+      style={{ paddingTop: 'var(--safe-top)' }}
+    >
+      <div className="h-12 flex items-center justify-between flex-1 min-w-0 gap-2">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-5 w-5 text-primary" />
+          <h1 className="text-lg font-heading font-bold theme-glow-text">异界兄妹</h1>
+        </div>
+        <div className="flex items-center gap-1">
+          {isGenerating && (
+            <Button variant="destructive" size="sm" onClick={onStop} className="mr-2 gap-1">
+              <Square className="h-3 w-3" /> 停止
+            </Button>
+          )}
+          {showBackToBookshelf && (
+            <Button variant="ghost" size="sm" onClick={onGoToBookshelf} className="gap-1 text-xs">
+              <Library className="h-4 w-4" /> 书架
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" onClick={() => setApiOpen(true)} title="API 设置" aria-label="API 设置">
+            <Settings className="h-4 w-4" />
           </Button>
-        )}
-        {showBackToBookshelf && (
-          <Button variant="ghost" size="sm" onClick={onGoToBookshelf} className="gap-1 text-xs">
-            <Library className="h-4 w-4" /> 书架
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" onClick={() => setApiOpen(true)} title="API 设置" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Settings className="h-4 w-4" />
-        </Button>
+        </div>
       </div>
       <ApiSettingsDialog open={apiOpen} onOpenChange={setApiOpen} />
     </header>

@@ -1,0 +1,26 @@
+- main [ref=f1e4]:
+  - generic [ref=f1e5]:
+    - link "返回书架" [ref=f1e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "设置" [level=1] [ref=f1e7]
+  - navigation "设置分区" [ref=f1e8]:
+    - button "LLM 接入" [ref=f1e9]
+    - button "TTS" [ref=f1e10]
+    - button "旧站迁移" [ref=f1e11]
+    - button "界面偏好" [ref=f1e12]
+  - region "界面偏好" [ref=f1e119]:
+    - generic [ref=f1e120]:
+      - heading "界面主题" [level=3] [ref=f1e121]
+      - paragraph [ref=f1e122]: 默认跟随作品题材换肤（进入作品时按题材应用）。选定固定主题后全局生效，不再随作品切换。
+      - button "跟随作品题材（默认）" [ref=f1e123]
+      - generic [ref=f1e124]:
+        - button "穿越重生" [ref=f1e125]
+        - button "星际科幻 使用中" [active] [pressed] [ref=f1e156]:
+          - generic [ref=f1e131]: 星际科幻
+          - generic [ref=f1e157]: 使用中
+        - button "末世求生" [ref=f1e135]
+        - button "无限流" [ref=f1e140]
+        - button "玄幻修仙" [ref=f1e145]
+        - button "混合暗色" [ref=f1e150]
+    - paragraph [ref=f1e155]: 阅读字号/行高在写作台的阅读视图内调整；界面主题即时生效并保存在本设备（刷新后保持）。

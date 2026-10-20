@@ -212,12 +212,27 @@
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
   }
-  /* Safe area padding for iPhone notch/home indicator */
+  /* Safe area padding for iPhone notch/home indicator（根变量统一供给，组件内 calc 组合偏移） */
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: var(--safe-bottom);
   }
   .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--safe-top);
+  }
+}
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 固定面板顶缘 = 顶栏(48px) + 顶部安全区；桌面 lg 断点回到文档流（配合 lg:relative lg:inset-auto） */
+.panel-top-safe {
+  top: calc(3rem + var(--safe-top));
+}
+@media (min-width: 1024px) {
+  .panel-top-safe {
+    top: auto;
   }
 }
 

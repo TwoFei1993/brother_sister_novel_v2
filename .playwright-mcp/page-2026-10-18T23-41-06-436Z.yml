@@ -1,0 +1,42 @@
+- main [ref=f59e4]:
+  - generic [ref=f59e5]:
+    - link "返回书架" [ref=f59e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "大纲向导" [level=1] [ref=f59e7]
+    - generic [ref=f59e8]: 粘贴大纲，一键生成角色卡与世界书草稿
+  - status [ref=f59e12]: 识别出 2 位人物及设定要素
+  - generic [ref=f59e9]:
+    - textbox "大纲文本" [ref=f59e10]:
+      - /placeholder: "粘贴网文大纲，例如：\n一、故事背景：灵气复苏的大周王朝…\n哥哥（林昭）：天赋觉醒古龙血脉，性格沉稳…\n三、势力格局：天玄宗、丹王谷三足鼎立。\n四、核心矛盾：灭门惨案背后的夺舍阴谋。"
+      - text: 一、故事背景：灵气复苏的大周王朝，凡人可修星力。 二、主要人物： 哥哥（林昭）：天赋觉醒古龙血脉，性格沉稳坚毅。 妹妹（林婉儿）：天生灵瞳，能窥见万物气机，古灵精怪。 三、势力格局：天玄宗、丹王谷、万剑山庄三足鼎立。 四、核心矛盾：十年前灭门惨案背后隐藏着夺舍重生的阴谋。
+    - button "智能抽取" [active] [ref=f59e11]
+  - region "抽取预览" [ref=f59e13]:
+    - generic [ref=f59e14]:
+      - paragraph [ref=f59e15]: 人物（2）
+      - list [ref=f59e16]:
+        - listitem [ref=f59e17]:
+          - paragraph [ref=f59e18]:
+            - text: 林昭
+            - generic [ref=f59e19]: （哥哥）
+          - paragraph [ref=f59e20]: 天赋觉醒古龙血脉 · 性格沉稳坚毅
+        - listitem [ref=f59e21]:
+          - paragraph [ref=f59e22]:
+            - text: 林婉儿
+            - generic [ref=f59e23]: （妹妹）
+          - paragraph [ref=f59e24]: 天生灵瞳 · 能窥见万物气机 · 古灵精怪
+    - generic [ref=f59e25]:
+      - paragraph [ref=f59e26]: 背景
+      - paragraph [ref=f59e27]: 灵气复苏的大周王朝，凡人可修星力。
+    - generic [ref=f59e28]:
+      - paragraph [ref=f59e29]: 势力
+      - paragraph [ref=f59e30]: 天玄宗、丹王谷、万剑山庄三足鼎立。
+    - generic [ref=f59e31]:
+      - paragraph [ref=f59e32]: 核心矛盾
+      - paragraph [ref=f59e33]: 十年前灭门惨案背后隐藏着夺舍重生的阴谋。
+    - generic [ref=f59e34]:
+      - paragraph [ref=f59e35]: 书名建议
+      - paragraph [ref=f59e36]: 异界兄妹：天赋觉醒与天生灵瞳的冒险 / 天赋觉醒天生灵瞳传 / 异界兄妹录·卷2
+    - generic [ref=f59e37]:
+      - button "生成角色卡草稿" [ref=f59e38]
+      - button "生成世界书草稿" [ref=f59e39]

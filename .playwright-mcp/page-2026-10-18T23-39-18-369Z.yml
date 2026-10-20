@@ -1,0 +1,30 @@
+- main [ref=f56e4]:
+  - generic [ref=f56e5]:
+    - link "返回书架" [ref=f56e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "设置" [level=1] [ref=f56e7]
+  - navigation "设置分区" [ref=f56e8]:
+    - button "LLM 接入" [ref=f56e9]
+    - button "TTS" [ref=f56e10]
+    - button "旧站迁移" [ref=f56e11]
+    - button "界面偏好" [ref=f56e12]
+  - region "旧站数据迁移" [ref=f56e13]:
+    - heading "旧站数据迁移" [level=3] [ref=f56e14]
+    - paragraph [ref=f56e15]: 把旧版网页（localStorage）里的作品迁到当前站：章节正文、多版本、世界观与小说设定一并保留。
+    - generic [ref=f56e16]:
+      - paragraph [ref=f56e17]: 第一步 · 在旧站导出数据
+      - paragraph [ref=f56e18]: 打开旧站页面，按 F12 打开浏览器控制台，粘贴执行下面的命令并回车，把输出的 JSON 全选复制，存为 .json 文件：
+      - code [ref=f56e19]: "JSON.stringify({projects: JSON.parse(localStorage.getItem('novel_history'))})"
+    - paragraph [ref=f56e20]: 第二步 · 上传导出的 JSON 文件
+    - button "选择旧站导出的 JSON 文件" [active] [ref=f56e21]
+    - generic [ref=f56e22]:
+      - paragraph [ref=f56e23]: 检测到 2 部作品、共 3 章：
+      - list [ref=f56e24]:
+        - listitem [ref=f56e25]:
+          - generic [ref=f56e26]: M4迁移小说甲
+          - generic [ref=f56e27]: 2 章
+        - listitem [ref=f56e28]:
+          - generic [ref=f56e29]: M4迁移小说乙
+          - generic [ref=f56e30]: 1 章
+      - button "确认迁移" [ref=f56e31]

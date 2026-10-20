@@ -1,0 +1,19 @@
+- generic [ref=f48e79]:
+  - banner [ref=f48e80]:
+    - button "返回书架" [ref=f48e81]: ←
+    - heading "听书验收" [level=1] [ref=f48e82]
+    - tablist "视图切换" [ref=f48e83]:
+      - tab "💬" [ref=f48e84]
+      - tab "📖" [selected] [ref=f48e85]
+      - tab "🛠️" [ref=f48e86]
+    - button "章节目录" [ref=f48e87]: 📖
+    - button "作品设置" [ref=f48e88]: ⚙
+  - main [ref=f48e89]:
+    - generic [ref=f48e90]:
+      - paragraph [ref=f48e91]: 《听书验收》
+      - paragraph [ref=f48e92]: 在下方输入剧情指令（可留空），点击「▶ 续写」开始创作第一章
+    - generic [ref=f48e94]:
+      - textbox "剧情指令" [ref=f48e95]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f48e96]
+      - button "🎲 换一支" [ref=f48e97]

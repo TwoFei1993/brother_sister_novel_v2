@@ -1,0 +1,126 @@
+- generic [ref=f89e88]:
+  - banner [ref=f89e89]:
+    - button "返回书架" [ref=f89e90]: ←
+    - heading "深测-试炼之门" [level=1] [ref=f89e91]
+    - tablist "视图切换" [ref=f89e92]:
+      - tab "💬" [ref=f89e93]
+      - tab "📖" [selected] [ref=f89e94]
+      - tab "🛠️" [ref=f89e95]
+    - button "章节目录" [ref=f89e96]: 📖
+    - button "作品设置" [active] [ref=f89e97]: ⚙
+  - generic [ref=f89e114]:
+    - generic [ref=f89e115]: 该通道尚未配置密钥，请先到设置页填写
+    - button "知道了" [ref=f89e116]
+  - main [ref=f89e98]:
+    - generic [ref=f89e117]:
+      - paragraph [ref=f89e118]: 《深测-试炼之门》
+      - paragraph [ref=f89e119]: 在下方输入剧情指令（可留空），点击「▶ 续写」开始创作第一章
+    - generic [ref=f89e103]:
+      - textbox "剧情指令" [ref=f89e120]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f89e121]
+      - button "⚡ 连写" [ref=f89e122]
+      - button "说明：续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。连写：点一次自动连写到目标章节数，中途点停止即停。" [ref=f89e124]:
+        - generic [aria-hidden] [ref=f89e125]: "?"
+      - button "🎲 换一支" [ref=f89e126]
+      - button "说明：换一支：同一章重新生成一个候选版本；已有多支候选时用 ◀▶ 按钮来回切换对比。" [ref=f89e128]:
+        - generic [aria-hidden] [ref=f89e129]: "?"
+  - complementary "作品设置" [ref=f89e131]:
+    - generic [ref=f89e132]:
+      - heading "作品设置" [level=2] [ref=f89e133]
+      - button "✕" [ref=f89e134]
+    - generic [ref=f89e135]:
+      - generic [ref=f89e136]:
+        - generic [ref=f89e137]: 作者注释
+        - paragraph [ref=f89e138]: 按深度注入到上下文（倒数第 N 条消息处），适合放置剧情走向与文风要求
+        - textbox "作者注释" [ref=f89e139]:
+          - /placeholder: 例：本章起节奏加快，多写妹妹的心理活动…
+        - generic [ref=f89e140]:
+          - generic [ref=f89e141]: 注入深度
+          - spinbutton "注入深度" [ref=f89e142]: "4"
+          - generic [ref=f89e143]: 条（酒馆默认 4）
+      - generic [ref=f89e145]:
+        - generic [ref=f89e146]: 文风复刻
+        - paragraph [ref=f89e147]: 粘贴一段参考文字（建议 200 字以上），只学习文风不学习内容
+        - textbox "文风复刻" [ref=f89e148]:
+          - /placeholder: 例：粘贴一段你喜欢的小说开头…
+        - generic [ref=f89e149]:
+          - generic [ref=f89e150]: 已粘贴 0 字
+          - button "分析文风" [disabled] [ref=f89e151]
+        - generic [ref=f89e152]:
+          - generic [ref=f89e153]: 当前文风画像
+          - paragraph [ref=f89e154]: 未设置，使用默认文风
+          - textbox "当前文风画像" [ref=f89e155]:
+            - /placeholder: 例：短句为主，动作为主，少用形容词…
+          - generic [ref=f89e156]:
+            - button "保存画像" [ref=f89e157]
+            - button "清除文风" [disabled] [ref=f89e158]
+      - generic [ref=f89e159]:
+        - paragraph [ref=f89e160]: 生成目标
+        - paragraph [ref=f89e161]: 字数注入每章提示词；连写按钮按目标章节数自动续写（改动下一章起生效）
+        - generic [ref=f89e162]:
+          - generic [ref=f89e163]: 每章字数
+          - spinbutton "每章字数" [ref=f89e164]: "3000"
+          - generic [ref=f89e165]: 字（默认 3000）
+        - generic [ref=f89e166]:
+          - generic [ref=f89e167]: 目标章节数
+          - spinbutton "目标章节数" [ref=f89e168]: "50"
+          - generic [ref=f89e169]: 章（⚡连写到本章数即停）
+      - generic [ref=f89e170]:
+        - generic [ref=f89e171]:
+          - paragraph [ref=f89e172]: 允许角色卡覆盖预设
+          - paragraph [ref=f89e173]: 开启后卡片 system_prompt / post_history_instructions 替换预设对应项（§4.4）
+        - switch [checked] [ref=f89e174]
+      - generic [ref=f89e176]:
+        - paragraph [ref=f89e177]:
+          - text: 绑定资产
+          - generic [ref=f89e178]: （改动即保存）
+        - generic [ref=f89e179]:
+          - generic [ref=f89e180]:
+            - generic [ref=f89e181]:
+              - generic [ref=f89e182]: 角色卡
+              - combobox "添加角色卡" [ref=f89e183]:
+                - option "添加…" [selected]
+            - generic [ref=f89e185]:
+              - text: Seraphina
+              - button "移除 Seraphina" [ref=f89e186]: ×
+          - generic [ref=f89e187]:
+            - generic [ref=f89e188]:
+              - generic [ref=f89e189]: 世界书
+              - combobox "添加世界书" [ref=f89e190]:
+                - option "添加…" [selected]
+            - generic [ref=f89e192]:
+              - text: Eldoria
+              - button "移除 Eldoria" [ref=f89e193]: ×
+          - generic [ref=f89e194]:
+            - generic [ref=f89e195]: 预设
+            - combobox "选择预设" [ref=f89e196]:
+              - option "（不绑定，生成用内置空预设）"
+              - option "Default" [selected]
+      - region "TTS 分声绑定" [ref=f89e198]:
+        - generic [ref=f89e199]:
+          - heading "TTS 分声绑定" [level=3] [ref=f89e200]
+          - paragraph [ref=f89e201]: 为角色分配不同声音；正文中的对白段落按说话人自动选声，未设置的角色与旁白使用默认声。
+        - list [ref=f89e202]:
+          - listitem [ref=f89e203]:
+            - generic [ref=f89e204]: Seraphina
+            - combobox "Seraphina 的声音" [ref=f89e205]:
+              - option "未设置（用旁白声）" [selected]
+              - option "晓晓（女）"
+              - option "小艺（女）"
+              - option "小贝（女）"
+              - option "云希（男）"
+              - option "云健（男）"
+              - option "云扬（男）"
+        - generic [ref=f89e206]:
+          - generic [ref=f89e207]: 旁白默认声
+          - combobox "旁白默认声音" [ref=f89e208]:
+            - option "跟随播放条（晓晓）" [selected]
+            - option "晓晓（女）"
+            - option "小艺（女）"
+            - option "小贝（女）"
+            - option "云希（男）"
+            - option "云健（男）"
+            - option "云扬（男）"
+        - button "保存绑定" [ref=f89e210]
+    - button "保存设置" [ref=f89e211]

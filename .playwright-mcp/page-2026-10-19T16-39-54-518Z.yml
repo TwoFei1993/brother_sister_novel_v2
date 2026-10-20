@@ -1,0 +1,29 @@
+- main [ref=f88e4]:
+  - generic [ref=f88e5]:
+    - link "返回书架" [ref=f88e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "资产库" [level=1] [ref=f88e7]
+  - status [ref=f88e690]: 已导入「Seraphina」，已为你切换到对应标签页
+  - navigation "资产分类" [ref=f88e8]:
+    - button "角色卡" [ref=f88e9]
+    - button "世界书" [ref=f88e10]
+    - button "预设" [ref=f88e11]
+    - button "正则脚本" [ref=f88e12]
+    - button "资源中心" [ref=f88e13]
+  - region "角色卡资产面板" [ref=f88e691]:
+    - generic [ref=f88e692]:
+      - button "导入角色卡" [ref=f88e693]
+      - generic [ref=f88e694]: 支持 .png,.json 文件（PNG 卡自动提取内嵌 JSON）
+    - list [ref=f88e695]:
+      - listitem [ref=f88e696]:
+        - generic [ref=f88e697]:
+          - generic [ref=f88e698]:
+            - paragraph [ref=f88e699]: Seraphina
+            - paragraph [ref=f88e700]:
+              - text: "[Seraphina's Personality= \"caring\", \"protective\", \"compassio…"
+              - generic [ref=f88e701]: · 添加于 2026/10/20
+          - button "编辑" [ref=f88e702]
+          - button "导出 PNG" [ref=f88e703]
+          - button "导出 JSON" [ref=f88e704]
+          - button "删除" [ref=f88e705]

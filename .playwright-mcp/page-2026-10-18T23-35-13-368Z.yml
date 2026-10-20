@@ -1,0 +1,126 @@
+- generic [ref=f51e4]:
+  - banner [ref=f51e5]:
+    - button "返回书架" [ref=f51e6]: ←
+    - heading "分声验收共 1 章" [level=1] [ref=f51e7]:
+      - text: 分声验收
+      - generic [ref=f51e8]: 共 1 章
+    - tablist "视图切换" [ref=f51e9]:
+      - tab "💬" [ref=f51e10]
+      - tab "📖" [selected] [ref=f51e11]
+      - tab "🛠️" [ref=f51e12]
+    - button "章节目录" [ref=f51e13]: 📖
+    - button "作品设置" [ref=f51e14]: ⚙
+  - main [ref=f51e15]:
+    - generic [ref=f51e16]:
+      - generic [ref=f51e17]:
+        - button "白天" [ref=f51e18]
+        - button "夜间" [ref=f51e19]
+        - button "护眼" [ref=f51e20]
+        - button "深空" [ref=f51e21]
+        - button "小" [ref=f51e22]
+        - button "中" [ref=f51e23]
+        - button "大" [ref=f51e24]
+        - button "超大" [ref=f51e25]
+        - button "紧凑" [ref=f51e26]
+        - button "标准" [ref=f51e27]
+        - button "宽松" [ref=f51e28]
+        - button "导出 TXT" [ref=f51e29]: ⬇ TXT
+      - article [ref=f51e32]:
+        - heading "脉冲信号" [level=2] [ref=f51e33]
+        - paragraph [ref=f51e35]: 深夜的观测站一片寂静，只有仪器的微光闪烁。 哥哥：信号越来越强了，小婉，你听到了吗？ 「听到了，像心跳一样，一声一声敲在胸口。」 妹妹：这不是普通的脉冲，它在重复一句问候。 远处传来低沉的轰鸣，合金舱门缓缓开启。
+    - generic [ref=f51e36]:
+      - generic [ref=f51e37]:
+        - button "上一章" [disabled] [ref=f51e38]: ⏮
+        - button "播放" [ref=f51e39]: ▶
+        - button "停止" [ref=f51e40]: ⏹
+        - button "下一章" [disabled] [ref=f51e41]: ⏭
+      - generic [ref=f51e42]:
+        - combobox "旁白声音" [ref=f51e44]:
+          - option "晓晓（女）" [selected]
+          - option "小艺（女）"
+          - option "小贝（女）"
+          - option "云希（男）"
+          - option "云健（男）"
+          - option "云扬（男）"
+        - generic [ref=f51e45]:
+          - button "语速 0.8x" [ref=f51e46]: 0.8x
+          - button "语速 1x" [ref=f51e47]: 1x
+          - button "语速 1.2x" [ref=f51e48]: 1.2x
+          - button "语速 1.5x" [ref=f51e49]: 1.5x
+          - button "语速 1.8x" [ref=f51e50]: 1.8x
+          - button "语速 2x" [ref=f51e51]: 2x
+    - generic [ref=f51e53]:
+      - textbox "剧情指令" [ref=f51e54]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f51e55]
+      - button "🎲 换一支" [ref=f51e56]
+  - complementary "作品设置" [ref=f51e58]:
+    - generic [ref=f51e59]:
+      - heading "作品设置" [level=2] [ref=f51e60]
+      - button "✕" [ref=f51e61]
+    - generic [ref=f51e62]:
+      - generic [ref=f51e63]:
+        - generic [ref=f51e64]: 作者注释
+        - paragraph [ref=f51e65]: 按深度注入到上下文（倒数第 N 条消息处），适合放置剧情走向与文风要求
+        - textbox "作者注释" [ref=f51e66]:
+          - /placeholder: 例：本章起节奏加快，多写妹妹的心理活动…
+        - generic [ref=f51e67]:
+          - generic [ref=f51e68]: 注入深度
+          - spinbutton "注入深度" [ref=f51e69]: "4"
+          - generic [ref=f51e70]: 条（酒馆默认 4）
+      - generic [ref=f51e71]:
+        - generic [ref=f51e72]:
+          - paragraph [ref=f51e73]: 允许角色卡覆盖预设
+          - paragraph [ref=f51e74]: 开启后卡片 system_prompt / post_history_instructions 替换预设对应项（§4.4）
+        - switch [checked] [ref=f51e75]
+      - generic [ref=f51e77]:
+        - paragraph [ref=f51e78]: 绑定资产
+        - generic [ref=f51e79]:
+          - generic [ref=f51e80]:
+            - generic [ref=f51e81]: 角色卡
+            - generic [ref=f51e82]: 哥哥、妹妹
+          - generic [ref=f51e83]:
+            - generic [ref=f51e84]: 世界书
+            - generic [ref=f51e85]: （无）
+          - generic [ref=f51e86]:
+            - generic [ref=f51e87]: 预设
+            - generic [ref=f51e88]: （未绑定，生成用内置空预设）
+      - region "TTS 分声绑定" [ref=f51e90]:
+        - generic [ref=f51e91]:
+          - heading "TTS 分声绑定" [level=3] [ref=f51e92]
+          - paragraph [ref=f51e93]: 为角色分配不同声音；正文中的对白段落按说话人自动选声，未设置的角色与旁白使用默认声。
+        - list [ref=f51e94]:
+          - listitem [ref=f51e95]:
+            - generic [ref=f51e96]: 哥哥
+            - combobox "哥哥 的声音" [ref=f51e97]:
+              - option "未设置（用旁白声）"
+              - option "晓晓（女）"
+              - option "小艺（女）"
+              - option "小贝（女）"
+              - option "云希（男）"
+              - option "云健（男）" [selected]
+              - option "云扬（男）"
+          - listitem [ref=f51e98]:
+            - generic [ref=f51e99]: 妹妹
+            - combobox "妹妹 的声音" [ref=f51e100]:
+              - option "未设置（用旁白声）"
+              - option "晓晓（女）" [selected]
+              - option "小艺（女）"
+              - option "小贝（女）"
+              - option "云希（男）"
+              - option "云健（男）"
+              - option "云扬（男）"
+        - generic [ref=f51e101]:
+          - generic [ref=f51e102]: 旁白默认声
+          - combobox "旁白默认声音" [ref=f51e103]:
+            - option "跟随播放条（晓晓）" [selected]
+            - option "晓晓（女）"
+            - option "小艺（女）"
+            - option "小贝（女）"
+            - option "云希（男）"
+            - option "云健（男）"
+            - option "云扬（男）"
+        - generic [ref=f51e104]:
+          - button "保存绑定" [ref=f51e105]
+          - status [ref=f51e107]: 已保存
+    - button "保存设置" [ref=f51e106]

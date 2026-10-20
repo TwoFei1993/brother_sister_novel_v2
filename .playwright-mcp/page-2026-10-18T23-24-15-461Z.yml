@@ -1,0 +1,22 @@
+- main [ref=f47e4]:
+  - generic [ref=f47e5]:
+    - link "返回书架" [ref=f47e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "设置" [level=1] [ref=f47e7]
+  - navigation "设置分区" [ref=f47e8]:
+    - button "LLM 接入" [ref=f47e9]
+    - button "TTS" [active] [ref=f47e10]
+    - button "旧站迁移" [ref=f47e11]
+    - button "界面偏好" [ref=f47e12]
+  - region "TTS 设置" [ref=f47e84]:
+    - generic [ref=f47e85]:
+      - heading "TTS 听书服务" [level=3] [ref=f47e86]
+      - paragraph [ref=f47e87]: 对接 easyvoice 语音合成服务的地址（部署时由服务端 TTS_BASE_URL 初始化，可在此修改）。
+      - generic [ref=f47e88]: 服务地址
+      - textbox "服务地址" [ref=f47e89]:
+        - /placeholder: https://your-easyvoice.example.com
+        - text: http://localhost:9911
+      - generic [ref=f47e90]:
+        - button "保存" [ref=f47e91]
+        - button "测试连通" [ref=f47e92]

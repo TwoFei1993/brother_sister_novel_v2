@@ -1,0 +1,120 @@
+- main [ref=f90e4]:
+  - generic [ref=f90e5]:
+    - link "返回书架" [ref=f90e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "设置" [level=1] [ref=f90e7]
+  - navigation "设置分区" [ref=f90e8]:
+    - button "LLM 接入" [ref=f90e9]
+    - button "TTS" [ref=f90e10]
+    - button "旧站迁移" [ref=f90e11]
+    - button "界面偏好" [ref=f90e12]
+  - generic [ref=f90e13]:
+    - region "LLM 接入" [ref=f90e14]:
+      - paragraph [ref=f90e15]: 密钥仅保存在服务端（data/secrets.json），浏览器不存储明文。配置后可在下方测试连通性。
+      - generic [ref=f90e16]:
+        - generic [ref=f90e17]:
+          - heading "OpenAI 兼容" [level=3] [ref=f90e18]
+          - generic [ref=f90e19]: 已配置
+        - paragraph [ref=f90e20]: OpenAI 官方或任何兼容接口（中转站可自定义 Base URL）
+        - generic [ref=f90e21]:
+          - text: API Key
+          - generic "服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" [ref=f90e22]:
+            - generic [aria-hidden] [ref=f90e23]: "?"
+        - textbox "API Key 服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" [ref=f90e25]:
+          - /placeholder: 已配置（输入新值可更新）
+        - generic [ref=f90e26]:
+          - text: 接口地址（选填，留空用官方默认）
+          - generic "使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" [ref=f90e27]:
+            - generic [aria-hidden] [ref=f90e28]: "?"
+        - textbox "接口地址（选填，留空用官方默认） 使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" [ref=f90e30]:
+          - /placeholder: https://api.openai.com/v1
+        - generic [ref=f90e31]:
+          - button "保存" [disabled] [ref=f90e32]
+          - button "测试连接" [ref=f90e33]
+      - generic [ref=f90e34]:
+        - heading "Google Gemini" [level=3] [ref=f90e36]
+        - paragraph [ref=f90e37]: Gemini 原生接口，密钥从 Google AI Studio 获取
+        - generic [ref=f90e38]:
+          - text: API Key
+          - generic "服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" [ref=f90e39]:
+            - generic [aria-hidden] [ref=f90e40]: "?"
+        - textbox "API Key 服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" [ref=f90e42]:
+          - /placeholder: 粘贴 API Key
+        - generic [ref=f90e43]:
+          - text: 接口地址（选填，留空用官方默认）
+          - generic "使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" [ref=f90e44]:
+            - generic [aria-hidden] [ref=f90e45]: "?"
+        - textbox "接口地址（选填，留空用官方默认） 使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" [ref=f90e47]:
+          - /placeholder: https://generativelanguage.googleapis.com
+        - generic [ref=f90e48]:
+          - button "保存" [disabled] [ref=f90e49]
+          - button "测试连接" [ref=f90e50]
+      - generic [ref=f90e51]:
+        - heading "Anthropic Claude" [level=3] [ref=f90e53]
+        - paragraph [ref=f90e54]: Claude 原生接口，密钥从 Anthropic Console 获取
+        - generic [ref=f90e55]:
+          - text: API Key
+          - generic "服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" [ref=f90e56]:
+            - generic [aria-hidden] [ref=f90e57]: "?"
+        - textbox "API Key 服务商颁发的密钥（如 sk-…），用于验证你的身份。仅保存在服务端 data/secrets.json，浏览器不存储明文。" [ref=f90e59]:
+          - /placeholder: 粘贴 API Key
+        - generic [ref=f90e60]:
+          - text: 接口地址（选填，留空用官方默认）
+          - generic "使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" [ref=f90e61]:
+            - generic [aria-hidden] [ref=f90e62]: "?"
+        - textbox "接口地址（选填，留空用官方默认） 使用兼容端点/中转站时才需要填（如 MiniMax 的 Claude 兼容地址）。官方直连留空即可。" [ref=f90e64]:
+          - /placeholder: https://api.anthropic.com
+        - generic [ref=f90e65]:
+          - button "保存" [disabled] [ref=f90e66]
+          - button "测试连接" [ref=f90e67]
+    - region "LLM 默认参数" [ref=f90e68]:
+      - paragraph [ref=f90e69]: 默认生成通道与采样参数，保存在本设备（localStorage），生成时自动应用。
+      - group "生成通道" [ref=f90e70]:
+        - generic [ref=f90e72]:
+          - generic [ref=f90e73] [cursor=pointer]:
+            - radio "OpenAI 兼容 GPT 系列及各类兼容中转" [checked] [active] [ref=f90e74]
+            - generic [ref=f90e75]:
+              - generic [ref=f90e76]: OpenAI 兼容
+              - generic [ref=f90e77]: GPT 系列及各类兼容中转
+          - generic [ref=f90e78] [cursor=pointer]:
+            - radio "Gemini Google Gemini 原生" [ref=f90e79]
+            - generic [ref=f90e80]:
+              - generic [ref=f90e81]: Gemini
+              - generic [ref=f90e82]: Google Gemini 原生
+          - generic [ref=f90e83] [cursor=pointer]:
+            - radio "Claude Anthropic Claude 原生" [ref=f90e84]
+            - generic [ref=f90e85]:
+              - generic [ref=f90e86]: Claude
+              - generic [ref=f90e87]: Anthropic Claude 原生
+      - group "模型与采样" [ref=f90e88]:
+        - generic [ref=f90e90]:
+          - text: 模型名
+          - generic "该通道下调用的模型 ID（如 MiniMax-M3、claude-sonnet-4），须与服务商提供的名称完全一致。" [ref=f90e91]:
+            - generic [aria-hidden] [ref=f90e92]: "?"
+        - textbox "模型名 该通道下调用的模型 ID（如 MiniMax-M3、claude-sonnet-4），须与服务商提供的名称完全一致。" [ref=f90e94]:
+          - /placeholder: 如 MiniMax-M3、claude-sonnet-4 等
+          - text: MiniMax-M3
+        - paragraph [ref=f90e95]: 留空时「测试连接」会用各通道的内置探活小模型；正式生成前请填写。
+        - generic [ref=f90e96]:
+          - generic [ref=f90e97]:
+            - generic [ref=f90e98]:
+              - text: Temperature
+              - generic "随机度：0 严谨固定，1 均衡，1.5+ 天马行空。小说续写建议 0.8–1.2。" [ref=f90e99]:
+                - generic [aria-hidden] [ref=f90e100]: "?"
+            - spinbutton "Temperature 随机度：0 严谨固定，1 均衡，1.5+ 天马行空。小说续写建议 0.8–1.2。" [ref=f90e102]: "0.8"
+            - paragraph [ref=f90e103]: 0–2，越高越发散
+          - generic [ref=f90e104]:
+            - generic [ref=f90e105]:
+              - text: 最大输出 tokens
+              - generic "单次生成长度上限，1 token ≈ 0.7 个汉字；一章 2000 字建议 4096 以上。" [ref=f90e106]:
+                - generic [aria-hidden] [ref=f90e107]: "?"
+            - spinbutton "最大输出 tokens 单次生成长度上限，1 token ≈ 0.7 个汉字；一章 2000 字建议 4096 以上。" [ref=f90e109]: "8192"
+            - paragraph [ref=f90e110]: 单次生成的长度上限
+          - generic [ref=f90e111]:
+            - generic [ref=f90e112]:
+              - text: 上下文预算 tokens
+              - generic "发给 AI 的总预算上限：历史装填预算 = 此值 − 最大输出。建议不超过模型窗口的 3/4。" [ref=f90e113]:
+                - generic [aria-hidden] [ref=f90e114]: "?"
+            - spinbutton "上下文预算 tokens 发给 AI 的总预算上限：历史装填预算 = 此值 − 最大输出。建议不超过模型窗口的 3/4。" [ref=f90e116]: "1000000"
+            - paragraph [ref=f90e117]: 历史装填预算 = 此值 − 最大输出

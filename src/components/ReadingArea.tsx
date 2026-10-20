@@ -136,9 +136,9 @@ export function ReadingArea({
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-2 sm:px-4 py-2 border-b border-border flex-wrap gap-1 sm:gap-2">
-        <div className="flex items-center gap-1 flex-wrap">
+      {/* Toolbar：移动端横向滚动锁定单行（wrap 会在 375px 挤成多行挤压正文），桌面保持换行 */}
+      <div data-testid="reading-toolbar" className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 border-b border-border overflow-x-auto sm:flex-wrap sm:justify-between">
+        <div className="flex items-center gap-1 shrink-0">
           {readingModes.map(m => (
             <button
               key={m.id}
@@ -160,17 +160,20 @@ export function ReadingArea({
             </button>
           ))}
           <span className="text-muted-foreground mx-0.5 sm:mx-1 hidden sm:inline">|</span>
-          {lineHeights.map(l => (
-            <button
-              key={l.id}
-              onClick={() => onLineHeightChange(l.id)}
-              className={`px-2 sm:px-1.5 py-1.5 rounded text-xs hidden sm:inline-block min-w-[36px] min-h-[36px] flex items-center justify-center ${lineHeight === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              {l.label}
-            </button>
-          ))}
+          {/* 行高为次要控制：移动端隐藏（375px 屏放不下 11 个按钮，会挤成三行工具栏） */}
+          <div className="hidden sm:flex items-center gap-1">
+            {lineHeights.map(l => (
+              <button
+                key={l.id}
+                onClick={() => onLineHeightChange(l.id)}
+                className={`px-1.5 py-1.5 rounded text-xs min-w-[36px] min-h-[36px] flex items-center justify-center ${lineHeight === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-1 sm:gap-1">
+        <div className="flex items-center gap-1 sm:gap-1 shrink-0">
           <Button variant="ghost" size="sm" onClick={onEditOutline} className="text-xs gap-1 h-9 sm:h-8 px-2 sm:px-2">
             <Edit3 className="h-4 w-4" /> <span className="hidden sm:inline">调整大纲</span><span className="sm:hidden">大纲</span>
           </Button>
@@ -186,7 +189,7 @@ export function ReadingArea({
       {/* Seamless reading area - all chapters in one scroll */}
       <ScrollArea className="flex-1" ref={scrollRef}>
         <div
-          className="max-w-3xl mx-auto px-3 sm:px-6 py-4 sm:py-8 pb-20"
+          className="max-w-3xl mx-auto px-3 sm:px-6 py-4 sm:py-8 pb-[calc(5rem_+_var(--safe-bottom))]"
           style={{
             fontSize: `${fontSize}px`,
             lineHeight: lineHeight,

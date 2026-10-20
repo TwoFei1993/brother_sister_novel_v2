@@ -1,0 +1,79 @@
+- main [ref=f98e4]:
+  - generic [ref=f98e5]:
+    - link "返回书架" [ref=f98e6] [cursor=pointer]:
+      - /url: /
+      - text: ←
+    - heading "大纲向导" [level=1] [ref=f98e7]
+    - generic [ref=f98e8]: 粘贴大纲，一键生成角色卡与世界书草稿
+  - textbox "大纲文本" [ref=f98e10]:
+    - /placeholder: "粘贴网文大纲或「编号人设展板」文档，例如：\n一、故事背景：灵气复苏的大周王朝…\n哥哥（林昭）：天赋觉醒古龙血脉，性格沉稳…\n——或——\n01. 沈清晏｜镇国公府嫡长女（女主）\n正向 prompt：\n…（批量人设将自动识别）"
+    - text: 01. 林昭｜哥哥（男主） 正向 prompt：古龙血脉觉醒者，十八岁，性格沉稳寡言，佩剑「霜降」，天生灵力亲和雷系。 反向 prompt：娘化，话唠，优柔寡断 02. 林小满｜妹妹（女主） 正向 prompt：十四岁，灵厨天赋，性格活泼贪吃，随身携带一口会说话的锅「阿鼎」。 反向 prompt：圣母，玻璃心 03. 沈青梧｜青梅竹马 正向 prompt：镇北侯独女，剑修，冷面热心，与林昭有婚约。 反向 prompt：绿茶 04. 老锅阿鼎｜器灵 正向 prompt：上古灵厨遗物成精，毒舌，认林小满为主。 反向 prompt：无 05. 玄机子｜师父 正向 prompt：青云观观主，占卜大师，嗜酒，关键时刻掉链子。 反向 prompt：全知全能 06. 血衣楼主｜反派 正向 prompt：血衣楼之主，追杀林昭全家之人，真实身份成谜。 反向 prompt：无 07. 苏芷｜药谷传人 正向 prompt：药谷少主，医毒双绝，因一场误会与林昭结怨。 反向 prompt：无 08. 大周皇帝｜配角 正向 prompt：大周天子，表面昏聩实则深藏不露，暗中庇护林家遗孤。 反向 prompt：无
+  - region "批量人设导入" [ref=f98e12]:
+    - generic [ref=f98e13]:
+      - text: 已识别批量人设展板：共
+      - strong [ref=f98e14]: "8"
+      - text: 位角色，默认全选，可逐条取消。
+    - generic [ref=f98e15]:
+      - generic [ref=f98e16]:
+        - checkbox "全选角色" [ref=f98e17]
+        - text: 全选（7/8）
+      - list [ref=f98e18]:
+        - listitem [ref=f98e19]:
+          - generic [ref=f98e20] [cursor=pointer]:
+            - generic [ref=f98e21]:
+              - checkbox "选择林昭" [checked] [ref=f98e22]
+              - generic [ref=f98e23]: 林昭
+              - generic [ref=f98e24]: 哥哥（男主）
+            - generic [ref=f98e25]: 古龙血脉觉醒者，十八岁，性格沉稳寡言，佩剑「霜降」，天生灵力亲和雷系。反向 prompt：娘化，话唠，优柔寡断
+        - listitem [ref=f98e26]:
+          - generic [ref=f98e27] [cursor=pointer]:
+            - generic [ref=f98e28]:
+              - checkbox "选择林小满" [checked] [ref=f98e29]
+              - generic [ref=f98e30]: 林小满
+              - generic [ref=f98e31]: 妹妹（女主）
+            - generic [ref=f98e32]: 十四岁，灵厨天赋，性格活泼贪吃，随身携带一口会说话的锅「阿鼎」。反向 prompt：圣母，玻璃心
+        - listitem [ref=f98e33]:
+          - generic [ref=f98e34] [cursor=pointer]:
+            - generic [ref=f98e35]:
+              - checkbox "选择沈青梧" [checked] [ref=f98e36]
+              - generic [ref=f98e37]: 沈青梧
+              - generic [ref=f98e38]: 青梅竹马
+            - generic [ref=f98e39]: 镇北侯独女，剑修，冷面热心，与林昭有婚约。反向 prompt：绿茶
+        - listitem [ref=f98e40]:
+          - generic [ref=f98e41] [cursor=pointer]:
+            - generic [ref=f98e42]:
+              - checkbox "选择老锅阿鼎" [checked] [ref=f98e43]
+              - generic [ref=f98e44]: 老锅阿鼎
+              - generic [ref=f98e45]: 器灵
+            - generic [ref=f98e46]: 上古灵厨遗物成精，毒舌，认林小满为主。反向 prompt：无
+        - listitem [ref=f98e47]:
+          - generic [ref=f98e48] [cursor=pointer]:
+            - generic [ref=f98e49]:
+              - checkbox "选择玄机子" [checked] [ref=f98e50]
+              - generic [ref=f98e51]: 玄机子
+              - generic [ref=f98e52]: 师父
+            - generic [ref=f98e53]: 青云观观主，占卜大师，嗜酒，关键时刻掉链子。反向 prompt：全知全能
+        - listitem [ref=f98e54]:
+          - generic [ref=f98e55] [cursor=pointer]:
+            - generic [ref=f98e56]:
+              - checkbox "选择血衣楼主" [checked] [ref=f98e57]
+              - generic [ref=f98e58]: 血衣楼主
+              - generic [ref=f98e59]: 反派
+            - generic [ref=f98e60]: 血衣楼之主，追杀林昭全家之人，真实身份成谜。反向 prompt：无
+        - listitem [ref=f98e61]:
+          - generic [ref=f98e62] [cursor=pointer]:
+            - generic [ref=f98e63]:
+              - checkbox "选择苏芷" [active] [ref=f98e64]
+              - generic [ref=f98e65]: 苏芷
+              - generic [ref=f98e66]: 药谷传人
+            - generic [ref=f98e67]: 药谷少主，医毒双绝，因一场误会与林昭结怨。反向 prompt：无
+        - listitem [ref=f98e68]:
+          - generic [ref=f98e69] [cursor=pointer]:
+            - generic [ref=f98e70]:
+              - checkbox "选择大周皇帝" [checked] [ref=f98e71]
+              - generic [ref=f98e72]: 大周皇帝
+              - generic [ref=f98e73]: 配角
+            - generic [ref=f98e74]: 大周天子，表面昏聩实则深藏不露，暗中庇护林家遗孤。反向 prompt：无
+    - generic [ref=f98e75]:
+      - button "生成 7 张角色卡" [ref=f98e78]
+      - button "分部与全局设定生成世界书" [ref=f98e77]

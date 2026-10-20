@@ -1,0 +1,24 @@
+- generic [ref=f89e88]:
+  - banner [ref=f89e89]:
+    - button "返回书架" [ref=f89e90]: ←
+    - heading "深测-试炼之门" [level=1] [ref=f89e91]
+    - tablist "视图切换" [ref=f89e92]:
+      - tab "💬" [ref=f89e93]
+      - tab "📖" [selected] [ref=f89e94]
+      - tab "🛠️" [ref=f89e95]
+    - button "章节目录" [ref=f89e96]: 📖
+    - button "作品设置" [ref=f89e97]: ⚙
+  - main [ref=f89e98]:
+    - generic [ref=f89e99]:
+      - paragraph [ref=f89e100]: 《深测-试炼之门》
+      - paragraph [ref=f89e101]: 在下方输入剧情指令（可留空），点击「▶ 续写」开始创作第一章
+    - generic [ref=f89e103]:
+      - textbox "剧情指令" [ref=f89e104]:
+        - /placeholder: 剧情指令（可空，如：兄妹进入遗迹深处…）
+      - button "▶ 续写" [ref=f89e105]
+      - button "⚡ 连写" [ref=f89e106]
+      - button "说明：续写：输入剧情方向（如「兄妹进入遗迹深处」）后 AI 据此写下一章，也可留空让 AI 自由发挥。连写：点一次自动连写到目标章节数，中途点停止即停。" [ref=f89e108]:
+        - generic [aria-hidden] [ref=f89e109]: "?"
+      - button "🎲 换一支" [ref=f89e110]
+      - button "说明：换一支：同一章重新生成一个候选版本；已有多支候选时用 ◀▶ 按钮来回切换对比。" [ref=f89e112]:
+        - generic [aria-hidden] [ref=f89e113]: "?"

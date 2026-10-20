@@ -1,0 +1,27 @@
+- main [ref=f66e4]:
+  - navigation "全局导航" [ref=f66e5]:
+    - link "小说工坊" [ref=f66e6] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f66e7]:
+      - link "🗂 资产库" [ref=f66e8] [cursor=pointer]:
+        - /url: /library
+      - link "📝 大纲向导" [ref=f66e9] [cursor=pointer]:
+        - /url: /wizard
+      - link "⚙ 设置" [ref=f66e10] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=f66e11]:
+    - generic [ref=f66e12]:
+      - generic [ref=f66e13]:
+        - heading "我的书架" [level=1] [ref=f66e14]
+        - paragraph [ref=f66e15]: 共 0 部作品
+      - generic [ref=f66e16]:
+        - searchbox "按标题搜索作品" [ref=f66e17]
+        - combobox "排序方式" [ref=f66e18]:
+          - option "最近更新" [selected]
+          - option "章节数"
+          - option "标题"
+        - button "＋ 新建作品" [ref=f66e19]
+    - generic [ref=f66e20]:
+      - generic [aria-hidden] [ref=f66e21]: 📚
+      - paragraph [ref=f66e22]: 书架空空如也
+      - button "＋ 新建作品" [ref=f66e23]
