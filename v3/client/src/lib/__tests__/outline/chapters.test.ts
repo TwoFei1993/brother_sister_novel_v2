@@ -115,6 +115,72 @@ describe('parseChapterOutlines', () => {
     expect(out[0]?.highlight).toContain('金手指初现');
     expect(out[1]?.plot).toBe('初入江湖。');
   });
+
+  // 用户真实 docx（【原创短剧】嫡出大小姐）3 章缩样脱敏仿制：单个巨型段落（无 \n），
+  // U+FEFF 分隔，「剧情/看点/小冲突」独立成"行"（FEFF 后），末尾跟下一个卷标记。
+  const DOCX_REAL_LIKE = [
+    '标题：穿成相府嫡女的日常',
+    '背景：穿成古代大家族嫡出大小姐，胎穿。',
+    '金手指：随身空间，只有女主一人知晓。',
+    '第一卷：稚岁藏锋（0-8岁）',
+    '第1章 落地嫡长，方寸藏天机',
+    '剧情',
+    '女主胎穿清醒，从母体感知这一世顶级家世，顺利降生为相府嫡长女。',
+    '看点',
+    '开局铺垫胎穿身份、隐藏金手指，奠定早熟沉静人设。',
+    '小冲突',
+    '府中下人试探性情，女主全程隐忍伪装普通婴孩。',
+    '第2章 稚子无声，私囤万千',
+    '剧情',
+    '女主幼年借玩耍为由，悄悄将吃食药材小物件全部囤进时停仓库。',
+    '看点',
+    '未雨绸缪性格首次落地，从小养成囤积习惯。',
+    '小冲突',
+    '乳母起疑，被女主哭闹化解。',
+    '第3章 父母偏爱，高门安稳局',
+    '剧情',
+    '通过日常相处展现父母联姻的和睦格局，女主看清家族权力结构，划分亲人亲疏。',
+    '看点',
+    '铺垫全书最大靠山：家庭绝对稳固。',
+    '小冲突',
+    '旁支长辈想借幼童拿捏嫡房，被父母不动声色挡回。',
+  ].join('﻿');
+
+  it('真实 docx 3 章缩样（FEFF 巨段 + 独立标记行）：各章 plot 均含「剧情」段细节，非仅标题', () => {
+    const out = parseChapterOutlines(DOCX_REAL_LIKE);
+    expect(out.map((c) => c.index)).toEqual([1, 2, 3]);
+    expect(out[0]?.title).toBe('落地嫡长，方寸藏天机');
+    expect(out[0]?.plot).toContain('相府嫡长女');
+    expect(out[0]?.plot.length).toBeGreaterThanOrEqual(15);
+    expect(out[0]?.highlight).toContain('隐藏金手指');
+    expect(out[0]?.conflict).toContain('隐忍');
+    expect(out[1]?.plot).toContain('时停仓库');
+    expect(out[1]?.conflict).toContain('哭闹化解');
+    expect(out[2]?.plot).toContain('权力结构');
+    // 全章 volume 均为「其后最近章节之前的卷标记」——第一卷
+    expect(out.every((c) => c.volume === '稚岁藏锋（0-8岁）')).toBe(true);
+  });
+
+  it('末章缺「小冲突」+ 尾部卷标记：字段取文在卷标记处截断，不吞入「第二卷：…」文本', () => {
+    // 真实 docx 第 8 章形态：只有 剧情+看点，其后紧跟下一卷标记
+    const text = [
+      '第8章 初藏产业，小小家底',
+      '剧情',
+      '女主借长辈赏赐悄悄积累第一笔私财，空间仓库开始大批量囤积物资。',
+      '看点',
+      '从小建立经济独立，为后期掌权势铺垫。',
+      '第二卷：豆蔻初显，风华暗藏（9-14岁）',
+      '第9章 名师入府，技压众长',
+      '剧情',
+      '父母重金请来各界名师，女主私下靠空间翻倍练习。',
+    ].join('﻿');
+    const out = parseChapterOutlines(text);
+    expect(out.map((c) => c.index)).toEqual([8, 9]);
+    expect(out[0]?.highlight).toBe('从小建立经济独立，为后期掌权势铺垫。');
+    expect(out[0]?.highlight).not.toContain('第二卷');
+    expect(out[0]?.conflict).toBeUndefined();
+    expect(out[1]?.volume).toBe('豆蔻初显，风华暗藏（9-14岁）'); // 卷标记仍正确归属下一章
+  });
 });
 
 describe('chapterOutlineDirective / toChapterOutlineItems', () => {

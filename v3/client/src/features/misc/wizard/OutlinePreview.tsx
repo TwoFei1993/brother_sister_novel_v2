@@ -2,8 +2,22 @@
  * 普通大纲抽取预览：人物 / 背景 / 势力 / 矛盾 / 书名建议展示 + 生成按钮。
  * 规则来源只读（与既有行为一致）；AI 来源（editable）字段可编辑修正后再生成的
  * 卡片与世界书使用修正后的值。编辑即时回调父级（onChange 更新 llmResult）。
+ * 反馈①：新增「一键导入角色卡+世界书」主按钮——串行建卡（进度 x/N）+ 建世界书，
+ * 成功不跳转，就地展示成功清单与「前往资产库」链接。
  */
+import { Link } from 'react-router-dom';
+
 import type { ExtractedOutline } from '../../../lib/outline/wizard';
+import { canImportAll, type ImportedAssets } from './importAll';
+
+/** 一键导入状态（父级 OutlineWizard 管理，本组件纯展示） */
+export interface ImportAllState {
+  phase: 'idle' | 'running' | 'done' | 'error';
+  progress: { done: number; total: number } | null;
+  assets: ImportedAssets;
+  /** 失败时的人话消息 */
+  message: string;
+}
 
 interface Props {
   extracted: ExtractedOutline;
@@ -14,6 +28,8 @@ interface Props {
   onChange: (next: ExtractedOutline) => void;
   onCreateCards: () => void;
   onCreateWorldbook: () => void;
+  importAll: ImportAllState;
+  onImportAll: () => void;
 }
 
 const inputCls =
@@ -27,8 +43,12 @@ export default function OutlinePreview({
   onChange,
   onCreateCards,
   onCreateWorldbook,
+  importAll,
+  onImportAll,
 }: Props) {
   const patch = (p: Partial<ExtractedOutline>): void => onChange({ ...extracted, ...p });
+  const canAll = canImportAll(extracted);
+  const { phase, progress, assets, message } = importAll;
 
   return (
     <section aria-label="抽取预览" className="flex flex-col gap-3">
@@ -168,23 +188,58 @@ export default function OutlinePreview({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onCreateCards}
-          disabled={busy}
-          className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
-        >
-          生成角色卡草稿
-        </button>
-        <button
-          type="button"
-          onClick={onCreateWorldbook}
-          disabled={busy}
-          className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))] disabled:opacity-40"
-        >
-          生成世界书草稿
-        </button>
+      <div className="flex flex-col gap-2">
+        {phase === 'running' && progress && (
+          <p role="status" data-testid="import-all-progress" className="text-sm text-[hsl(var(--accent))]">
+            一键导入中：角色卡 {progress.done}/{progress.total}…
+          </p>
+        )}
+        {phase === 'done' && (assets.characterNames.length > 0 || assets.worldbookNames.length > 0) && (
+          <div
+            role="status"
+            data-testid="import-all-result"
+            className="flex flex-col gap-1 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-500"
+          >
+            <p>一键导入完成（未跳转，本页可继续操作）：</p>
+            {assets.characterNames.length > 0 && (
+              <p className="text-xs">角色卡（{assets.characterNames.length}）：{assets.characterNames.join('、')}</p>
+            )}
+            {assets.worldbookNames.length > 0 && <p className="text-xs">世界书：{assets.worldbookNames.join('、')}</p>}
+            <Link to="/library" data-testid="goto-library" className="text-xs underline underline-offset-4">
+              前往资产库查看 →
+            </Link>
+          </div>
+        )}
+        {phase === 'error' && <p role="alert" className="text-sm text-red-400">{message}</p>}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onImportAll}
+            disabled={busy || !canAll}
+            title={canAll ? '批量生成角色卡与 worldbook' : '需识别到人物，且背景/势力/矛盾至少其一'}
+            data-testid="import-all-btn"
+            className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
+          >
+            {phase === 'running' ? '一键导入中…' : '一键导入角色卡+世界书'}
+          </button>
+          <button
+            type="button"
+            onClick={onCreateCards}
+            disabled={busy}
+            className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))] disabled:opacity-40"
+          >
+            仅生成角色卡
+          </button>
+          <button
+            type="button"
+            onClick={onCreateWorldbook}
+            disabled={busy}
+            className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))] disabled:opacity-40"
+          >
+            仅生成世界书
+          </button>
+        </div>
       </div>
     </section>
   );

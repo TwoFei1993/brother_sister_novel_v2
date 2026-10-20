@@ -13,6 +13,7 @@ import {
   llmExtract,
   outlineFromLlm,
   parseJsonLoose,
+  repairJson,
   shouldFallbackToLLM,
   sheetEntriesFromLlm,
 } from '../../outline/llm';
@@ -122,6 +123,69 @@ describe('llmExtract LLM 非流式抽取', () => {
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user']);
     const outline = outlineFromLlm(out.parsed);
     expect(outline?.characters[0]?.name).toBe('赵六');
+  });
+
+  it('opts.temperature 覆盖缺省 0.2（repairJson 走 temperature 0）', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ text: '{"ok":1}' }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await llmExtract('x', buildOutlinePrompt('x'), PREFS, { temperature: 0 });
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as {
+      params: { temperature: number };
+    };
+    expect(body.params.temperature).toBe(0);
+  });
+});
+
+describe('repairJson 坏 JSON 自动修复重试（Word 导入实测反馈③）', () => {
+  function stubResponses(bodies: string[]): ReturnType<typeof vi.fn> {
+    let i = 0;
+    return vi.fn(async () =>
+      new Response(JSON.stringify({ text: bodies[Math.min(i++, bodies.length - 1)] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  }
+
+  it('修复 prompt：把坏 JSON 原文回传，system 约束「只修格式不改内容」，temperature 0', async () => {
+    const fetchMock = stubResponses(['{"characters":[]}']);
+    vi.stubGlobal('fetch', fetchMock);
+    await repairJson('{"characters":[{"name":"张三"}', PREFS);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as {
+      params: { temperature: number };
+      messages: { role: string; content: string }[];
+    };
+    expect(body.params.temperature).toBe(0);
+    expect(body.messages[0]?.content).toContain('只修复格式');
+    expect(body.messages[0]?.content).toContain('严禁增删改');
+    expect(body.messages[1]?.content).toContain('JSON.parse 失败');
+    expect(body.messages[1]?.content).toContain('{"characters":[{"name":"张三"}'); // 坏 JSON 原文在 user 消息里
+  });
+
+  it('首次解析失败 → 修复成功返回结构化结果（repairJson 自身仅发一次修复请求）', async () => {
+    const fetchMock = stubResponses(['{"characters":[{"name":"李四"}]}']);
+    vi.stubGlobal('fetch', fetchMock);
+    const parsed = await repairJson<{ characters: { name: string }[] }>('{"characters":[{"name":"李四"},', PREFS);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 修复请求一次；「抽取+修复」两步由向导编排
+    expect(parsed?.characters[0]?.name).toBe('李四');
+  });
+
+  it('两次都坏 → 返回 null（调用方显示错误 + raw 折叠）', async () => {
+    const fetchMock = stubResponses(['还是不是 JSON']);
+    vi.stubGlobal('fetch', fetchMock);
+    const parsed = await repairJson('完全损坏的返回', PREFS);
+    expect(parsed).toBeNull();
+  });
+
+  it('空 raw 直接拒绝，不发修复请求', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const parsed = await repairJson('   ', PREFS);
+    expect(parsed).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

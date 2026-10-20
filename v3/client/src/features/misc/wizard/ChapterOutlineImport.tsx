@@ -3,6 +3,8 @@
  * 展示章数预览与「创建作品并导入大纲」入口——输入书名 → POST /api/works
  * （settings 携带 chapterOutlines + pastedOutline=原文）→ 跳 /work/:id 直接开写。
  * 生成侧联动见 lib/outline/chapters.chapterOutlineDirective（每章 directive 追加本章要点）。
+ * 反馈⑥时序A：把本次抽取流程已创建的角色卡/世界书 ids 一并传入新作品（characterIds/
+ * worldbookIds）；创建成功先回调 onCreated(workId)（向导持久化，供时序B自动绑定）再跳转。
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -16,12 +18,18 @@ interface Props {
   outline: string;
   /** 书名建议首条（无则空输入） */
   suggestedTitle?: string;
+  /** 本次抽取流程已创建的角色卡 ids（创建作品时一并绑定） */
+  characterIds?: string[];
+  /** 本次抽取流程已创建的世界书 ids */
+  worldbookIds?: string[];
+  /** 创建成功回调（跳转前触发；向导记录 workId 供建卡时自动绑定） */
+  onCreated?: (workId: string) => void;
 }
 
 /** 最少章数门槛：低于此值不展示导入入口（避免零星「第N章」提及误触发） */
 const MIN_CHAPTERS = 3;
 
-export default function ChapterOutlineImport({ outline, suggestedTitle = '' }: Props) {
+export default function ChapterOutlineImport({ outline, suggestedTitle = '', characterIds = [], worldbookIds = [], onCreated }: Props) {
   const navigate = useNavigate();
   const chapters = useMemo(() => parseChapterOutlines(outline), [outline]);
   const [expanded, setExpanded] = useState(false);
@@ -44,12 +52,15 @@ export default function ChapterOutlineImport({ outline, suggestedTitle = '' }: P
         title: name,
         mode: 'novel',
         genre: 'chuanyue',
+        characterIds,
+        worldbookIds,
         settings: {
           ...defaultNovelSettings,
           pastedOutline: outline,
           chapterOutlines: toChapterOutlineItems(chapters),
         },
       });
+      onCreated?.(work.id); // 先持久化 workId（时序B锚点）再跳转
       navigate(`/work/${work.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建作品失败，请重试');

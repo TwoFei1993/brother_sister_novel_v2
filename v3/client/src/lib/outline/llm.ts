@@ -96,6 +96,7 @@ export async function llmExtract<T = unknown>(
   text: string,
   prompt: { system: string; user: string },
   prefs: LlmPrefs,
+  opts?: { temperature?: number },
 ): Promise<LlmExtractResult<T>> {
   const trimmed = text.trim();
   if (!trimmed) return { parsed: null, raw: '' };
@@ -105,7 +106,7 @@ export async function llmExtract<T = unknown>(
       source: prefs.source,
       model: prefs.model || undefined,
       stream: false,
-      params: { max_tokens: 4000, temperature: 0.2 },
+      params: { max_tokens: 4000, temperature: opts?.temperature ?? 0.2 },
       messages: [
         { role: 'system', content: prompt.system },
         { role: 'user', content: prompt.user },
@@ -114,6 +115,25 @@ export async function llmExtract<T = unknown>(
   }));
   const raw = out.text ?? '';
   return { parsed: parseJsonLoose<T>(raw), raw };
+}
+
+/**
+ * 坏 JSON 自动修复重试（Word 导入实测反馈③）：解析失败时把损坏 JSON 原文回传 LLM，
+ * 只修格式（缺失括号/引号/逗号、截断、围栏残留）不改内容，temperature 0 保证确定性。
+ * 仅重试一次；修复后仍解析不出返回 null（调用方显示错误 + raw 折叠）。
+ */
+export async function repairJson<T = unknown>(raw: string, prefs: LlmPrefs): Promise<T | null> {
+  const bad = raw.trim();
+  if (!bad) return null;
+  const prompt = {
+    system:
+      '你是 JSON 修复助手。把用户给出的损坏 JSON 修复为合法 JSON：' +
+      '只修复格式问题（缺失或多余的括号/引号/逗号、非法转义、截断的字符串、代码围栏残留），' +
+      '严禁增删改任何键名与键值内容。只输出修复后的 JSON，不要任何解释。',
+    user: `以下是格式损坏的 JSON（JSON.parse 失败），请修复为合法 JSON，不要改动内容：\n\n${bad}`,
+  };
+  const out = await llmExtract<T>(bad, prompt, prefs, { temperature: 0 });
+  return out.parsed;
 }
 
 // ---------- 兜底启发式 ----------

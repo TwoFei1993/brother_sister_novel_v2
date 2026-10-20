@@ -39,6 +39,13 @@ const PLOT_MARK = /(?:剧情(?:任务)?|梗概)[：:]?/;
 const HIGHLIGHT_MARK = /看点[：:]?|爽点[：:]?/;
 const CONFLICT_MARK = /小冲突[：:]?|冲突[：:]?/;
 
+/**
+ * 段内卷标记位置探测（真实 docx 实测：末章缺「小冲突」时字段取文会一路吞到下一段
+ * 开头的「第二卷：…」——卷标记是结构性边界，所有字段取文须在此截断）。
+ * VOLUME_MARK 带 g 供全局扫描；此处用非全局副本做单段位置探测。
+ */
+const VOLUME_MARK_LOCAL = /第[一二三四五六七八九十百\d]{1,3}卷[：:｜|\-—]/;
+
 /** 标题/剧情等内容最短门槛：过短视为正文叙述误切（如「见第3章：历史」类提及） */
 const MIN_CONTENT = 4;
 /** 单字段长度上限（防无标记长段撑爆 settings 与 directive） */
@@ -72,17 +79,20 @@ function parseSegment(seg: string): SegmentFields | null {
   const plotM = seg.match(PLOT_MARK);
   const highlightM = seg.match(HIGHLIGHT_MARK);
   const conflictM = seg.match(CONFLICT_MARK);
+  const volumeM = seg.match(VOLUME_MARK_LOCAL);
+  // 卷标记位置（无则段尾）：字段取文的结构性停止边界
+  const volPos = volumeM?.index ?? seg.length;
   const markPositions = [plotM, highlightM, conflictM]
     .filter((m): m is RegExpMatchArray => m !== null)
     .map((m) => m.index ?? seg.length);
 
-  // 标题：章头后到「首个换行 / 最早标记」中较早者
+  // 标题：章头后到「首个换行 / 最早标记 / 卷标记」中较早者
   const nlPos = seg.indexOf('\n');
   const firstMarkPos = markPositions.length > 0 ? Math.min(...markPositions) : seg.length;
-  const titleEnd = nlPos === -1 ? firstMarkPos : Math.min(nlPos, firstMarkPos);
+  const titleEnd = nlPos === -1 ? Math.min(firstMarkPos, volPos) : Math.min(nlPos, firstMarkPos, volPos);
   const title = cleanTitle(seg.slice(0, titleEnd));
 
-  // 标记后的取文：到下一个（更晚出现的）标记或段尾
+  // 标记后的取文：到下一个（更晚出现的）标记、卷标记或段尾
   const after = (mark: RegExpMatchArray | null, stops: number[]): string => {
     if (!mark) return '';
     const from = (mark.index ?? 0) + mark[0].length;
@@ -92,11 +102,12 @@ function parseSegment(seg: string): SegmentFields | null {
   };
   const hlPos = highlightM?.index ?? seg.length;
   const cfPos = conflictM?.index ?? seg.length;
+  const fieldStop = Math.min(hlPos, cfPos, volPos);
   const plot = plotM
-    ? trimField(seg.slice((plotM.index ?? 0) + plotM[0].length, Math.min(hlPos, cfPos)), FIELD_MAX.plot)
-    : trimField(seg.slice(titleEnd), FIELD_MAX.plot); // 缺标记：标题后的整段即剧情
-  const highlight = after(highlightM, [cfPos]);
-  const conflict = after(conflictM, []);
+    ? trimField(seg.slice((plotM.index ?? 0) + plotM[0].length, fieldStop), FIELD_MAX.plot)
+    : trimField(seg.slice(titleEnd, fieldStop), FIELD_MAX.plot); // 缺标记：标题后到最早标记/卷标记即剧情
+  const highlight = after(highlightM, [cfPos, volPos]);
+  const conflict = after(conflictM, [volPos]);
 
   if (title.length + plot.length + highlight.length + conflict.length < MIN_CONTENT) return null;
   return {
@@ -107,12 +118,15 @@ function parseSegment(seg: string): SegmentFields | null {
   };
 }
 
-/** 卷归属：取 (上一章头, 本章头] 区间内最后一个卷标记（卷头惯例位于其章节之前） */
-function volumeBetween(volumes: { pos: number; name: string }[], prevPos: number, pos: number): string | undefined {
+/**
+ * 卷归属：取章头之前（≤pos）最近出现的卷标记（跨章头继承——真实 docx 为
+ * 「第一卷：…」后连排多章，卷名须逐章继承，紧邻判定会丢失第 2 章起的卷名）。
+ */
+function volumeAt(volumes: { pos: number; name: string }[], pos: number): string | undefined {
   let hit: string | undefined;
   for (const v of volumes) {
     if (v.pos > pos) break;
-    if (v.pos > prevPos) hit = v.name;
+    hit = v.name;
   }
   return hit;
 }
@@ -142,7 +156,7 @@ export function parseChapterOutlines(text: string): ChapterOutline[] {
     const end = i + 1 < heads.length ? heads[i + 1].index ?? normalized.length : normalized.length;
     const fields = parseSegment(normalized.slice(start, end));
     if (!fields) continue;
-    const volume = volumeBetween(volumes, i > 0 ? heads[i - 1].index ?? 0 : -1, headPos);
+    const volume = volumeAt(volumes, headPos);
     out.push({ index, ...fields, ...(volume ? { volume } : {}) });
     seen.add(index);
   }

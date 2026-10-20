@@ -1,13 +1,13 @@
 /**
  * 大纲向导（最小版，Task 32）：粘贴网文大纲 → 正则抽取预览（人物/背景/势力/矛盾）→
- * 一键生成角色卡与世界书草稿 → 成功跳 /library。路由 /wizard（App.tsx）。
- * LLM 兜底：效果不佳时可切换 AI 结构化解析（lib/outline/llm），结果可切换对比；
- * 展板形态走 SheetImportPanel 复用；章节大纲识别走 ChapterOutlineImport（一键开写）。
+ * 一键导入角色卡+世界书（反馈①：不跳转，就地展示成功清单）。路由 /wizard（App.tsx）。
+ * LLM 兜底：效果不佳时可切换 AI 结构化解析（lib/outline/llm），解析失败自动修复重试
+ * 一次（反馈③）；展板形态走 SheetImportPanel 复用；章节大纲识别走 ChapterOutlineImport
+ * （一键开写，反馈⑥：携带已建资产 ids，作品已存在时自动 PATCH 绑定）。
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { apiFetch } from '../../api/client';
 import {
   buildCharacterSheetPrompt,
   buildOutlinePrompt,
@@ -15,18 +15,20 @@ import {
   estimateTokenKilo,
   llmExtract,
   outlineFromLlm,
+  repairJson,
   sheetEntriesFromLlm,
   shouldFallbackToLLM,
 } from '../../lib/outline/llm';
 import { parseSheetDocument, type SheetDocument } from '../../lib/outline/sheet';
 import { extractFromOutline, type ExtractedOutline } from '../../lib/outline/wizard';
-import { buildCardDraft, buildWorldbookDraft } from '../../lib/outline/draft';
 import { suggestBookTitles } from '../../lib/export';
 import { useSettingsStore } from '../../stores/settings';
 import SheetImportPanel from './wizard/SheetImportPanel';
 import OutlinePreview from './wizard/OutlinePreview';
 import ChapterOutlineImport from './wizard/ChapterOutlineImport';
 import DocImport from './wizard/DocImport';
+import { useWizardImports } from './wizard/useWizardImports';
+import { writeCreatedWorkId } from './wizard/importAll';
 import { AiErrorBox, AiRetryHint, AiSourceSwitch, LlmFallbackBar, type AiErrorState } from './wizard/LlmFallback';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
@@ -54,7 +56,7 @@ function clearDraft(): void {
 }
 
 export default function OutlineWizard() {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // 展板批量导入成功后的既有跳转（反馈①仅改抽取预览区路径）
   const initial = useMemo(loadDraft, []);
   const [outline, setOutline] = useState(initial.outline);
   const [ruleResult, setRuleResult] = useState<ExtractedOutline | null>(null);
@@ -64,7 +66,6 @@ export default function OutlineWizard() {
   const [source, setSource] = useState<'rule' | 'llm'>('rule');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<AiErrorState | null>(null);
-  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
   const llmPrefs = useSettingsStore((s) => s.llmPrefs);
@@ -88,6 +89,9 @@ export default function OutlineWizard() {
   const tokenHint = estimateTokenKilo(outline.length);
 
   const notify = (kind: 'ok' | 'err', text: string) => setToast({ kind, text });
+
+  // 反馈①⑥：资产导入编排（一键导入不跳转 + ids 累计供创建作品自动绑定）
+  const { busy, assets, importState, importAll, createCards, createWorldbookOnly } = useWizardImports(notify, clearDraft);
 
   /** 粘贴即探测：编号展板条目 ≥3 → 批量人设导入模式；否则保留旧抽取路径（草稿同步 localStorage） */
   const onOutlineChange = (value: string) => {
@@ -114,16 +118,19 @@ export default function OutlineWizard() {
     notify(found > 0 ? 'ok' : 'err', found > 0 ? `识别出 ${out.characters.length} 位人物及设定要素` : '未识别出有效要素，请检查大纲格式（如"哥哥（名字）：特质"）');
   };
 
-  /** AI 解析（LLM 兜底）：成功后与规则结果并存，可切换对比；失败保留 raw 供排查 */
+  /** AI 解析（LLM 兜底）：成功后与规则结果并存，可切换对比；解析失败自动修复重试一次，仍失败保留 raw 供排查 */
   const runAiExtract = async (): Promise<void> => {
     if (aiLoading || !outline.trim()) return;
     setAiLoading(true);
     setAiError(null);
     try {
       const prompt = useSheetPrompt ? buildCharacterSheetPrompt(outline) : buildOutlinePrompt(outline);
-      const { parsed, raw } = await llmExtract(outline, prompt, llmPrefs);
+      let { parsed, raw } = await llmExtract(outline, prompt, llmPrefs);
+      if (parsed === null && raw.trim()) {
+        parsed = await repairJson(raw, llmPrefs); // 坏 JSON 自动修复（temperature 0，重试一次）
+      }
       if (parsed === null) {
-        setAiError({ message: '返回内容无法解析为结构化 JSON，可重试或检查模型配置', raw });
+        setAiError({ message: '返回内容无法解析为结构化 JSON（自动修复仍未成功），可重试或检查模型配置', raw });
         return;
       }
       if (useSheetPrompt) {
@@ -149,52 +156,6 @@ export default function OutlineWizard() {
       setAiError({ message: err instanceof Error ? err.message : 'AI 解析请求失败', raw: '' });
     } finally {
       setAiLoading(false);
-    }
-  };
-
-  const postJson = async (path: string, body: unknown): Promise<void> => {
-    await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
-  };
-
-  const onCreateCards = async () => {
-    if (!extracted) return;
-    const names = extracted.characters.map((c) => c.name);
-    if (names.length === 0) {
-      notify('err', '未抽取到人物，无法生成角色卡');
-      return;
-    }
-    setBusy(true);
-    try {
-      for (const name of names) {
-        await postJson('/api/characters', { name, card: buildCardDraft(extracted, name) });
-      }
-      notify('ok', `已生成 ${names.length} 张角色卡草稿，正在跳转资产库…`);
-      clearDraft(); // 成功导入：草稿使命完成
-      window.setTimeout(() => navigate('/library'), 800);
-    } catch (err) {
-      notify('err', err instanceof Error ? err.message : '角色卡生成失败');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onCreateWorldbook = async () => {
-    if (!extracted) return;
-    setBusy(true);
-    try {
-      const draft = buildWorldbookDraft(extracted);
-      if (Object.keys(draft.raw.entries).length === 0) {
-        notify('err', '未抽取到背景/势力/矛盾，无法生成世界书');
-        return;
-      }
-      await postJson('/api/worldbooks', draft);
-      notify('ok', '已生成世界书草稿，正在跳转资产库…');
-      clearDraft(); // 成功导入：草稿使命完成
-      window.setTimeout(() => navigate('/library'), 800);
-    } catch (err) {
-      notify('err', err instanceof Error ? err.message : '世界书生成失败');
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -240,6 +201,7 @@ export default function OutlineWizard() {
               type="button"
               onClick={onExtract}
               disabled={!outline.trim()}
+              data-testid="extract-btn"
               className="min-h-[36px] rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-white disabled:opacity-40"
             >
               智能抽取
@@ -249,7 +211,13 @@ export default function OutlineWizard() {
         )}
       </section>
 
-      <ChapterOutlineImport outline={outline} suggestedTitle={titles[0] ?? ''} />
+      <ChapterOutlineImport
+        outline={outline}
+        suggestedTitle={titles[0] ?? ''}
+        characterIds={assets.characterIds}
+        worldbookIds={assets.worldbookIds}
+        onCreated={writeCreatedWorkId}
+      />
 
       {!sheet && ruleResult !== null && (
         <div className="mb-3 flex flex-col gap-2">
@@ -289,8 +257,10 @@ export default function OutlineWizard() {
           onChange={(next) => {
             if (source === 'llm') setLlmResult(next);
           }}
-          onCreateCards={() => void onCreateCards()}
-          onCreateWorldbook={() => void onCreateWorldbook()}
+          importAll={importState}
+          onImportAll={() => void importAll(extracted)}
+          onCreateCards={() => void createCards(extracted)}
+          onCreateWorldbook={() => void createWorldbookOnly(extracted)}
         />
       )}
     </main>

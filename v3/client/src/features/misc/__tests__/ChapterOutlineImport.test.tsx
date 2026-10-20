@@ -124,4 +124,40 @@ describe('ChapterOutlineImport', () => {
     await click(c, 'outline-import-create'); // 确认创建
     expect(c.textContent).toContain('书架已满');
   });
+
+  it('反馈⑥时序A：已建资产 ids 随创建一并传入；onCreated 回调携带 workId', async () => {
+    const onCreated = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    roots.push(root);
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <ChapterOutlineImport
+            outline={THREE_CHAPTERS}
+            suggestedTitle="预填书名"
+            characterIds={['char-a', 'char-b']}
+            worldbookIds={['wb-1']}
+            onCreated={onCreated}
+          />
+        </MemoryRouter>,
+      );
+    });
+    await click(container, 'outline-import-expand');
+    await click(container, 'outline-import-create');
+    const arg = createWorkMock.mock.calls[0]?.[0];
+    expect(arg?.characterIds).toEqual(['char-a', 'char-b']); // 时序A：创建作品即绑定
+    expect(arg?.worldbookIds).toEqual(['wb-1']);
+    expect(onCreated).toHaveBeenCalledWith('w-new'); // 向导持久化 workId（时序B锚点）
+  });
+
+  it('未传 ids：createWork 以空数组创建（不携带旧资产）', async () => {
+    const c = await mount(THREE_CHAPTERS);
+    await click(c, 'outline-import-expand');
+    await click(c, 'outline-import-create');
+    const arg = createWorkMock.mock.calls[0]?.[0];
+    expect(arg?.characterIds).toEqual([]);
+    expect(arg?.worldbookIds).toEqual([]);
+  });
 });
