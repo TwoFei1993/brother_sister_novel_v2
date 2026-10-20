@@ -70,6 +70,37 @@ export function buildOutlinePrompt(text: string): { system: string; user: string
  * 容错解析 LLM 返回中的 JSON 对象：剥完整代码围栏 → 截取首个 { 到最后一个 }
  * （容忍前后杂文）→ JSON.parse；任何一步失败返回 null（raw 由调用方保留展示）。
  */
+/**
+ * 修复 LLM 输出 JSON 的常见致命伤：字符串值内部的裸控制字符（换行/回车/制表）——
+ * pretty-print 换行落在长字符串内部时 JSON.parse 必抛「Bad control character」
+ * （用户 docx 实测：36 章 plot 长值被模型换行，直接解析与 LLM 修复重试双双失败）。
+ * 实现：字符级扫描，跟踪是否在字符串内，字符串内的裸控制字符转义为 \n 等合法形式。
+ */
+function escapeControlCharsInJson(text: string): string {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === '\\') {
+        out += ch + (text[i + 1] ?? '');
+        i += 1;
+        continue;
+      }
+      if (ch === '"') inStr = false;
+      const code = ch.charCodeAt(0);
+      if (code === 0x0a) out += '\\n';
+      else if (code === 0x0d) out += '\\r';
+      else if (code === 0x09) out += '\\t';
+      else out += ch;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    out += ch;
+  }
+  return out;
+}
+
 export function parseJsonLoose<T = unknown>(raw: string): T | null {
   let t = raw.trim();
   if (!t) return null;
@@ -78,10 +109,16 @@ export function parseJsonLoose<T = unknown>(raw: string): T | null {
   const start = t.indexOf('{');
   const end = t.lastIndexOf('}');
   if (start === -1 || end <= start) return null;
+  const slice = t.slice(start, end + 1);
   try {
-    return JSON.parse(t.slice(start, end + 1)) as T;
+    return JSON.parse(slice) as T;
   } catch {
-    return null;
+    // 二次尝试：字符串内裸控制字符转义后重解析（Word 实测反馈③根因修复）
+    try {
+      return JSON.parse(escapeControlCharsInJson(slice)) as T;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -196,11 +233,15 @@ export function sheetEntriesFromLlm(parsed: unknown): CharacterSheetEntry[] {
     const name = asString(rec['name']);
     if (!name) continue;
     const age = rec['age'];
+    // 字段别名兼容（用户 docx 实测）：模型可能回 role=身份、personality=性格描述
+    const identityRaw = asString(rec['identity']) || asString(rec['role']) || asString(rec['title']);
+    const descRaw =
+      asString(rec['description']) || asString(rec['personality']) || asString(rec['appearance']);
     out.push({
       name,
-      identity: asString(rec['identity']),
+      identity: identityRaw,
       group: asString(rec['group']),
-      description: asString(rec['description']),
+      description: descRaw,
       ...(typeof age === 'number' && Number.isFinite(age) ? { age } : {}),
     });
   }
