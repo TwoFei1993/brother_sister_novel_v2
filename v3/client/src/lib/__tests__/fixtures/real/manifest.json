@@ -1,0 +1,694 @@
+{
+  "collectedAt": "2026-10-20",
+  "purpose": "智能抽取解析器乱格式真实语料（人设/大纲/角色设定类）",
+  "count": 58,
+  "totalChars": 288367,
+  "coverage": {
+    "中式古装": [
+      "R01",
+      "R02",
+      "R10",
+      "R40"
+    ],
+    "现代都市": [
+      "R03",
+      "R04",
+      "R34",
+      "R43",
+      "R33"
+    ],
+    "西幻": [
+      "R05",
+      "R52"
+    ],
+    "科幻": [
+      "R06",
+      "R35",
+      "R33"
+    ],
+    "二次元": [
+      "R07",
+      "R46",
+      "R47",
+      "R48",
+      "R56",
+      "R57",
+      "R60"
+    ],
+    "短剧漫剧": [
+      "R19",
+      "R20",
+      "R21",
+      "R22",
+      "R23",
+      "R58",
+      "R59"
+    ],
+    "英文文档": [
+      "R46",
+      "R47",
+      "R48",
+      "R49",
+      "R50",
+      "R52",
+      "R53"
+    ]
+  },
+  "failed": [
+    {
+      "source": "GitHub Rotengar/Obsidian.Character.Vaults 0. Character/Backstory.md",
+      "reason": "raw 路径 curl 404（原计划 R51，编号空缺保留）",
+      "url": "https://github.com/Rotengar/Obsidian.Character.Vaults"
+    },
+    {
+      "source": "萌娘百科 嘉然",
+      "reason": "反爬拦截（WebFetch 仅返回页面标题）",
+      "url": "https://zh.moegirl.org.cn/嘉然"
+    },
+    {
+      "source": "B站专栏《数码编织的挚爱——SillyTavern教程（四）角色卡创建》",
+      "reason": "B站验证码拦截页",
+      "url": "https://www.bilibili.com/opus/1032263314809290761"
+    },
+    {
+      "source": "Fandom wiki 语c洗白/黑话手册",
+      "reason": "HTTP 402 反爬拦截",
+      "url": "https://huogewocidanganchy.fandom.com/zh/wiki/语c洗白/黑话手册（小白必看）"
+    },
+    {
+      "source": "CSDN《AI漫剧全套万能提示词合集》(mo3408)",
+      "reason": "curl 返回 2.2KB 拦截页",
+      "url": "https://blog.csdn.net/mo3408/article/details/163311857"
+    },
+    {
+      "source": "CSDN《国风角色服装设计Prompt完整教程》(qq_46607667)",
+      "reason": "curl 返回 2.3KB 拦截页",
+      "url": "https://blog.csdn.net/qq_46607667/article/details/164152938"
+    },
+    {
+      "source": "66rpg《人物的设定》橙光专题",
+      "reason": "正文为纯图片，无可抽取文本",
+      "url": "https://www.66rpg.com/monthly/xbjc1035"
+    },
+    {
+      "source": "知乎《语C小白课堂》",
+      "reason": "抓回乱码（已作为 R60 第1节 mojibake 样本保留，属部分成功）",
+      "url": "https://zhuanlan.zhihu.com/p/104057156"
+    }
+  ],
+  "fixtures": [
+    {
+      "file": "R01-gudai-quanmo.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/ancient-politics.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "多层markdown",
+        "中英混排字段(id/label)",
+        "提示词模板与叙事规范嵌套"
+      ],
+      "approxChars": 3489
+    },
+    {
+      "file": "R02-lishi.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/historical.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "多层markdown",
+        "YAML风格键值混排"
+      ],
+      "approxChars": 3649
+    },
+    {
+      "file": "R03-dushi.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/urban.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "多层markdown",
+        "配置键(beat_density)混入正文"
+      ],
+      "approxChars": 2660
+    },
+    {
+      "file": "R04-dushi-yanqing.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/urban-romance.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "模板重复结构",
+        "中英编号混用"
+      ],
+      "approxChars": 3303
+    },
+    {
+      "file": "R05-xihuan.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/western-fantasy.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "西幻术语中英混排",
+        "嵌套章节模板"
+      ],
+      "approxChars": 3891
+    },
+    {
+      "file": "R06-khuan-mori.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/scifi-apocalypse.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "科幻设定与节奏规则混排",
+        "长列表"
+      ],
+      "approxChars": 4284
+    },
+    {
+      "file": "R07-erciyuan-zhanshen.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/anime-derivative.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "同源两节拼接(anime-derivative+war-god)",
+        "各自含独立元数据头导致模板重复",
+        "跳号分段"
+      ],
+      "approxChars": 964
+    },
+    {
+      "file": "R08-fanpai.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/character-craft/villain-types.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "反派类型学列表",
+        "无编号条目"
+      ],
+      "approxChars": 1299
+    },
+    {
+      "file": "R09-renshe-geshi.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/format-specs/character-setting-style.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "人设格式规范长文",
+        "嵌套模板+正反例"
+      ],
+      "approxChars": 9333
+    },
+    {
+      "file": "R10-xianxia.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/xianxia.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "仙侠术语密度高",
+        "层级深"
+      ],
+      "approxChars": 3987
+    },
+    {
+      "file": "R12-xuanyi.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modoojunko/awesome-novel-agent/main/knowledge/genre-example/suspense-crime.md",
+      "sourceName": "GitHub modoojunko/awesome-novel-agent（题材档案库）",
+      "traits": [
+        "悬疑刑侦档案",
+        "多层markdown"
+      ],
+      "approxChars": 4456
+    },
+    {
+      "file": "R13-renshe-card-tpl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/wordflowlab/novel-writer/main/.specify/templates/knowledge/character-profiles.md",
+      "sourceName": "GitHub wordflowlab/novel-writer（小说写作模板库）",
+      "traits": [
+        "模板占位符(placeholder)密集",
+        "英文模板字段+中文说明"
+      ],
+      "approxChars": 1509
+    },
+    {
+      "file": "R14-jiaose-shengyin-tpl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/wordflowlab/novel-writer/main/.specify/templates/knowledge/character-voices.md",
+      "sourceName": "GitHub wordflowlab/novel-writer（小说写作模板库）",
+      "traits": [
+        "语气模板",
+        "指令式文体"
+      ],
+      "approxChars": 1617
+    },
+    {
+      "file": "R15-shijieguan-tpl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/wordflowlab/novel-writer/main/.specify/templates/knowledge/world-setting.md",
+      "sourceName": "GitHub wordflowlab/novel-writer（小说写作模板库）",
+      "traits": [
+        "世界观模板",
+        "占位符"
+      ],
+      "approxChars": 977
+    },
+    {
+      "file": "R16-didian-tpl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/wordflowlab/novel-writer/main/.specify/templates/knowledge/locations.md",
+      "sourceName": "GitHub wordflowlab/novel-writer（小说写作模板库）",
+      "traits": [
+        "地点卡模板",
+        "字段名英文"
+      ],
+      "approxChars": 1885
+    },
+    {
+      "file": "R17-luyao-renshe-tpl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/wordflowlab/novel-writer/main/plugins/luyao-style/templates/character-profile.md",
+      "sourceName": "GitHub wordflowlab/novel-writer（小说写作模板库）",
+      "traits": [
+        "路遥风格人设模板",
+        "插件目录结构残留"
+      ],
+      "approxChars": 1976
+    },
+    {
+      "file": "R18-nw-character-expert.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/wordflowlab/novel-writer/main/experts/core/character.md",
+      "sourceName": "GitHub wordflowlab/novel-writer（小说写作模板库）",
+      "traits": [
+        "agent提示词文体",
+        "指令嵌套"
+      ],
+      "approxChars": 1589
+    },
+    {
+      "file": "R19-duanju-renwu-look.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/zenstory-ai/drama-skills/main/skills/short-drama-image-prompts/references/character-and-look.md",
+      "sourceName": "GitHub zenstory-ai/drama-skills（短剧技能与真实运行数据）",
+      "traits": [
+        "短剧人物定妆规范",
+        "正向prompt列表",
+        "JSONL schema引用"
+      ],
+      "approxChars": 3767
+    },
+    {
+      "file": "R20-golden-characters.jsonl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/zenstory-ai/drama-skills/main/examples/golden-project/设定集/characters.jsonl",
+      "sourceName": "GitHub zenstory-ai/drama-skills（短剧技能与真实运行数据）",
+      "traits": [
+        "纯JSONL",
+        "每行一个角色对象",
+        "中文字段值+英文键"
+      ],
+      "approxChars": 2210
+    },
+    {
+      "file": "R21-golden-looks.jsonl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/zenstory-ai/drama-skills/main/examples/golden-project/设定集/looks.jsonl",
+      "sourceName": "GitHub zenstory-ai/drama-skills（短剧技能与真实运行数据）",
+      "traits": [
+        "纯JSONL",
+        "外貌锚点字段",
+        "中英混排值"
+      ],
+      "approxChars": 2044
+    },
+    {
+      "file": "R22-refrun-screenplay.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/zenstory-ai/drama-skills/main/evaluations/让你管账号/reference-run/剧集/EP001/screenplay.md",
+      "sourceName": "GitHub zenstory-ai/drama-skills（短剧技能与真实运行数据）",
+      "traits": [
+        "真实AI运行产物",
+        "剧本+块索引混排"
+      ],
+      "approxChars": 1190
+    },
+    {
+      "file": "R23-refrun-characters.jsonl.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/zenstory-ai/drama-skills/main/evaluations/让你管账号/reference-run/设定集/characters.jsonl",
+      "sourceName": "GitHub zenstory-ai/drama-skills（短剧技能与真实运行数据）",
+      "traits": [
+        "JSONL首行为sources元数据",
+        "真实评测运行数据"
+      ],
+      "approxChars": 1944
+    },
+    {
+      "file": "R24-jiaose-huxing.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/uu201/character-arc/main/resources/skills/Distilled-Novel-Toolbox/novel-character-design/references/character-arc.md",
+      "sourceName": "GitHub uu201/character-arc（Distilled-Novel-Toolbox 技能集）",
+      "traits": [
+        "角色弧光方法条目",
+        "紧凑列表"
+      ],
+      "approxChars": 573
+    },
+    {
+      "file": "R25-zhujue-tags.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/uu201/character-arc/main/resources/skills/Distilled-Novel-Toolbox/novel-character-design/references/protagonist-tags.md",
+      "sourceName": "GitHub uu201/character-arc（Distilled-Novel-Toolbox 技能集）",
+      "traits": [
+        "主角标签库",
+        "顿号分隔密集"
+      ],
+      "approxChars": 475
+    },
+    {
+      "file": "R26-fanpai-moban.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/uu201/character-arc/main/resources/skills/Distilled-Novel-Toolbox/novel-character-design/references/antagonist-templates.md",
+      "sourceName": "GitHub uu201/character-arc（Distilled-Novel-Toolbox 技能集）",
+      "traits": [
+        "反派模板",
+        "编号条目"
+      ],
+      "approxChars": 465
+    },
+    {
+      "file": "R27-peijue.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/uu201/character-arc/main/resources/skills/Distilled-Novel-Toolbox/novel-character-design/references/supporting-roles.md",
+      "sourceName": "GitHub uu201/character-arc（Distilled-Novel-Toolbox 技能集）",
+      "traits": [
+        "配角功能清单"
+      ],
+      "approxChars": 448
+    },
+    {
+      "file": "R28-guanxi-moban.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/uu201/character-arc/main/resources/skills/Distilled-Novel-Toolbox/novel-character-design/references/relationship-patterns.md",
+      "sourceName": "GitHub uu201/character-arc（Distilled-Novel-Toolbox 技能集）",
+      "traits": [
+        "关系模式模板"
+      ],
+      "approxChars": 464
+    },
+    {
+      "file": "R29-dongfang-xuanhuan.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/uu201/character-arc/main/resources/skills/Distilled-Novel-Toolbox/novel-genres/references/eastern-fantasy.md",
+      "sourceName": "GitHub uu201/character-arc（Distilled-Novel-Toolbox 技能集）",
+      "traits": [
+        "东方玄幻题材方法"
+      ],
+      "approxChars": 1104
+    },
+    {
+      "file": "R30-qmai-renshe-biaozhun.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Mochocyang/QMAI/main/skills/SkillHub/JueseSkill/CHARACTER_PROFILE_STANDARD.md",
+      "sourceName": "GitHub Mochocyang/QMAI（角色灵魂系统/档案标准）",
+      "traits": [
+        "角色档案标准长文",
+        "嵌套JSON示例"
+      ],
+      "approxChars": 4400
+    },
+    {
+      "file": "R31-qmai-sheding-biaozhun.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Mochocyang/QMAI/main/skills/SkillHub/SheDingSkill/SETTING_PROFILE_STANDARD.md",
+      "sourceName": "GitHub Mochocyang/QMAI（角色灵魂系统/档案标准）",
+      "traits": [
+        "50KB设定标准",
+        "超长嵌套结构",
+        "模板重复"
+      ],
+      "approxChars": 20843
+    },
+    {
+      "file": "R32-qmai-fenzhi-shuoming.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Mochocyang/QMAI/main/docs/character-skill-分支说明.md",
+      "sourceName": "GitHub Mochocyang/QMAI（角色灵魂系统/档案标准）",
+      "traits": [
+        "工程分支说明与人设系统混杂",
+        "中文标题层级乱"
+      ],
+      "approxChars": 14846
+    },
+    {
+      "file": "R33-fanqie-xigang.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/OldDriverTakeUFly/TomatoXiaoshuo/main/01-大纲与细纲/第一卷-重生·囤货-章节细纲.md",
+      "sourceName": "GitHub OldDriverTakeUFly/TomatoXiaoshuo（番茄小说真实创作仓库）",
+      "traits": [
+        "真实连载章节细纲",
+        "章-节两级编号",
+        "作者手写口语混入"
+      ],
+      "approxChars": 4701
+    },
+    {
+      "file": "R34-fanqie-renwu-ka.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/OldDriverTakeUFly/TomatoXiaoshuo/main/02-设定集/人物卡.md",
+      "sourceName": "GitHub OldDriverTakeUFly/TomatoXiaoshuo（番茄小说真实创作仓库）",
+      "traits": [
+        "真实人物卡",
+        "多角色连续排列易粘连",
+        "bullet/序号混用"
+      ],
+      "approxChars": 3746
+    },
+    {
+      "file": "R35-fanqie-shijieguan.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/OldDriverTakeUFly/TomatoXiaoshuo/main/02-设定集/世界观与系统设定.md",
+      "sourceName": "GitHub OldDriverTakeUFly/TomatoXiaoshuo（番茄小说真实创作仓库）",
+      "traits": [
+        "系统流世界观",
+        "数值设定混排"
+      ],
+      "approxChars": 2766
+    },
+    {
+      "file": "R36-fanqie-xinjiaose.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/OldDriverTakeUFly/TomatoXiaoshuo/main/02-设定集/第二卷-新角色与新势力.md",
+      "sourceName": "GitHub OldDriverTakeUFly/TomatoXiaoshuo（番茄小说真实创作仓库）",
+      "traits": [
+        "卷级增量设定集",
+        "新旧角色混排"
+      ],
+      "approxChars": 3365
+    },
+    {
+      "file": "R37-gushi-shengjing.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/2026811新书/01-故事圣经.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "story bible中文实践",
+        "多节结构"
+      ],
+      "approxChars": 3326
+    },
+    {
+      "file": "R38-shijieguan-sheding.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/2026811新书/02-世界观设定.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "世界观设定",
+        "嵌套列表"
+      ],
+      "approxChars": 2941
+    },
+    {
+      "file": "R39-renwu-ka-zhujue.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/2026811新书/03-人物卡/主角-周平安.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "单人主角卡完整字段"
+      ],
+      "approxChars": 3449
+    },
+    {
+      "file": "R40-renwu-ka-fanpai.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/2026811新书/03-人物卡/反派-剑无涯.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "古风反派卡"
+      ],
+      "approxChars": 1579
+    },
+    {
+      "file": "R41-zong-dagang.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/2026811新书/04-总大纲.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "总大纲",
+        "卷-幕结构"
+      ],
+      "approxChars": 3530
+    },
+    {
+      "file": "R42-fenjuan-dagang.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/2026811新书/05-分卷大纲/第1卷-七天.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "分卷大纲",
+        "章节推进表"
+      ],
+      "approxChars": 4714
+    },
+    {
+      "file": "R43-renwu-ka-chenmo.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/示例-我的差评能要人命/03-人物卡/主角-陈默.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "都市系统文主角卡"
+      ],
+      "approxChars": 1839
+    },
+    {
+      "file": "R44-lixiang-shu.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/2022hpsk/novel/main/作品/示例-我的差评能要人命/00-立项书.md",
+      "sourceName": "GitHub 2022hpsk/novel（真实小说项目：故事圣经/人物卡/大纲）",
+      "traits": [
+        "立项书文体",
+        "卖点列表"
+      ],
+      "approxChars": 1378
+    },
+    {
+      "file": "R45-reading-renwu-ka.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/greenhandzdl/readings/main/demo/card_category/信息型/人物卡.md",
+      "sourceName": "GitHub greenhandzdl/readings（阅读卡片示例）",
+      "traits": [
+        "读书笔记式人物卡",
+        "卡片格式"
+      ],
+      "approxChars": 575
+    },
+    {
+      "file": "R46-st-card-drzenith.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/teknium1/character-cards/main/ai council/drzenith.json",
+      "sourceName": "GitHub teknium1/character-cards（SillyTavern 角色卡集）",
+      "traits": [
+        "纯JSON角色卡",
+        "description内嵌长文本",
+        "转义符污染"
+      ],
+      "approxChars": 1747
+    },
+    {
+      "file": "R47-st-card-literary.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/teknium1/character-cards/main/expert panel/charlotteemerson-literary.json",
+      "sourceName": "GitHub teknium1/character-cards（SillyTavern 角色卡集）",
+      "traits": [
+        "JSON卡",
+        "英文长段落",
+        "\\n转义"
+      ],
+      "approxChars": 1784
+    },
+    {
+      "file": "R48-st-persona-elara.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/bunnywaffle/AI-Persona/main/Elara/Elara.json",
+      "sourceName": "GitHub bunnywaffle/AI-Persona（AI persona 角色卡）",
+      "traits": [
+        "JSON persona",
+        "字段嵌套"
+      ],
+      "approxChars": 1771
+    },
+    {
+      "file": "R49-en-story-bible-char.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/BryanHarrisScripts/24-Blocks/main/General/General - Story Bible - Character.md",
+      "sourceName": "GitHub BryanHarrisScripts/24-Blocks（英文剧本写作方法库）",
+      "traits": [
+        "英文story bible角色模板",
+        "填空字段"
+      ],
+      "approxChars": 3030
+    },
+    {
+      "file": "R50-en-archetypes.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/BryanHarrisScripts/24-Blocks/main/Character/24 Blocks - Character Archetypes.md",
+      "sourceName": "GitHub BryanHarrisScripts/24-Blocks（英文剧本写作方法库）",
+      "traits": [
+        "英文原型理论长文",
+        "多级标题"
+      ],
+      "approxChars": 8857
+    },
+    {
+      "file": "R52-dnd-backstory.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/markdav-is/dnd-lost-ship/main/assets/robin-wood-backstory.md",
+      "sourceName": "GitHub markdav-is/dnd-lost-ship（DnD 跑团战役资产）",
+      "traits": [
+        "英文跑团背景故事",
+        "叙事体设定"
+      ],
+      "approxChars": 2622
+    },
+    {
+      "file": "R53-trpg-pc-sheet.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/jahitchcock/Northwatch-Wardens---HomeBrew-/main/player-characters/perkia-fali.md",
+      "sourceName": "GitHub jahitchcock/Northwatch-Wardens---HomeBrew-（跑团玩家角色卡）",
+      "traits": [
+        "英文玩家角色表",
+        "字段表+自由文本混排"
+      ],
+      "approxChars": 5443
+    },
+    {
+      "file": "R54-zhihu-renshe-tpl.txt",
+      "sourceUrl": "https://zhuanlan.zhihu.com/p/272303126",
+      "sourceName": "知乎专栏《小说人物设定模板参考》（独阳王）",
+      "traits": [
+        "论坛帖口语开头",
+        "A/B/C/D区+半角连字符编号混乱",
+        "reader截断样本"
+      ],
+      "approxChars": 678
+    },
+    {
+      "file": "R55-zhihu-renwu-baodian.txt",
+      "sourceUrl": "https://www.zhihu.com/tardis/bd/art/653190295",
+      "sourceName": "知乎《角色设定怎么做？搭建「人物宝典」》",
+      "traits": [
+        "闲聊开头",
+        "图片占位链接混入",
+        "云文档操作步骤污染设定内容"
+      ],
+      "approxChars": 3477
+    },
+    {
+      "file": "R56-bgm-lelouch.txt",
+      "sourceUrl": "https://bgm.tv/character/1",
+      "sourceName": "bangumi.tv 鲁路修角色页（curl+HTML粗抽取）",
+      "traits": [
+        "HTML碎片残留",
+        "中日英三语别名混排",
+        "页面导航/评论区闲聊污染",
+        "HTML实体(&mdash;)"
+      ],
+      "approxChars": 22897
+    },
+    {
+      "file": "R57-bgm-char2.txt",
+      "sourceUrl": "https://bgm.tv/character/57912",
+      "sourceName": "bangumi.tv galgame角色シアン页",
+      "traits": [
+        "BWH三围/CV字段",
+        "极简infobox",
+        "HTML残留"
+      ],
+      "approxChars": 1172
+    },
+    {
+      "file": "R58-csdn-manju-prompts.txt",
+      "sourceUrl": "https://blog.csdn.net/qq_39735003/article/details/160680812",
+      "sourceName": "CSDN《15种AI漫剧题材人物提示词大全》",
+      "traits": [
+        "VIP付费墙截断",
+        "推荐流噪声混入",
+        "emoji+markdown多层",
+        "正文与相关文章摘要粘连"
+      ],
+      "approxChars": 52375
+    },
+    {
+      "file": "R59-csdn-manju-tifa.txt",
+      "sourceUrl": "https://blog.csdn.net/HH1238389/article/details/162632860",
+      "sourceName": "CSDN《AI漫剧绘画提示词写法》",
+      "traits": [
+        "HTML实体(&#xff1a;)残留",
+        "广告位噪声(好课优选)",
+        "prompt公式列表"
+      ],
+      "approxChars": 38062
+    },
+    {
+      "file": "R60-zhihu-yuc-mojibake.txt",
+      "sourceUrl": "https://zhuanlan.zhihu.com/p/104057156",
+      "sourceName": "知乎《语C小白课堂》+知乎答案《建立小说角色的人设步骤》",
+      "traits": [
+        "真实mojibake乱码样本",
+        "同平台两节拼接",
+        "编码损坏正文"
+      ],
+      "approxChars": 902
+    }
+  ]
+}

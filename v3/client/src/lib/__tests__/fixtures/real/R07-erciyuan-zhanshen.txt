@@ -1,0 +1,81 @@
+来源：GitHub modoojunko/awesome-novel-agent（同源两节拼接：动漫衍生 + 战神赘婿 两套题材档案）
+源链1：https://github.com/modoojunko/awesome-novel-agent/blob/main/knowledge/genre-example/anime-derivative.md
+源链2：https://github.com/modoojunko/awesome-novel-agent/blob/main/knowledge/genre-example/war-god.md
+====
+# 类型档案：动漫衍生
+
+> 游戏、动漫等偏二次元向的同人作品。
+
+- **id:** `anime-derivative`
+- **label:** 动漫衍生
+
+---
+
+## 题材配置
+
+### 满足类型
+- 角色互动
+- 名场面还原
+- 剧情if线
+- cp发糖
+- 战力讨论
+
+
+### 章节类型
+- 主线重绎
+- 日常补全
+- 战斗还原
+- if线展开
+- 角色solo回
+
+
+### 节奏规则
+- max_consecutive_action_chapters: 3
+- max_consecutive_daily_chapters: 2
+- beat_density_min: 1
+
+---
+
+## 卷级故事弧模板
+
+默认：根据原作结构适配
+
+----（以下为同仓库另一档案：战神赘婿）----
+
+# 类型档案：战神赘婿
+
+> 都市向战神、兵王文。
+
+- **id:** `war-god`
+- **label:** 战神赘婿
+
+---
+
+## 题材配置
+
+### 满足类型
+- 身份揭晓
+- 打脸装逼
+- 实力碾压
+- 扮猪吃虎
+- 守护成功
+
+
+### 章节类型
+- 日常装逼
+- 打脸反转
+- 身份揭晓
+- 冲突爆发
+- 战斗碾压
+
+
+### 节奏规则
+- max_consecutive_action_chapters: 3
+- max_consecutive_daily_chapters: 1
+- beat_density_min: 2
+
+---
+
+## 卷级故事弧模板
+
+默认：回归→扮猪→遇事→打脸→升级对手→再打脸→身份揭晓→更高舞台
