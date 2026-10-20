@@ -1,11 +1,13 @@
 /**
- * 向导资产导入 hook（Word 导入实测反馈①⑥）：一键导入/单独建卡建书的状态与编排。
+ * 向导资产导入 hook（Word 导入实测反馈①⑥ + 绑定全时序）：一键导入/单独建卡建书的状态与编排。
  * 反馈①：成功不跳转，就地展示成功清单（已建卡名 + 世界书名 +「前往资产库」链接）。
  * 反馈⑥：已建资产 ids 累计记录（assets）供「创建作品自动绑定」——
  * 时序A：ChapterOutlineImport 创建作品时携带全部 ids；
  * 时序B：本会话先前已创建作品（readCreatedWorkId 锚点）→ 建卡/书成功后自动 PATCH 合并绑定。
+ * 兜底：每次导入成功 writeLastAssets 持久化累计清单（v3-wizard-last-assets）——
+ * 书架建作品/先建作品后导入/刷新等其余时序，由作品设置与新建弹窗读它一键绑定。
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   bindAssetsToWork,
@@ -15,6 +17,7 @@ import {
   mergeAssets,
   readCreatedWorkId,
   writeCreatedWorkId,
+  writeLastAssets,
   EMPTY_ASSETS,
   type ImportedAssets,
 } from './importAll';
@@ -38,30 +41,38 @@ type Notify = (kind: 'ok' | 'err', text: string) => void;
 export function useWizardImports(notify: Notify, onImported?: () => void) {
   const [busy, setBusy] = useState(false);
   const [assets, setAssets] = useState<ImportedAssets>(EMPTY_ASSETS); // 累计（⑥创建作品时携带）
+  const assetsRef = useRef<ImportedAssets>(EMPTY_ASSETS); // 累计镜像（成功后写 localStorage 兜底）
   const [importState, setImportState] = useState<ImportAllState>(INITIAL_STATE);
+
+  /** 累计资产（ref 与 state 同步），返回合并后清单供持久化 */
+  const accumulate = (created: ImportedAssets): ImportedAssets => {
+    assetsRef.current = mergeAssets(assetsRef.current, created);
+    setAssets(assetsRef.current);
+    return assetsRef.current;
+  };
 
   /** 时序B：本会话已创建作品 → 合并绑定本次新建资产，成功后清除锚点 */
   const bindIfWorkExists = async (created: ImportedAssets): Promise<void> => {
     const workId = readCreatedWorkId();
     if (!workId || (created.characterIds.length === 0 && created.worldbookIds.length === 0)) return;
     try {
-      const title = await bindAssetsToWork(workId, {
+      const bound = await bindAssetsToWork(workId, {
         characterIds: created.characterIds,
         worldbookIds: created.worldbookIds,
       });
       writeCreatedWorkId(null);
-      notify('ok', `已自动绑定到作品《${title}》`);
+      notify('ok', `已自动绑定到作品《${bound.title}》`);
     } catch {
       notify('err', '自动绑定作品失败，可稍后在作品设置中手动绑定');
     }
   };
 
-  /** 公共骨架：busy 管理 + 失败转译 + 累计 assets + 时序B绑定；成功返回 true */
+  /** 公共骨架：busy 管理 + 失败转译 + 累计 assets + 兜底持久化 + 时序B绑定；成功返回 true */
   const run = async (action: () => Promise<Partial<ImportedAssets>>): Promise<boolean> => {
     setBusy(true);
     try {
       const created = mergeAssets(EMPTY_ASSETS, await action());
-      setAssets((prev) => mergeAssets(prev, created));
+      writeLastAssets(accumulate(created)); // 统一兜底数据源（其余时序的一键绑定入口读它）
       setImportState((s) => ({ ...s, phase: 'done', progress: null, assets: mergeAssets(s.assets, created) }));
       await bindIfWorkExists(created);
       onImported?.();
@@ -123,9 +134,9 @@ export function useWizardImports(notify: Notify, onImported?: () => void) {
   };
 
   /** 反馈⑥（展板路径）：SheetImportPanel 等外部导入点回传本次创建的 ids——
-   *  累计进 assets（时序A：创建作品时携带）+ 作品已存在时立即 PATCH 绑定（时序B） */
+   *  累计进 assets（时序A）+ 兜底持久化 + 作品已存在时立即 PATCH 绑定（时序B） */
   const recordCreated = async (created: ImportedAssets): Promise<void> => {
-    setAssets((prev) => mergeAssets(prev, created));
+    writeLastAssets(accumulate(created));
     await bindIfWorkExists(created);
   };
 

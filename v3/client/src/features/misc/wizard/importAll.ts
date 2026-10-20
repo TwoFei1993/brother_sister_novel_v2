@@ -9,6 +9,7 @@ import { apiFetch } from '../../../api/client';
 import { getWork, updateWork } from '../../../api/works';
 import { buildCardDraft, buildWorldbookDraft } from '../../../lib/outline/draft';
 import type { ExtractedOutline } from '../../../lib/outline/wizard';
+import type { Work } from '@shared/work';
 
 // ---------- 资产清单（⑥向导顶层状态持久化的数据形状） ----------
 
@@ -87,6 +88,54 @@ export async function importAllAssets(
   };
 }
 
+// ---------- 最近导入资产持久化（绑定全时序的统一兜底数据源） ----------
+
+/** 最近一次导入流程的累计资产（localStorage 持久；跨时序/跨会话兜底绑定用） */
+export interface LastAssets extends ImportedAssets {
+  /** 写入时间戳（毫秒），供「绑定向导最近资产」入口展示时效 */
+  at: number;
+}
+
+const LAST_ASSETS_KEY = 'v3-wizard-last-assets';
+
+/** 导入成功后覆盖写入（传累计资产：单独建卡/建书与一键导入合并后的完整清单） */
+export function writeLastAssets(assets: ImportedAssets): void {
+  try {
+    localStorage.setItem(LAST_ASSETS_KEY, JSON.stringify({ ...assets, at: Date.now() }));
+  } catch {
+    /* 存储不可用时静默（绑定兜底仅为体验增强） */
+  }
+}
+
+/** 读取最近导入资产；解析失败/结构不符返回 null（旧版本数据或脏数据自愈） */
+export function readLastAssets(): LastAssets | null {
+  try {
+    const raw = localStorage.getItem(LAST_ASSETS_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Partial<LastAssets> | null;
+    if (typeof v !== 'object' || v === null) return null;
+    const isStrList = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === 'string');
+    if (!isStrList(v.characterIds) || !isStrList(v.characterNames) || !isStrList(v.worldbookIds) || !isStrList(v.worldbookNames)) {
+      return null;
+    }
+    if (typeof v.at !== 'number') return null;
+    return {
+      characterIds: v.characterIds,
+      characterNames: v.characterNames,
+      worldbookIds: v.worldbookIds,
+      worldbookNames: v.worldbookNames,
+      at: v.at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 合并去重保序（既有在前、新增追加去重）：绑定合并与创建携带共用的纯函数 */
+export function mergeIdLists(existing: string[], added: string[]): string[] {
+  return [...new Set([...existing, ...added])];
+}
+
 // ---------- 时序B：作品已存在时自动绑定 ----------
 
 /**
@@ -112,16 +161,15 @@ export function writeCreatedWorkId(id: string | null): void {
   }
 }
 
-/** 把本次创建的资产合并绑定进已有作品（GET revision → PATCH 去重合并）；返回作品标题供提示 */
+/** 把资产合并绑定进已有作品（GET revision → PATCH 去重合并，保留已有绑定）；返回更新后的 Work */
 export async function bindAssetsToWork(
   workId: string,
   assets: { characterIds: string[]; worldbookIds: string[] },
-): Promise<string> {
+): Promise<Work> {
   const work = await getWork(workId);
-  const merged = await updateWork(work.id, {
+  return updateWork(work.id, {
     revision: work.revision,
-    characterIds: [...new Set([...work.characterIds, ...assets.characterIds])],
-    worldbookIds: [...new Set([...work.worldbookIds, ...assets.worldbookIds])],
+    characterIds: mergeIdLists(work.characterIds, assets.characterIds),
+    worldbookIds: mergeIdLists(work.worldbookIds, assets.worldbookIds),
   });
-  return merged.title;
 }

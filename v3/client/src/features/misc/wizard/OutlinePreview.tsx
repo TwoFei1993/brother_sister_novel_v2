@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 
 import type { ExtractedOutline } from '../../../lib/outline/wizard';
 import { canImportAll, type ImportedAssets } from './importAll';
+import BindToWorkControl from './BindToWorkControl';
 
 /** 一键导入状态（父级 OutlineWizard 管理，本组件纯展示） */
 export interface ImportAllState {
@@ -208,6 +209,7 @@ export default function OutlinePreview({
             <Link to="/library" data-testid="goto-library" className="text-xs underline underline-offset-4">
               前往资产库查看 →
             </Link>
+            <BindToWorkControl assets={assets} />
           </div>
         )}
         {phase === 'error' && <p role="alert" className="text-sm text-red-400">{message}</p>}

@@ -15,6 +15,7 @@ import VoiceMapEditor from '../tts/VoiceMapEditor';
 
 import WorkBindingsEditor from './dialog/WorkBindingsEditor';
 import WorkOutlineSection from './WorkOutlineSection';
+import WizardAssetsBind from './WizardAssetsBind';
 import StyleClonePanel from './dialog/StyleClonePanel';
 
 /** 数字输入兜底：空串/非法值回退 fallback，最小 1（防 PATCH 出非法设置值） */
@@ -183,6 +184,9 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
 
           {/* 章节大纲（反馈⑦）：完整可滚动可编辑列表 + 导入覆盖，独立 PATCH（乐观锁） */}
           <WorkOutlineSection work={work} onSaved={onSaved} />
+
+          {/* 绑定向导最近资产（用户实测反馈⑥追问）：一键把向导最近导入的卡/书合并绑到本作品 */}
+          <WizardAssetsBind work={work} onSaved={onSaved} />
 
           <section className="flex items-center justify-between gap-3">
             <div>
