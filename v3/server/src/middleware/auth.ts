@@ -96,8 +96,9 @@ authRouter.post('/login', zodBody(loginSchema), (req, res) => {
   res.cookie(COOKIE_NAME, signToken(), {
     httpOnly: true,
     sameSite: 'lax',
-    // 生产仅经 HTTPS 传输；本地 http dev（NODE_ENV 未设/development）不启用以免登录失效（review #14）
-    secure: process.env.NODE_ENV === 'production',
+    // Secure 跟随实际请求协议（req.secure + trust proxy）：HTTPS 部署带 Secure，
+    // HTTP 直连部署（如 IP:3001）不带——否则浏览器在 http 下不回传 cookie，登录后全 401
+    secure: req.secure,
     path: '/',
     maxAge: TOKEN_TTL_MS,
   });

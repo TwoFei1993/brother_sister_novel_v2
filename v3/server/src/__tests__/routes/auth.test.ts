@@ -114,3 +114,26 @@ describe('POST /api/auth/logout（D5 登出）', () => {
     expect(res.body).toEqual({ ok: true });
   });
 });
+
+
+describe('cookie Secure 标记随请求协议（HTTP 直连部署登录可用）', () => {
+  it('HTTP 请求（req.secure=false）→ Set-Cookie 不含 Secure，浏览器可回传', async () => {
+    const res = await request(createApp())
+      .post('/api/auth/login')
+      .send({ password: 'test123' });
+    expect(res.status).toBe(200);
+    const setCookie = Array.isArray(res.headers['set-cookie']) ? res.headers['set-cookie'].join('; ') : String(res.headers['set-cookie'] ?? '');
+    expect(setCookie).toContain('token=');
+    expect(setCookie).not.toContain('Secure');
+  });
+
+  it('HTTPS 请求（X-Forwarded-Proto=https + trust proxy）→ Set-Cookie 含 Secure', async () => {
+    const res = await request(createApp())
+      .post('/api/auth/login')
+      .set('X-Forwarded-Proto', 'https')
+      .send({ password: 'test123' });
+    const setCookie = Array.isArray(res.headers['set-cookie']) ? res.headers['set-cookie'].join('; ') : String(res.headers['set-cookie'] ?? '');
+    expect(setCookie).toContain('token=');
+    expect(setCookie).toContain('Secure');
+  });
+});

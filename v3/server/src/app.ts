@@ -5,7 +5,7 @@
  * → 探活 → API 路由组 → 404 → 统一错误处理（zod/HttpError→400，其余→500 人话）
  */
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, {
   type Express,
@@ -60,6 +60,8 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  // 反代（caddy/nginx）后识别 X-Forwarded-Proto，使 req.secure/cookie Secure 判定正确
+  app.set('trust proxy', 1);
   app.use(httpLogger);
   app.use(express.json({ limit: '50mb' }));
 
@@ -94,6 +96,18 @@ export function createApp(): Express {
   app.use('/api', llmRouter);     // llm/ 生成代理（SSE）+ 探活 + tokenize（Task 17）
   app.use('/api/extract', extractRouter); // extract/ Word 文档文本提取（向导导入）
   // ---- 后续任务预留挂载位 ----
+
+  // SPA 历史回退：非 API/静态资源且无扩展名的 GET → index.html（react-router 深链接/刷新；
+  // 生产构建存在才挂，开发期 Vite dev 自带回退）。带扩展名的资源缺失仍走 404。
+  if (existsSync(PUBLIC_DIR)) {
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/data-assets') || extname(req.path)) {
+        next();
+        return;
+      }
+      res.sendFile(resolve(PUBLIC_DIR, 'index.html'));
+    });
+  }
 
   app.use(notFound);
   app.use(errorHandler);
