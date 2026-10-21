@@ -65,6 +65,11 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     (text) => useGenerationStore.getState().appendChunk(text),
     opts.pace ? 24 : 0,
   );
+  // 思考流匀速（推理模型思考期可达数十秒）：实时可视化避免「卡死」体感；novel 走打字机、chat 直通
+  const thinkingPacer = new TypewriterPacer(
+    (text) => useGenerationStore.getState().appendThinking(text),
+    opts.pace ? 24 : 0,
+  );
 
   try {
     const { body, finalize } = await opts.prepare({ prefs, startedAt });
@@ -80,8 +85,8 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
               chunksReceived += 1;
               pacer.push(text);
             },
-            // 思考流累积（D4）：不走打字机直接进 thinkingBuffer，finalize 时优先入 extra.rawThinking
-            onThinking: (thinking) => useGenerationStore.getState().appendThinking(thinking),
+            // 思考流累积（D4）：经思考打字机匀速进 thinkingBuffer，finalize 时优先入 extra.rawThinking
+            onThinking: (thinking) => thinkingPacer.push(thinking),
             onDone: () => undefined,
             onError: (e) => {
               streamError = toGenerationError(e); // 流中错误帧：中止读取，统一走 catch
@@ -105,12 +110,13 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     }
 
     // 等缓冲区逐字吐完再收尾：buffer 只含已显示文字，最后一屏不会突然弹出
-    await pacer.drained();
+    await Promise.all([pacer.drained(), thinkingPacer.drained()]);
 
     // ---------- 完成收尾（novel=章节入库 / chat=成对入库，由 finalize 委托） ----------
     return await finalize();
   } catch (err) {
     pacer.flushSync(); // 停止/出错时把已收到未显示的内容一次性补进 buffer，partialKept 不丢字
+    thinkingPacer.flushSync();
     const ge = err instanceof GenerationFlowError ? err.ge : toGenerationError(err);
     const partialKept = chunksReceived > 0 || opts.initialBuffer.length > 0;
     if (ge.code === 'aborted' && streamError === null) {
@@ -121,6 +127,7 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     return null;
   } finally {
     pacer.stop();
+    thinkingPacer.stop();
     opts.bindController(null);
   }
 }

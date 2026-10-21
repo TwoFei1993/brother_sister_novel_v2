@@ -71,7 +71,9 @@ export default function CommandBar({
   const [outlinePanelOpen, setOutlinePanelOpen] = useState(false);
   const [outlineLimit, setOutlineLimit] = useState(3);
   // 思考流实时指示（推理模型点击后先思考几十秒才出正文，可视化避免「卡死」体感）
-  const thinkingLen = useGenerationStore((s) => s.thinkingBuffer.length);
+  const thinkingBuffer = useGenerationStore((s) => s.thinkingBuffer);
+  const thinkingLen = thinkingBuffer.length;
+  const thinkingTail = thinkingBuffer.replace(/\s+/g, ' ').slice(-110);
 
   // 外部指令复填：注入输入框后立即回调复位（允许同一指令再次点击重新注入）
   useEffect(() => {
@@ -116,14 +118,14 @@ export default function CommandBar({
             >
               ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
             </button>
-            {/* 推理模型点击后先思考几十秒才出正文——实时显示思考量，消除「卡死」体感 */}
+            {/* 推理模型思考期可视化：滚动显示思考尾部（思考打字机），消除「卡死」体感 */}
             {thinkingLen > 0 && (
               <span
                 data-testid="thinking-indicator"
-                className="flex items-center gap-1 whitespace-nowrap text-xs text-[hsl(var(--fg-muted))]"
+                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-xs text-[hsl(var(--fg-muted))] sm:flex-none sm:max-w-md"
               >
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
-                💭 思考中 {thinkingLen} 字
+                <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+                <span className="truncate">💭 {thinkingTail}</span>
               </span>
             )}
           </>
