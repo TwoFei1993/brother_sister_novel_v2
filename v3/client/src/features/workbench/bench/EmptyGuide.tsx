@@ -11,6 +11,7 @@ import type { Work } from '@shared/work';
 import { upsertMessage } from '../../../api/works';
 import { loadAssembleAssets } from '../../../hooks/generation-pipeline';
 
+import { uuid } from '../../../lib/uuid';
 interface EmptyGuideProps {
   work: Work;
   onCreated: (m: Message) => void;
@@ -35,7 +36,7 @@ export default function EmptyGuide({ work, onCreated }: EmptyGuideProps) {
   async function importGreeting(text: string): Promise<void> {
     setImporting(true);
     const message: Message = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       role: 'assistant',
       name: '小说家',
       content: text,

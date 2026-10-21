@@ -12,6 +12,7 @@ import type { Message, MessageExtra } from '@shared/message';
 
 import { ApiError } from '../api/client';
 
+import { uuid } from '../lib/uuid';
 export interface GenerationError {
   code: string;
   message: string;
@@ -161,7 +162,7 @@ export function buildChapterMessage(input: ChapterMessageInput): Message {
     ...(input.rawThinking ? { rawThinking: input.rawThinking } : {}),
   };
   return {
-    id: input.id ?? crypto.randomUUID(),
+    id: input.id ?? uuid(),
     role: 'assistant',
     name: '小说家',
     content: input.content,

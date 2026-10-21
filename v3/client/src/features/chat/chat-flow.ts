@@ -36,6 +36,7 @@ import {
   type PendingVars,
 } from '../../hooks/generation-pipeline';
 
+import { uuid } from '../../lib/uuid';
 /** chat 宏环境（§4.3/§5.1③）：char=本次激活角色、user=「用户」。
  *  复用 buildMacroEnv 的变量读写管线，仅覆盖 chat 语义 persona。 */
 export function buildChatMacroEnv(work: Work, speaker: ChatMember, pending: PendingVars): MacroEnv {
@@ -45,7 +46,7 @@ export function buildChatMacroEnv(work: Work, speaker: ChatMember, pending: Pend
 /** 用户对话消息（§4.2）：role=user / name=「用户」/ swipes=[text] */
 export function buildUserTurn(text: string): Message {
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     role: 'user',
     name: '用户',
     content: text,
@@ -59,7 +60,7 @@ export function buildUserTurn(text: string): Message {
 /** AI 回复消息（chat 语义）：无 chapter 元数据，name=激活角色 */
 function buildAssistantTurn(input: { content: string; speakerName: string; extra: MessageExtra }): Message {
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     role: 'assistant',
     name: input.speakerName,
     content: input.content,

@@ -32,6 +32,7 @@ import {
   type ChatTurn,
 } from './chat-flow';
 
+import { uuid } from '../../lib/uuid';
 /** 单次生成编排参数（targetId 预生成 uuid 作入库幂等键；重试专用字段见 ChatRunOptions） */
 type RunOptions = ChatRunOptions;
 
@@ -131,7 +132,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
   const sendMessage = useCallback(
     (userText: string, speaker: ChatMember, sendOpts?: { implicit?: boolean; otherNames?: string[] }) =>
       runChatWithMetaRetry(run, messagesRef.current, userText, speaker, {
-        targetId: crypto.randomUUID(),
+        targetId: uuid(),
         initialBuffer: '',
         ...(sendOpts?.implicit ? { implicitUser: true } : {}),
         otherNames: sendOpts?.otherNames,
@@ -141,7 +142,7 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
 
   const continueFromPartial = useCallback(
     (partial: string, userText: string, speaker: ChatMember, opts?: { otherNames?: string[] }) => {
-      const targetId = useGenerationStore.getState().targetMessageId ?? crypto.randomUUID();
+      const targetId = useGenerationStore.getState().targetMessageId ?? uuid();
       return runChatWithMetaRetry(run, messagesRef.current, userText, speaker, { targetId, initialBuffer: partial, otherNames: opts?.otherNames });
     },
     [run],

@@ -24,6 +24,7 @@ import { NewPromptForm, PasteImportForm } from './PromptForms';
 import { describePrompt, isSudachiPreset } from './guides/preset-guides';
 import SudachiGuideCard from './guides/SudachiGuideCard';
 
+import { uuid } from '../../../lib/uuid';
 /** 一期装配感知的 marker 集（与 assemble.ts blocks 键一致 + 常见占位符） */
 const MARKER_IDS = new Set([
   'main', 'chatHistory', 'worldInfoBefore', 'worldInfoAfter',
@@ -161,10 +162,7 @@ export default function PromptManager({ presetId, onImportedNew, notify }: Promp
   };
 
   const handleCreate = (input: Pick<TavernPrompt, 'name' | 'content' | 'role'>) => {
-    const identifier =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const identifier = uuid();
     patchRaw((draft) => ({
       ...draft,
       prompts: [...draft.prompts, { marker: false, ...input, identifier }],

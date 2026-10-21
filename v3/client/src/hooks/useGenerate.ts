@@ -39,6 +39,7 @@ import {
   type PendingVars,
 } from './generation-pipeline';
 
+import { uuid } from '../lib/uuid';
 /** 单次生成的编排参数（targetId 预生成 uuid 作入库幂等键） */
 interface RunOptions {
   targetId: string;
@@ -180,7 +181,7 @@ export function useGenerate(): UseGenerateResult {
     async (work: Work, messages: Message[], directive: string) => {
       // 重试复用同一 targetId：入库按 messageId 幂等 upsert，重试结果覆盖首次无效行
       //（否则首次残章/崩溃行以孤儿形式留在库里，重载后出现垃圾章节）
-      const targetId = crypto.randomUUID();
+      const targetId = uuid();
       let msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
       const reason = invalidReasonOf(msg);
       if (msg && reason) {
@@ -201,7 +202,7 @@ export function useGenerate(): UseGenerateResult {
 
   const continueFromPartial = useCallback(
     (work: Work, messages: Message[], partial: string) => {
-      const targetId = useGenerationStore.getState().targetMessageId ?? crypto.randomUUID();
+      const targetId = useGenerationStore.getState().targetMessageId ?? uuid();
       return run(work, messages, buildContinueDirective(partial), { targetId, initialBuffer: partial });
     },
     [run],
