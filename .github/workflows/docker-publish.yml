@@ -60,3 +60,26 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 国内服务器快速拉取：同步推送到腾讯云镜像仓库（TCR 个人版，免费）
+      # 启用条件（三步）：① Actions Variables 添加 TCR_ENABLED=true、TCR_NAMESPACE=<你的命名空间>
+      # ② Secrets 添加 TCR_USERNAME / TCR_PASSWORD（TCR 控制台「访问凭证」生成）
+      # ③ TCR 控制台先创建同名命名空间；不配置则本步自动跳过（走 GHCR）
+      - name: Login to Tencent TCR
+        if: vars.TCR_ENABLED == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ccr.ccs.tencentyun.com
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Push to Tencent TCR
+        if: vars.TCR_ENABLED == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./v3
+          file: ./v3/Dockerfile
+          push: true
+          tags: ccr.ccs.tencentyun.com/${{ vars.TCR_NAMESPACE }}/brother_sister_novel_v2:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
