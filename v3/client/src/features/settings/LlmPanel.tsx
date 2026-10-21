@@ -88,6 +88,22 @@ export default function LlmPanel() {
           留空时「测试连接」会用各通道的内置探活小模型；正式生成前请填写。
         </p>
 
+        {/* 思考模式（D4）：claude 通道开启上游思考流，💭折叠才有真实内容 */}
+        <label className="mb-4 flex min-h-[36px] cursor-pointer items-center gap-3 rounded-lg border border-[hsl(var(--border-soft))] px-3 py-2.5 has-checked:border-[hsl(var(--accent))] has-checked:bg-[hsl(var(--accent))]/10">
+          <input
+            type="checkbox"
+            checked={llmPrefs.thinking !== false}
+            onChange={(e) => setLlmPrefs({ thinking: e.target.checked })}
+            className="h-4 w-4 accent-[hsl(var(--accent))]"
+          />
+          <span className="flex flex-col">
+            <span className="text-sm font-medium">💭 思考模式（Claude 通道）</span>
+            <span className="text-xs text-[hsl(var(--fg-muted))]">
+              开启后 MiniMax-M3 等思考模型先思考再写作，章节头的💭折叠可见思考过程；会多消耗部分 tokens。
+            </span>
+          </span>
+        </label>
+
         <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-temperature">

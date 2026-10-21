@@ -80,6 +80,8 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
               chunksReceived += 1;
               pacer.push(text);
             },
+            // 思考流累积（D4）：不走打字机直接进 thinkingBuffer，finalize 时优先入 extra.rawThinking
+            onThinking: (thinking) => useGenerationStore.getState().appendThinking(thinking),
             onDone: () => undefined,
             onError: (e) => {
               streamError = toGenerationError(e); // 流中错误帧：中止读取，统一走 catch

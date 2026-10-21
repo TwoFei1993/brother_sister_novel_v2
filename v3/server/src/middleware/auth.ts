@@ -107,3 +107,16 @@ authRouter.post('/login', zodBody(loginSchema), (req, res) => {
 authRouter.get('/check', authRequired, (_req, res) => {
   res.json({ ok: true });
 });
+
+authRouter.post('/logout', (_req, res) => {
+  // 无状态 HMAC 设计（§6）：服务端不存会话，登出 = 下发过期 Set-Cookie 覆盖浏览器侧
+  // token（path/secure 与签发时一致才能正确覆盖）；已签发 token 在 TTL 内仍自洽有效，
+  // 单实例单密码场景可接受。200 恒定返回（重复登出幂等）。
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+  });
+  res.json({ ok: true });
+});

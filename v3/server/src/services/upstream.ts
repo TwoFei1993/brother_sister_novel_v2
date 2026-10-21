@@ -78,10 +78,10 @@ interface OpenAiChunk {
 }
 interface ClaudeChunk {
   type?: string;
-  delta?: { type?: string; text?: string };
+  delta?: { type?: string; text?: string; thinking?: string };
 }
 interface GeminiChunk {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
 }
 interface OpenAiFull {
   choices?: Array<{ message?: { content?: string } }>;
@@ -92,6 +92,8 @@ interface ClaudeFull {
 
 export interface DeltaResult {
   text: string;
+  /** 思考流增量（D4：claude thinking_delta / gemini thought part）；无思考时缺省 */
+  thinking?: string;
   done: boolean;
 }
 
@@ -107,11 +109,29 @@ export function extractStreamDelta(source: LlmSource, json: Record<string, unkno
     if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
       return { text: chunk.delta.text ?? '', done: false };
     }
+    // 思考流增量（D4）：官方协议为 delta.type='thinking_delta' 且内容在 delta.thinking；
+    // 部分兼容实现写作 'thinking'，一并接受。MiniMax M3（anthropic 兼容通道）的真实主路径。
+    if (
+      chunk.type === 'content_block_delta' &&
+      (chunk.delta?.type === 'thinking_delta' || chunk.delta?.type === 'thinking')
+    ) {
+      return { text: '', thinking: chunk.delta.thinking ?? '', done: false };
+    }
+    // message_delta 官方语义只带 stop_reason/usage；兼容实现若内嵌 thinking 同样透传
+    if (chunk.type === 'message_delta' && typeof chunk.delta?.thinking === 'string') {
+      return { text: '', thinking: chunk.delta.thinking, done: false };
+    }
     return { text: '', done: false };
   }
-  // gemini：candidates[0].content.parts[].text 合并
+  // gemini：candidates[0].content.parts[] 合并；thought:true 的 part 是思考流（不混入正文）
   const parts = (json as GeminiChunk).candidates?.[0]?.content?.parts ?? [];
-  return { text: parts.map((p) => p.text ?? '').join(''), done: false };
+  let text = '';
+  let thinking = '';
+  for (const p of parts) {
+    if (p.thought === true) thinking += p.text ?? '';
+    else text += p.text ?? '';
+  }
+  return thinking ? { text, thinking, done: false } : { text, done: false };
 }
 
 /** 非流式完整响应 → 全文（openai message.content / claude content[].text 合并 / gemini parts 合并） */

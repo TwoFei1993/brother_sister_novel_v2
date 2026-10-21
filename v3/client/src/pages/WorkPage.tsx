@@ -15,6 +15,7 @@ import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDra
 import WorkSettingsSheet from '../features/workbench/WorkSettingsSheet';
 import WorkViewRouter from '../features/workbench/WorkViewRouter';
 import { useGenerate } from '../hooks/useGenerate';
+import { useLogout } from '../hooks/useLogout';
 import { useWorkTheme } from '../lib/theme';
 import { useWorkStore } from '../stores/work';
 import type { Message } from '@shared/message';
@@ -73,6 +74,7 @@ export default function WorkPage() {
   const { work, messages, loading, loadError, hasMore, loadingOlder, loadWork, loadOlder, setWork } =
     useWorkStore();
   const gen = useGenerate();
+  const logout = useLogout();
   // 题材→主题：作品挂载时按 genre 换肤，离开还原默认暗色基调（Task 32）
   useWorkTheme(work?.genre ?? 'hunhe');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -156,6 +158,17 @@ export default function WorkPage() {
           aria-label="作品设置"
         >
           ⚙
+        </button>
+        {/* 退出（D5）：POST logout 清服务端 cookie + 本地会话态，跳 /login */}
+        <button
+          type="button"
+          data-testid="logout-btn"
+          onClick={() => void logout()}
+          className={iconBtn}
+          title="退出登录"
+          aria-label="退出登录"
+        >
+          ⏻
         </button>
       </header>
 

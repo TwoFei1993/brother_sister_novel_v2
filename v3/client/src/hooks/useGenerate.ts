@@ -121,6 +121,7 @@ export function useGenerate(): UseGenerateResult {
             messages: fitted.messages,
             temperature: prefs.temperature,
             maxTokens: prefs.maxTokens,
+            thinking: prefs.thinking !== false, // D4：缺省视为开（老用户 localStorage 无此字段也有💭）
           });
           return {
             body,

@@ -90,3 +90,27 @@ describe('GET /api/auth/check（authRequired 中间件）', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('POST /api/auth/logout（D5 登出）', () => {
+  it('登录后 logout → 200 + Set-Cookie 下发过期 token，随后 check 401（cookie jar 已清）', async () => {
+    const app = createApp();
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'test123' });
+    const before = await agent.get('/api/auth/check');
+    expect(before.status).toBe(200); // 登录态就绪
+    const logout = await agent.post('/api/auth/logout');
+    expect(logout.status).toBe(200);
+    expect(logout.body).toEqual({ ok: true });
+    const setCookie = String(logout.headers['set-cookie']);
+    expect(setCookie).toContain('token='); // 覆盖同名 cookie
+    expect(/expires=Thu, 01 Jan 1970|max-age=0/i.test(setCookie)).toBe(true); // 过期标记
+    const after = await agent.get('/api/auth/check');
+    expect(after.status).toBe(401); // agent cookie jar 应用了过期 Set-Cookie → 登录态终止
+  });
+
+  it('未登录直接 logout → 200 幂等（不因无 cookie 报错）', async () => {
+    const res = await request(createApp()).post('/api/auth/logout');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+  });
+});

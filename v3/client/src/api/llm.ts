@@ -22,6 +22,8 @@ export interface GenerateParams {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  /** 思考模式（D4）：true = claude 通道开启上游思考流（MiniMax M3 等默认关闭需显式开启） */
+  thinking?: boolean;
 }
 
 /** POST /api/llm/generate 请求体 */
@@ -39,6 +41,8 @@ export interface BuildGenerateBodyInput {
   messages: GenerateMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** 思考模式开关（prefs.thinking !== false 由调用方判定；老用户 localStorage 缺省 = 开） */
+  thinking?: boolean;
   stream?: boolean;
 }
 
@@ -47,6 +51,7 @@ export function buildGenerateBody(input: BuildGenerateBodyInput): GenerateBody {
   const params: GenerateParams = {};
   if (input.temperature !== undefined) params.temperature = input.temperature;
   if (input.maxTokens !== undefined) params.max_tokens = input.maxTokens;
+  if (input.thinking === true) params.thinking = true;
   return {
     source: input.source,
     model: input.model,
@@ -65,15 +70,18 @@ export interface LlmStreamError {
 export interface StreamHandlers {
   /** 收到一段增量文本 */
   onChunk: (text: string) => void;
+  /** 思考流增量（D4：server thinking 帧；MiniMax M3 等思考模型的💭折叠数据源）。缺省时忽略 */
+  onThinking?: (thinking: string) => void;
   /** 流正常结束（收到 [DONE]），恰一次；断流（streamIncomplete）不触发 */
   onDone: () => void;
   /** 收到流中错误帧 */
   onError: (error: LlmStreamError) => void;
 }
 
-/** SSE 帧形状（text 与 error 互斥） */
+/** SSE 帧形状（text/thinking 可同帧共存，与 error 互斥） */
 interface SseFrame {
   text?: unknown;
+  thinking?: unknown;
   error?: { code?: unknown; message?: unknown };
 }
 
@@ -90,6 +98,9 @@ export async function generateStream(
         message: typeof frame.error.message === 'string' ? frame.error.message : '上游未知错误',
       });
       return;
+    }
+    if (typeof frame.thinking === 'string' && frame.thinking.length > 0) {
+      handlers.onThinking?.(frame.thinking);
     }
     if (typeof frame.text === 'string' && frame.text.length > 0) {
       handlers.onChunk(frame.text);

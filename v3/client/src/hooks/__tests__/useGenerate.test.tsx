@@ -318,3 +318,51 @@ describe('useGenerate（元信息残章自动重试——质检T4「第二次消
     expect(calls.filter((c) => c.path === '/api/works/w1/messages')).toHaveLength(0); // 占位不入库
   });
 });
+
+describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容）', () => {
+  it('thinking 帧 → runtime 累积 thinkingBuffer → finalize 优先写入 extra.rawThinking，正文干净', async () => {
+    stubDefaultRoute([
+      'data: {"thinking":"先想兄妹动机：是复仇还是逃离。"}\n\n',
+      'data: {"thinking":"选逃离，留悬念。"}\n\n',
+      'data: {"text":"# 第1章 雨夜\\n妹妹攥紧了哥哥的袖口。"}\n\n',
+      'data: [DONE]\n\n',
+    ]);
+    await renderHook();
+    let result: Message | null = null;
+    await act(async () => {
+      result = await latest!.generateChapter(baseWork(), [], '写第一章');
+    });
+    expect(result).not.toBeNull();
+    // 流式累积的思考优先入库（MiniMax M3 不写 <think> 标签，这是💭折叠的唯一真实数据源）
+    expect(result!.extra.rawThinking).toBe('先想兄妹动机：是复仇还是逃离。选逃离，留悬念。');
+    expect(result!.content).not.toContain('先想兄妹动机'); // 思考不混入正文
+    expect(result!.content).toContain('妹妹攥紧了哥哥的袖口。');
+    // store 收束：finish+reset 后 thinkingBuffer 一并复位（不串味到下一章）
+    expect(useGenerationStore.getState().thinkingBuffer).toBe('');
+  });
+
+  it('正文内嵌 <think> 标签仍走 extractThinking 兜底；流式+标签同时存在时拼接不丢内容', async () => {
+    stubDefaultRoute([
+      'data: {"thinking":"流式思考"}\n\n',
+      'data: {"text":"<think>标签思考</think>正文开始。"}\n\n',
+      'data: [DONE]\n\n',
+    ]);
+    await renderHook();
+    let result: Message | null = null;
+    await act(async () => {
+      result = await latest!.generateChapter(baseWork(), [], '写第一章');
+    });
+    expect(result!.extra.rawThinking).toBe('流式思考\n\n标签思考');
+    expect(result!.content).toBe('正文开始。'); // 标签剥离干净
+  });
+
+  it('无 thinking 帧且正文无标签 → extra.rawThinking 不落空串（字段缺省）', async () => {
+    stubDefaultRoute(['data: {"text":"纯净正文。"}\n\n', 'data: [DONE]\n\n']);
+    await renderHook();
+    let result: Message | null = null;
+    await act(async () => {
+      result = await latest!.generateChapter(baseWork(), [], '写第一章');
+    });
+    expect(result!.extra.rawThinking).toBeUndefined();
+  });
+});

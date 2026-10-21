@@ -79,6 +79,86 @@ describe('POST /api/llm/generate 流式（SSE）', () => {
     );
   });
 
+  it('claude thinking_delta（D4）：上游思考帧透传为 SSE {"thinking":…}，正文帧形状不变（MiniMax M3 主路径）', async () => {
+    await withUpstream(
+      (req, res, raw) => {
+        // thinking:true → 服务端组装 extended-thinking 参数开启上游思考（MiniMax 默认关闭）
+        const body = JSON.parse(raw) as { thinking?: { type?: string; budget_tokens?: number } };
+        expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 }); // max_tokens 8192 → 一半
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        // 官方协议：content_block_delta + delta.type='thinking_delta'，内容在 delta.thinking
+        res.write(
+          `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '先想兄妹动机：' } })}\n\n`,
+        );
+        // 部分兼容实现写作 delta.type='thinking'
+        res.write(
+          `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'thinking', thinking: '复仇还是逃离' } })}\n\n`,
+        );
+        // 正文不受影响
+        res.write(
+          `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: '雨夜。' } })}\n\n`,
+        );
+        res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
+        res.end();
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send({
+            ...GEN_BODY,
+            source: 'claude',
+            model: 'MiniMax-M3',
+            params: { max_tokens: 8192, thinking: true },
+          });
+        const frames = sseFrames(res.text);
+        const parse = (f: string): Record<string, unknown> => JSON.parse(f) as Record<string, unknown>;
+        expect(parse(frames[0]!)).toEqual({
+          thinking: '先想兄妹动机：',
+          raw: expect.anything(),
+        }); // 纯思考帧：只带 thinking 不带 text
+        expect(parse(frames[1]!)).toEqual({ thinking: '复仇还是逃离', raw: expect.anything() });
+        expect(parse(frames[2]!)).toEqual({ text: '雨夜。', raw: expect.anything() }); // 正文帧形状不变
+        expect(frames).toHaveLength(4); // message_stop 在服务端直接收束，不产生帧
+        expect(frames.at(-1)).toBe('[DONE]');
+      },
+    );
+  });
+
+  it('gemini thought part（D4）：thought:true 的 part 进 thinking 帧不混入正文', async () => {
+    await withUpstream(
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.write(
+          `data: ${JSON.stringify({
+            candidates: [{ content: { parts: [{ text: '梳理线索', thought: true }] } }],
+          })}\n\n`,
+        );
+        res.write(
+          `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: '正文开始' }] } }] })}\n\n`,
+        );
+        res.write('data: [DONE]\n\n');
+        res.end();
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send({ ...GEN_BODY, source: 'gemini', model: 'gemini-2.5-flash' });
+        const frames = sseFrames(res.text);
+        const parse = (f: string): Record<string, unknown> => JSON.parse(f) as Record<string, unknown>;
+        expect(parse(frames[0]!)).toMatchObject({ thinking: '梳理线索' });
+        expect(parse(frames[0]!)).not.toHaveProperty('text'); // 思考不混入正文
+        expect(parse(frames[1]!)).toMatchObject({ text: '正文开始' });
+        expect(frames.at(-1)).toBe('[DONE]');
+      },
+    );
+  });
+
   it('gemini：candidates parts 文本合并为增量帧，密钥仅在 query 不回传', async () => {
     await withUpstream(
       (req, res) => {

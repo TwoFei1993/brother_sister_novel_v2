@@ -19,6 +19,8 @@ export interface LlmPrefs {
   maxTokens?: number;
   /** 上下文预算（字符/token，按 §5.4 装填策略裁剪） */
   maxContext?: number;
+  /** 思考模式（D4）：claude 通道开启上游思考流；缺省（老用户无此字段）视为开，消费处用 !== false 判定 */
+  thinking?: boolean;
 }
 
 /**
@@ -54,7 +56,8 @@ interface SettingsState {
   config: ConfigDto | null;
   llmPrefs: LlmPrefs;
   uiTheme: string | null;
-  setConfig: (config: ConfigDto) => void;
+  /** null = 清空会话内存态（登出 D5；llmPrefs 设备偏好保留不随登出清除） */
+  setConfig: (config: ConfigDto | null) => void;
   setLlmPrefs: (patch: Partial<LlmPrefs>) => void;
   setUiTheme: (theme: string | null) => void;
 }

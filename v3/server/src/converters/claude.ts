@@ -37,5 +37,18 @@ export function toClaude(messages: ChatMessage[], params: GenParams): ClaudeBody
   if (system.length > 0) body.system = system.join('\n\n');
   if (params.temperature !== undefined) body.temperature = params.temperature;
   if (params.top_p !== undefined) body.top_p = params.top_p;
+  // 思考模式（D4）：params.thinking=true → 组装 extended-thinking 参数开启上游思考流
+  // （MiniMax anthropic 端点默认关闭思考，需显式开启才返回 thinking_delta）。
+  // budget 取 max_tokens 一半且 ≥1024、< max_tokens（协议约束 budget_tokens ≥1024 且必须小于 max_tokens）。
+  // Anthropic 官方约束：thinking 开启时 temperature 必须未设或 1 且不可与 top_p 共用——统一锁 1 保兼容。
+  if (params.thinking === true) {
+    const maxTokens = body.max_tokens;
+    body.thinking = {
+      type: 'enabled',
+      budget_tokens: Math.min(Math.max(1024, Math.floor(maxTokens / 2)), maxTokens - 1),
+    };
+    body.temperature = 1;
+    delete body.top_p;
+  }
   return body;
 }

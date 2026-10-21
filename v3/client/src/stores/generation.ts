@@ -19,6 +19,8 @@ interface GenerationState {
   streaming: boolean;
   /** 流式缓冲（含「继续」场景的半成品基底） */
   buffer: string;
+  /** 思考流缓冲（D4：server thinking 帧累积；finalize 优先写入 extra.rawThinking） */
+  thinkingBuffer: string;
   /** 本次生成的目标消息 id（前端预生成 uuid，入库幂等键） */
   targetMessageId: string | null;
   workId: string | null;
@@ -29,6 +31,8 @@ interface GenerationState {
   /** 开始一次生成；initialBuffer 供「继续」场景作基底 */
   start: (workId: string, targetMessageId: string, initialBuffer?: string) => void;
   appendChunk: (text: string) => void;
+  /** 思考流增量累积（不走打字机——折叠块不需要逐字动画） */
+  appendThinking: (text: string) => void;
   /** 正常完成（buffer 保留，入库成功后由调用方 reset） */
   finish: () => void;
   /** 失败或停止（error=null 表示停止） */
@@ -41,6 +45,7 @@ interface GenerationState {
 const INITIAL = {
   streaming: false,
   buffer: '',
+  thinkingBuffer: '',
   targetMessageId: null,
   workId: null,
   error: null,
@@ -52,6 +57,7 @@ export const useGenerationStore = create<GenerationState>()((set) => ({
   start: (workId, targetMessageId, initialBuffer = '') =>
     set({ ...INITIAL, streaming: true, buffer: initialBuffer, workId, targetMessageId }),
   appendChunk: (text) => set((s) => ({ buffer: s.buffer + text })),
+  appendThinking: (text) => set((s) => ({ thinkingBuffer: s.thinkingBuffer + text })),
   finish: () => set({ streaming: false }),
   fail: (error, partialKept) => set({ streaming: false, error, partialKept }),
   clearError: () => set({ error: null }),

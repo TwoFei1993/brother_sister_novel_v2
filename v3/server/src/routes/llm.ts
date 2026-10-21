@@ -2,7 +2,8 @@
  * LLM 代理路由（设计 §6 / §3.2）：generate（SSE 流式/非流式）、test 探活、tokenize 计数
  *
  * 全部需登录（authRequired）；无状态不落盘（§9.2）——生成内容由前端暂存与入库。
- * 流式帧协议：增量 `data: {"text": "...", "raw": <上游原chunk>}`，收束 `data: [DONE]`，
+ * 流式帧协议：增量 `data: {"text": "...", "raw": <上游原chunk>}`（思考模型同帧可含
+ * `"thinking": "..."` 思考流增量，D4），收束 `data: [DONE]`，
  * 流中错误 `data: {"error": {code, message}}`；未开流前的错误一律 502 JSON {code, message}，
  * 开流后异常也以 error 帧收尾（HTTP 已 200，不可再改状态码）。
  * 客户端提前断开时中止上游请求（res close → abort signal），避免空烧 token。
@@ -80,7 +81,14 @@ function openSse(res: Response): void {
 
 function sendEvent(res: Response, ev: StreamEvent): void {
   if (ev.kind === 'text') {
-    res.write(`data: ${JSON.stringify({ text: ev.text, raw: ev.raw })}\n\n`);
+    // 帧协议（D4）：text 与 thinking 可同帧共存，各自仅在非空时出现（无思考帧形状不变）
+    res.write(
+      `data: ${JSON.stringify({
+        ...(ev.text ? { text: ev.text } : {}),
+        ...(ev.thinking ? { thinking: ev.thinking } : {}),
+        raw: ev.raw,
+      })}\n\n`,
+    );
   } else if (ev.kind === 'done') {
     res.write('data: [DONE]\n\n');
   } else {

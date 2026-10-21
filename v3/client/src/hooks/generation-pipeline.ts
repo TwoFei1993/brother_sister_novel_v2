@@ -18,7 +18,7 @@ import { tokenizeMessages, type GenerateMessage } from '../api/llm';
 import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
-import { META_ONLY_PLACEHOLDER, extractThinking, postprocessMessage } from '../engine/prompt/postprocess';
+import { META_ONLY_PLACEHOLDER, extractThinking, mergeThinking, postprocessMessage } from '../engine/prompt/postprocess';
 import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
 import { chapterOutlineDirective } from '../lib/outline/chapters';
 import { scanWorldInfo } from '../engine/worldbook';
@@ -265,8 +265,9 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
   const { work, directive, swipeTarget, assets, env, prefs, startedAt, pending } = input;
   const raw = useGenerationStore.getState().buffer;
   const chapterIndex = nextChapterIndex(input.messages);
-  // 思考流捕获（用户反馈⑨）：sanitize 只剥离，内容存 extra.rawThinking 供前端折叠展示
-  const { thinking } = extractThinking(raw);
+  // 思考流捕获（用户反馈⑨ + D4 全链路）：流式 thinkingBuffer 优先，内嵌 <think> 标签兜底
+  const { thinking: taggedThinking } = extractThinking(raw);
+  const thinking = mergeThinking(useGenerationStore.getState().thinkingBuffer, taggedThinking);
   const pp = postprocessMessage(raw, {
     directive: directive || undefined,
     chapterIndex: chapterIndex - 1,

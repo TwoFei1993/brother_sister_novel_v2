@@ -8,6 +8,7 @@ import { NavLink } from 'react-router-dom';
 
 import Bookshelf from '../features/bookshelf/Bookshelf';
 import HolidayBanner from '../features/misc/HolidayBanner';
+import { useLogout } from '../hooks/useLogout';
 
 /** 顶栏导航项（当前页高亮；触控目标 h-10） */
 const NAV_ITEMS: ReadonlyArray<{ to: string; label: string }> = [
@@ -17,6 +18,7 @@ const NAV_ITEMS: ReadonlyArray<{ to: string; label: string }> = [
 ];
 
 export default function RootPage() {
+  const logout = useLogout();
   return (
     <main className="safe-top safe-bottom min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--fg))]">
       <HolidayBanner />
@@ -37,6 +39,17 @@ export default function RootPage() {
               {item.label}
             </NavLink>
           ))}
+          {/* 退出（D5）：POST logout 清服务端 cookie + 本地会话态，跳 /login */}
+          <button
+            type="button"
+            data-testid="logout-btn"
+            onClick={() => void logout()}
+            title="退出登录"
+            aria-label="退出登录"
+            className="flex h-10 items-center rounded-lg px-2.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] sm:text-sm"
+          >
+            ⏻ 退出
+          </button>
         </div>
       </nav>
       <Bookshelf />

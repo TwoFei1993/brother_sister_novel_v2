@@ -14,6 +14,8 @@ export interface GenParams {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  /** 思考模式（D4）：true = claude 通道组装 thinking 参数开启上游思考流 */
+  thinking?: boolean;
   /** 透传通道差异参数（如 model） */
   [key: string]: unknown;
 }
@@ -35,6 +37,8 @@ export interface ClaudeBody {
   max_tokens: number;
   temperature?: number;
   top_p?: number;
+  /** 扩展思考（D4）：Claude extended-thinking 同形；MiniMax anthropic 端点同参开启思考流 */
+  thinking?: { type: 'enabled'; budget_tokens: number };
 }
 
 /** Gemini generateContent 请求体 */

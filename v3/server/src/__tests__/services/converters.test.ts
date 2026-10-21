@@ -87,6 +87,25 @@ describe('toClaude', () => {
     expect(toClaude([msg('user', '问')], { max_tokens: 2048 }).max_tokens).toBe(2048);
   });
 
+  it('thinking:true（D4）组装 extended-thinking 参数：budget 取 max_tokens 一半，temperature 锁 1、top_p 剔除', () => {
+    const body = toClaude([msg('user', '问')], { thinking: true, max_tokens: 8192, temperature: 0.8 });
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 });
+    expect(body.temperature).toBe(1); // Anthropic 约束：thinking 开启时 temperature 必须为 1
+    expect(body.top_p).toBeUndefined();
+  });
+
+  it('thinking:true 且 max_tokens 极小：budget 兜底 1024 且严格小于 max_tokens（协议下限约束）', () => {
+    const body = toClaude([msg('user', '问')], { thinking: true, max_tokens: 1024 });
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 1023 });
+  });
+
+  it('未开 thinking（缺省/false）不带 thinking 字段，采样参数原样保留', () => {
+    const body = toClaude([msg('user', '问')], { temperature: 0.8, top_p: 0.9 });
+    expect(body).not.toHaveProperty('thinking');
+    expect(body.temperature).toBe(0.8);
+    expect(body.top_p).toBe(0.9);
+  });
+
   it('name 合并为 content 前缀（claude 无 name 字段）', () => {
     const body = toClaude([msg('user', '内容', '阿明'), msg('assistant', '回应', '小雪')], {});
     expect(body.messages).toEqual([

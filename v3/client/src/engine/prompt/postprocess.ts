@@ -120,6 +120,18 @@ export interface PostprocessOpts {
   stripChatter?: boolean;
 }
 
+/**
+ * 思考流合并（D4 全链路）：流式累积（server thinking 帧 → generationStore.thinkingBuffer）
+ * 优先；正文内嵌 <think> 标签（extractThinking 兜底，无思考块时返回 null）在无流式内容时使用；
+ * 两者都有则拼接不丢内容。均无 → undefined（入库不落空串）。
+ */
+export function mergeThinking(streamed: string, tagged: string | null): string | undefined {
+  const s = streamed.trim();
+  const t = (tagged ?? '').trim();
+  if (s && t) return `${s}\n\n${t}`;
+  return s || t || undefined;
+}
+
 export interface PostprocessResult {
   content: string;
   title: string;

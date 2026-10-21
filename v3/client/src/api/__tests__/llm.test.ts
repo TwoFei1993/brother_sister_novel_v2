@@ -49,6 +49,23 @@ describe('buildGenerateBody', () => {
     expect(body.params).toEqual({ temperature: 0.7, max_tokens: 2048 });
   });
 
+  it('thinking:true（D4）写入 params.thinking；false/缺省不携带该字段', () => {
+    const on = buildGenerateBody({
+      source: 'claude',
+      model: 'MiniMax-M3',
+      messages: [{ role: 'user', content: 'x' }],
+      thinking: true,
+    });
+    expect(on.params?.thinking).toBe(true);
+    const off = buildGenerateBody({
+      source: 'claude',
+      model: 'MiniMax-M3',
+      messages: [{ role: 'user', content: 'x' }],
+      thinking: false,
+    });
+    expect(off.params?.thinking).toBeUndefined();
+  });
+
   it('无采样参数时不携带 params 字段', () => {
     const body = buildGenerateBody({
       source: 'gemini',
@@ -113,6 +130,59 @@ describe('generateStream', () => {
     );
     expect(onChunk).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith({ code: 'LLM_AUTH', message: '密钥无效' });
+  });
+
+  it('thinking 帧（D4）分发 onThinking，不误触发 onChunk', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([
+          'data: {"thinking":"先想兄妹动机："}\n\n',
+          'data: {"thinking":"复仇还是逃离"}\n\n',
+          'data: {"text":"雨夜。"}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      ),
+    );
+    const onChunk = vi.fn();
+    const onThinking = vi.fn();
+    await generateStream(
+      { source: 'claude', model: 'MiniMax-M3', messages: [], stream: true },
+      { onChunk, onThinking, onDone: vi.fn(), onError: vi.fn() },
+    );
+    expect(onThinking.mock.calls.map((c) => c[0])).toEqual(['先想兄妹动机：', '复仇还是逃离']);
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith('雨夜。');
+  });
+
+  it('text 与 thinking 同帧共存时两个回调都被调用（按上游形状透传）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse(['data: {"text":"正文","thinking":"边写边想"}\n\n', 'data: [DONE]\n\n'])),
+    );
+    const onChunk = vi.fn();
+    const onThinking = vi.fn();
+    await generateStream(
+      { source: 'claude', model: 'x', messages: [], stream: true },
+      { onChunk, onThinking, onDone: vi.fn(), onError: vi.fn() },
+    );
+    expect(onChunk).toHaveBeenCalledWith('正文');
+    expect(onThinking).toHaveBeenCalledWith('边写边想');
+  });
+
+  it('未传 onThinking（缺省）时 thinking 帧被安全忽略，不影响 text/onDone', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse(['data: {"thinking":"思考"}\n\n', 'data: {"text":"正文"}\n\n', 'data: [DONE]\n\n'])),
+    );
+    const chunks: string[] = [];
+    let doneCount = 0;
+    await generateStream(
+      { source: 'openai', model: 'x', messages: [], stream: true },
+      { onChunk: (t) => chunks.push(t), onDone: () => { doneCount += 1; }, onError: vi.fn() },
+    );
+    expect(chunks).toEqual(['正文']);
+    expect(doneCount).toBe(1);
   });
 
   it('上游非 2xx（未开流）向上抛 ApiError', async () => {
