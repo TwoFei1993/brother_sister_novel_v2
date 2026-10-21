@@ -7,6 +7,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import CommandBar from '../CommandBar';
+import { useGenerationStore } from '../../../stores/generation';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -119,10 +120,25 @@ describe('CommandBar 状态', () => {
     const c = await renderBar({ canOutline: true, onByOutline });
     const btn = c.querySelector<HTMLButtonElement>('[data-testid="outline-btn"]');
     expect(btn?.textContent).toContain('按大纲生成');
+    // 点击 📖 展开选择面板（不直接发起）
     await act(async () => {
       btn!.click();
     });
-    expect(onByOutline).toHaveBeenCalledTimes(1);
+    expect(c.querySelector('[data-testid="outline-panel"]')).not.toBeNull();
+    expect(onByOutline).not.toHaveBeenCalled();
+
+    // 面板内改章数 → 开始 → onByOutline 收到所选 limit（React 受控输入需原生 setter）
+    const input = c.querySelector<HTMLInputElement>('[data-testid="outline-limit-input"]')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(input, '5');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="outline-start"]')!.click();
+    });
+    expect(onByOutline).toHaveBeenCalledWith(5);
+    expect(c.querySelector('[data-testid="outline-panel"]')).toBeNull();
   });
 
   it('无大纲（canOutline=false）不渲染 📖 按钮', async () => {
@@ -144,5 +160,22 @@ describe('CommandBar 状态', () => {
     expect(input.className).toContain('basis-full'); // 移动端整行，按钮组换行
     expect(input.className).toContain('md:basis-0'); // 桌面恢复 flex 同行
     expect(input.className).toContain('min-w-32'); // 最差情况仍可输入
+  });
+});
+
+describe('生成中思考指示（推理模型思考期可视化）', () => {
+  it('streaming 且 thinkingBuffer 非空 → 显示 💭 思考中 N 字', async () => {
+    useGenerationStore.setState({ streaming: true, thinkingBuffer: 'x'.repeat(1234) });
+    const c = await renderBar({ streaming: true });
+    const ind = c.querySelector('[data-testid="thinking-indicator"]');
+    expect(ind?.textContent).toContain('思考中 1234 字');
+    useGenerationStore.setState({ streaming: false, thinkingBuffer: '' });
+  });
+
+  it('无思考流（thinkingBuffer 空）→ 不显示指示', async () => {
+    useGenerationStore.setState({ streaming: true, thinkingBuffer: '' });
+    const c = await renderBar({ streaming: true });
+    expect(c.querySelector('[data-testid="thinking-indicator"]')).toBeNull();
+    useGenerationStore.setState({ streaming: false, thinkingBuffer: '' });
   });
 });

@@ -11,6 +11,7 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
 import FieldHint from '../../components/FieldHint';
+import { useGenerationStore } from '../../stores/generation';
 
 interface CommandBarProps {
   streaming: boolean;
@@ -31,8 +32,8 @@ interface CommandBarProps {
   onGenerate: (directive: string) => void;
   /** ⚡连写：携带输入框当前指令作第一章指令（后续章空指令自由发挥） */
   onBatch: (directive: string) => void;
-  /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号 */
-  onByOutline: () => void;
+  /** 📖按大纲生成：limit=本次最多写几章（用户在弹层选择；缺省写满大纲覆盖） */
+  onByOutline: (limit?: number) => void;
   onToggleSwipe: (delta: 1 | -1) => void;
   /** 🎲 恒为重roll：同指令追加新候选并切到最新（多候选时也可用，与 ◀▶ 切换互补） */
   onRerollLast: () => void;
@@ -66,6 +67,11 @@ export default function CommandBar({
   onSeedConsumed,
 }: CommandBarProps) {
   const [directive, setDirective] = useState('');
+  // 📖按大纲弹层：点 📖 后展开「本次生成几章」选择（默认 3），确认才发起
+  const [outlinePanelOpen, setOutlinePanelOpen] = useState(false);
+  const [outlineLimit, setOutlineLimit] = useState(3);
+  // 思考流实时指示（推理模型点击后先思考几十秒才出正文，可视化避免「卡死」体感）
+  const thinkingLen = useGenerationStore((s) => s.thinkingBuffer.length);
 
   // 外部指令复填：注入输入框后立即回调复位（允许同一指令再次点击重新注入）
   useEffect(() => {
@@ -90,19 +96,37 @@ export default function CommandBar({
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
   }
 
+  function submitOutline(): void {
+    const limit = Math.max(1, Math.floor(Number(outlineLimit) || 3));
+    onByOutline(limit);
+    setOutlinePanelOpen(false);
+  }
+
   return (
     <div className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4">
       {/* 审计 H2：移动端折行——输入框 basis-full 独占一行，按钮组换行右接；md 起恢复单行 */}
       <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
         {streaming ? (
-          <button
-            type="button"
-            onClick={onStop}
-            data-testid="stop-btn"
-            className={`${btnBase} flex-1 bg-[hsl(var(--danger))] text-white sm:flex-none sm:px-6`}
-          >
-            ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onStop}
+              data-testid="stop-btn"
+              className={`${btnBase} flex-1 bg-[hsl(var(--danger))] text-white sm:flex-none sm:px-6`}
+            >
+              ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
+            </button>
+            {/* 推理模型点击后先思考几十秒才出正文——实时显示思考量，消除「卡死」体感 */}
+            {thinkingLen > 0 && (
+              <span
+                data-testid="thinking-indicator"
+                className="flex items-center gap-1 whitespace-nowrap text-xs text-[hsl(var(--fg-muted))]"
+              >
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+                💭 思考中 {thinkingLen} 字
+              </span>
+            )}
+          </>
         ) : (
           <>
             <input
@@ -139,14 +163,41 @@ export default function CommandBar({
             {canOutline && (
               <button
                 type="button"
-                onClick={onByOutline}
+                onClick={() => setOutlinePanelOpen((v) => !v)}
                 disabled={disabled || busy}
                 data-testid="outline-btn"
-                title="按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动跟随本章要点），随时可停止"
+                title="按大纲生成：可指定本次生成几章（默认 3），每章自动跟随本章要点，随时可停止"
                 className={`${btnBase} border border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10`}
               >
                 📖 按大纲生成
               </button>
+            )}
+            {canOutline && outlinePanelOpen && !streaming && (
+              <div
+                data-testid="outline-panel"
+                className="flex basis-full items-center gap-2 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2"
+              >
+                <span className="text-xs text-[hsl(var(--fg-muted))]">本次按大纲生成</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={outlineLimit}
+                  onChange={(e) => setOutlineLimit(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                  data-testid="outline-limit-input"
+                  aria-label="本次生成章数"
+                  className="h-8 w-20 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+                />
+                <span className="text-xs text-[hsl(var(--fg-muted))]">章（默认 3，可随时停止）</span>
+                <button
+                  type="button"
+                  onClick={submitOutline}
+                  data-testid="outline-start"
+                  className={`${btnBase} bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]`}
+                >
+                  开始
+                </button>
+              </div>
             )}
             <FieldHint
               tapToExpand

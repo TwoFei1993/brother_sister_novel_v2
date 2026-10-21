@@ -57,23 +57,26 @@ export async function runChunkLoop(
   }
 }
 
-/** 📖按大纲：从下一章逐章写到大纲覆盖的最大章号（plan 发起时快照）；错误/停止即停 */
+/** 📖按大纲：从下一章逐章写到大纲覆盖的最大章号（plan 发起时快照）；错误/停止即停。
+ *  limit：本次最多写几章（用户可选「先写 N 章」；缺省写满大纲覆盖，受此截断） */
 export async function runOutlineLoop(
   work: Work,
   messages: Message[],
   generateChapter: ChapterRunner,
   cancelRef: CancelFlag,
   setBatch: (b: BatchProgress | null) => void,
+  limit?: number,
 ): Promise<void> {
   const plan = outlineRunPlan(messages, work.settings.chapterOutlines);
   if (!plan) return; // 无大纲/已覆盖完：按钮不应出现，防御兜底
   if (useGenerationStore.getState().streaming) return; // 防重入
   cancelRef.current = false;
   try {
-    for (let remain = plan.total; remain > 0; remain--) {
+    const cap = limit && limit > 0 ? Math.min(plan.total, limit) : plan.total;
+    for (let remain = cap; remain > 0; remain--) {
       const current = useWorkStore.getState().messages;
       if (cancelRef.current) break;
-      setBatch({ done: plan.total - remain, total: plan.total, mode: 'outline' });
+      setBatch({ done: cap - remain, total: cap, mode: 'outline' });
       const msg = await generateChapter(work, current, OUTLINE_DIRECTIVE);
       if (msg) useWorkStore.getState().upsertLocal(msg);
       if (!msg || cancelRef.current) break; // 出错/停止即停

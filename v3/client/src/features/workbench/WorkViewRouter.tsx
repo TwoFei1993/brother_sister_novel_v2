@@ -285,7 +285,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
         canOutline={(work.settings.chapterOutlines?.length ?? 0) > 0}
         onGenerate={(d) => void handleGenerate(d)}
         onBatch={(d) => void gen.runBatch(work, d)}
-        onByOutline={() => void gen.runByOutline(work, messages)}
+        onByOutline={(limit?: number) => void gen.runByOutline(work, messages, limit)}
         onToggleSwipe={(d) => void handleToggleSwipe(d)}
         onRerollLast={() => void handleRerollLast()}
         onContinue={() => void handleContinue()}

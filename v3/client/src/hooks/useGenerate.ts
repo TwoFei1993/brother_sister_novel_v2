@@ -69,7 +69,7 @@ export interface UseGenerateResult {
   /** 一键连写：从下一章自动写到目标章节数（第一章用传入指令、后续空指令自由发挥） */
   runBatch: (work: Work, firstDirective: string) => Promise<void>;
   /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动注入本章大纲要点） */
-  runByOutline: (work: Work, messages: Message[]) => Promise<void>;
+  runByOutline: (work: Work, messages: Message[], limit?: number) => Promise<void>;
   /** 批量进度（null = 空闲；CommandBar 停止按钮进度文案消费） */
   batch: BatchProgress | null;
   /** 停止当前生成与连写循环（已产出部分保留在界面，「继续」可用） */
@@ -251,10 +251,10 @@ export function useGenerate(): UseGenerateResult {
 
   /** 📖按大纲生成（反馈⑤）：从下一章起按 chapterOutlines 逐章写到覆盖的最大章号
    *  （循环编排在 generation-batch.runOutlineLoop；每章 directive 固定「按本章大纲写」，
-   *  本章要点由 scanAndAssemble 按章号自动注入） */
+   *  本章要点由 scanAndAssemble 按章号自动注入）。limit：本次最多写几章（用户可选「先写 N 章」） */
   const runByOutline = useCallback(
-    (work: Work, messages: Message[]): Promise<void> =>
-      runOutlineLoop(work, messages, generateChapter, batchCancelRef, setBatch),
+    (work: Work, messages: Message[], limit?: number): Promise<void> =>
+      runOutlineLoop(work, messages, generateChapter, batchCancelRef, setBatch, limit),
     [generateChapter],
   );
 
