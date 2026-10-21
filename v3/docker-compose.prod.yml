@@ -1,0 +1,59 @@
+# 生产部署编排（自有服务器，国内直连）
+#
+# 组成：
+#   caddy     —— HTTPS 反代（自动签发/续期证书）：域名 → 主应用 + /tts → easyvoice
+#   app       —— 主应用镜像（client+API 同源 :3001，来自 GHCR 自动构建）
+#   easyvoice —— TTS 引擎（cosincox/easyvoice，:3000，音频落 /app/audio）
+#
+# 前置：域名 A 记录指向本服务器（Cloudflare DNS 设「仅 DNS/灰云」——国内直连最快，
+#       橙云代理反而增加延迟）；服务器开放 80/443（Let's Encrypt 签证书用 80）。
+#
+# 启动：
+#   DOMAIN=novel.example.com ACCESS_PASSWORD=你的密码 \
+#     docker compose -f docker-compose.prod.yml up -d
+#
+# 部署后在 /settings 录入：LLM 密钥（真实通道）+ TTS 地址填 https://<域名>/tts
+
+name: novel-prod
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: novel-caddy
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN:?必须设置 DOMAIN=你的域名}
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+      - easyvoice
+    restart: unless-stopped
+
+  app:
+    image: ghcr.io/twofei1993/brother_sister_novel_v2:latest
+    container_name: novel-app
+    environment:
+      ACCESS_PASSWORD: ${ACCESS_PASSWORD:?必须设置 ACCESS_PASSWORD}
+    volumes:
+      - app-data:/app/data
+      - app-logs:/app/logs
+    restart: unless-stopped
+
+  easyvoice:
+    image: cosincox/easyvoice:latest
+    container_name: novel-easyvoice
+    volumes:
+      - easyvoice-audio:/app/audio
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  app-logs:
+  easyvoice-audio:
+  caddy-data:
+  caddy-config:

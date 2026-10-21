@@ -1,0 +1,15 @@
+# 生产反代（Caddy 自动 HTTPS：证书签发/续期全自动，无需 certbot）
+# 域名来自环境变量 DOMAIN（compose 注入）
+
+{$DOMAIN} {
+	# TTS：/tts/* 去前缀转发到 easyvoice（客户端 ttsBaseUrl 填 https://<域名>/tts）
+	handle /tts/* {
+		uri strip_prefix /tts
+		reverse_proxy easyvoice:3000
+	}
+
+	# 主应用（client 静态 + /api 同源；SSE 流式透传）
+	handle {
+		reverse_proxy app:3001
+	}
+}
