@@ -42,10 +42,10 @@ export interface ConfigDto {
   [key: string]: unknown;
 }
 
-/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json）；预算默认拉满 1M（MiniMax-M3 支持） */
+/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json）；预算默认拉满 1M；模型 M3.1-Flash（2026-10 实测 /models 列表在册，anthropic 端点可用） */
 const DEFAULT_PREFS: LlmPrefs = {
   source: 'claude',
-  model: 'MiniMax-M3',
+  model: 'MiniMax-M3.1-Flash',
   maxContext: 1000000,
   maxTokens: 8192,
   temperature: 0.8,
