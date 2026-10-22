@@ -16,6 +16,7 @@ const WorkPage = lazy(() => import('./pages/WorkPage'));
 const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const OutlineWizard = lazy(() => import('./features/misc/OutlineWizard'));
+const PlannerPage = lazy(() => import('./features/planner/PlannerPage'));
 
 function PageLoading() {
   return (
@@ -76,6 +77,7 @@ export default function App() {
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/wizard" element={<OutlineWizard />} />
+            <Route path="/planner" element={<PlannerPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

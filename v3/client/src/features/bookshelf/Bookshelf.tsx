@@ -122,6 +122,13 @@ export default function Bookshelf() {
           >
             ＋ 新建作品
           </button>
+          <Link
+            to="/planner"
+            data-testid="wizard-entry"
+            className="flex h-10 items-center rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium transition-colors hover:border-[hsl(var(--accent))]"
+          >
+            🪄 AI 向导
+          </Link>
         </div>
       </div>
 
