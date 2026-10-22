@@ -193,7 +193,10 @@ export async function scanAndAssemble(
       ...(summary ? { summary } : {}),
       history,
       ...(tail.kind === 'directive'
-        ? { directive: tail.text + outlineHint + recallHint, chapterRequirement: buildChapterRequirement(targetWords) }
+        ? {
+            directive: tail.text + outlineHint + recallHint,
+            chapterRequirement: buildChapterRequirement(targetWords),
+          }
         : { userMessage: tail.text }),
       macroEnv: env,
       budgetTokens: budget,

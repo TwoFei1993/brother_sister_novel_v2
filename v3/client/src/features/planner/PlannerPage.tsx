@@ -53,12 +53,15 @@ export default function PlannerPage() {
     if (!trimmed || busy) return;
     setError(null);
 
-    // 重roll：移除最后一对问答后原样重发（LLM 无状态，同输入重发即换一版）
-    const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-    const source = opts.isReroll ? turns.slice(0, -1) : turns;
-    for (const t of source) history.push({ role: t.role, content: t.text });
-    if (!opts.isReroll) setTurns((prev) => [...prev, { role: 'user', text: trimmed }]);
-    else setTurns((prev) => [...prev.slice(0, -2), { role: 'user', text: trimmed }]);
+    // 关键：本次消息必须进 LLM 历史（setTurns 是异步的，不能用 turns 旧值拼）
+    const base = opts.isReroll ? turns.slice(0, -2) : turns;
+    const history: Array<{ role: 'user' | 'assistant'; content: string }> = base.map((t) => ({
+      role: t.role,
+      content: t.text,
+    }));
+    history.push({ role: 'user', content: trimmed });
+    if (opts.isReroll) setTurns((prev) => [...prev.slice(0, -2), { role: 'user', text: trimmed }]);
+    else setTurns((prev) => [...prev, { role: 'user', text: trimmed }]);
     setBusy(true);
     try {
       const msgs = plannerMessages(history, proposal);

@@ -108,27 +108,25 @@ export default function CommandBar({
     <div className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4">
       {/* 审计 H2：移动端折行——输入框 basis-full 独占一行，按钮组换行右接；md 起恢复单行 */}
       <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
+        {/* 推理模型思考期可视化：独立整行滚动思考尾部（思考打字机），不挤占按钮行 */}
+        {streaming && thinkingLen > 0 && (
+          <div
+            data-testid="thinking-indicator"
+            className="flex basis-full items-center gap-1.5 overflow-hidden text-xs text-[hsl(var(--fg-muted))]"
+          >
+            <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+            <span className="truncate">💭 {thinkingTail}</span>
+          </div>
+        )}
         {streaming ? (
-          <>
-            <button
-              type="button"
-              onClick={onStop}
-              data-testid="stop-btn"
-              className={`${btnBase} flex-1 bg-[hsl(var(--danger))] text-white sm:flex-none sm:px-6`}
-            >
-              ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
-            </button>
-            {/* 推理模型思考期可视化：滚动显示思考尾部（思考打字机），消除「卡死」体感 */}
-            {thinkingLen > 0 && (
-              <span
-                data-testid="thinking-indicator"
-                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-xs text-[hsl(var(--fg-muted))] sm:flex-none sm:max-w-md"
-              >
-                <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
-                <span className="truncate">💭 {thinkingTail}</span>
-              </span>
-            )}
-          </>
+          <button
+            type="button"
+            onClick={onStop}
+            data-testid="stop-btn"
+            className={`${btnBase} flex-1 bg-[hsl(var(--danger))] text-white sm:flex-none sm:px-6`}
+          >
+            ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
+          </button>
         ) : (
           <>
             <input
