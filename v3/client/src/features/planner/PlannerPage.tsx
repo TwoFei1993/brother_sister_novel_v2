@@ -63,17 +63,24 @@ export default function PlannerPage() {
     try {
       const msgs = plannerMessages(history, proposal);
       const prefs = useSettingsStore.getState().llmPrefs;
-      const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          source: prefs.source,
-          model: prefs.model,
-          stream: false,
-          params: { max_tokens: 4000, temperature: opts.isReroll ? 0.9 : 0.8 },
-          messages: msgs,
-        }),
-      });
-      const parsed = parsePlannerReply(res.text ?? '');
+      const callPlanner = (maxTokens: number) =>
+        apiFetch<{ text?: string }>('/api/llm/generate', {
+          method: 'POST',
+          body: JSON.stringify({
+            source: prefs.source,
+            model: prefs.model,
+            stream: false,
+            params: { max_tokens: maxTokens, temperature: opts.isReroll ? 0.9 : 0.8 },
+            messages: msgs,
+          }),
+        });
+      // 推理模型可能把预算吃在思考上：空文本（含被截断的坏 JSON）→ 加倍预算重试一次
+      let res = await callPlanner(8000);
+      let parsed = parsePlannerReply(res.text ?? '');
+      if (!parsed && !(res.text ?? '').trim()) {
+        res = await callPlanner(16000);
+        parsed = parsePlannerReply(res.text ?? '');
+      }
       if (!parsed) {
         // 无 JSON：当纯讨论展示
         setTurns((prev) => [...prev, { role: 'assistant', text: (res.text ?? '').trim() || '（空回复）' }]);
