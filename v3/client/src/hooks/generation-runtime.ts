@@ -9,6 +9,7 @@
  * 不含 React hook；调用方（hook）经 bindController 注册 AbortController 以支持 stop()。
  */
 import { generateStream, type GenerateBody } from '../api/llm';
+import { createThinkSplitter } from '../lib/think-split';
 import { TypewriterPacer } from '../lib/reading/typewriter';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
@@ -70,6 +71,10 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     (text) => useGenerationStore.getState().appendThinking(text),
     opts.pace ? 24 : 0,
   );
+  // <think> 内联标签分流器：openai 兼容端点把思考混在 content 流里（如 MiniMax-M3），
+  // 逐段拆开各归各桶——novel/chat 都生效；claude 通道思考走独立帧不受影响
+  const thinkSplit =
+    useSettingsStore.getState().llmPrefs.source === 'openai' ? createThinkSplitter() : null;
 
   try {
     const { body, finalize } = await opts.prepare({ prefs, startedAt });
@@ -83,6 +88,12 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
           {
             onChunk: (text) => {
               chunksReceived += 1;
+              if (thinkSplit) {
+                const r = thinkSplit.split(text);
+                if (r.content) pacer.push(r.content);
+                if (r.thinking) thinkingPacer.push(r.thinking);
+                return;
+              }
               pacer.push(text);
             },
             // 思考流累积（D4）：经思考打字机匀速进 thinkingBuffer，finalize 时优先入 extra.rawThinking
@@ -110,6 +121,11 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     }
 
     // 等缓冲区逐字吐完再收尾：buffer 只含已显示文字，最后一屏不会突然弹出
+    if (thinkSplit) {
+      const tail = thinkSplit.flush();
+      if (tail.content) pacer.push(tail.content);
+      if (tail.thinking) thinkingPacer.push(tail.thinking);
+    }
     await Promise.all([pacer.drained(), thinkingPacer.drained()]);
 
     // ---------- 完成收尾（novel=章节入库 / chat=成对入库，由 finalize 委托） ----------
