@@ -2,7 +2,8 @@
  * <think> 标签流式分流器（openai 兼容端点的思考内联在 content 里，如 MiniMax-M3）
  *
  * 跨 chunk 状态机：think 开/闭标签可能被切成两半分布在相邻 chunk，
- * 内部持有未决缓冲，按当前是否处于 think 块把文字分别导出：
+ * 未决缓冲在非 think 态保留「可能是 '<think>' 前缀」的尾巴等下一个 chunk 补全，
+ * 在 think 态同样保留「</think> 前缀」尾巴；按当前是否处于 think 块分别导出：
  *   content  → 正文打字机
  *   thinking → 思考流（D4，入库 extra.rawThinking）
  */
@@ -14,6 +15,15 @@ export interface ThinkSplitResult {
 
 const OPEN = '<think>';
 const CLOSE = '</think>';
+
+/** 保留 pending 尾部中「可能是 tag 前缀」的最长长度（无则 0） */
+function holdLength(pending: string, tag: string): number {
+  const keep = Math.min(pending.length, tag.length - 1);
+  for (let l = keep; l > 0; l--) {
+    if (tag.startsWith(pending.slice(pending.length - l))) return l;
+  }
+  return 0;
+}
 
 export function createThinkSplitter() {
   let pending = '';
@@ -28,8 +38,14 @@ export function createThinkSplitter() {
       if (!inThink) {
         const open = pending.indexOf(OPEN);
         if (open === -1) {
-          content.push(pending);
-          pending = '';
+          const hold = holdLength(pending, OPEN);
+          if (hold > 0) {
+            content.push(pending.slice(0, pending.length - hold));
+            pending = pending.slice(pending.length - hold);
+          } else {
+            content.push(pending);
+            pending = '';
+          }
           break;
         }
         if (open > 0) content.push(pending.slice(0, open));
@@ -38,8 +54,14 @@ export function createThinkSplitter() {
       } else {
         const close = pending.indexOf(CLOSE);
         if (close === -1) {
-          thinking.push(pending);
-          pending = '';
+          const hold = holdLength(pending, CLOSE);
+          if (hold > 0) {
+            thinking.push(pending.slice(0, pending.length - hold));
+            pending = pending.slice(pending.length - hold);
+          } else {
+            thinking.push(pending);
+            pending = '';
+          }
           break;
         }
         thinking.push(pending.slice(0, close));
@@ -50,12 +72,15 @@ export function createThinkSplitter() {
     return { content: content.join(''), thinking: thinking.join('') };
   }
 
-  /** 流结束：把残留在未决缓冲里的尾巴按当前状态导出（think 中断也归思考流） */
+  /** 流结束：把未决缓冲按当前状态导出，并复位状态（下一章可复用同一分流器） */
   function flush(): ThinkSplitResult {
-    if (!pending) return { content: '', thinking: '' };
+    const wasInThink = inThink;
     const rest = pending;
     pending = '';
-    return inThink ? { content: '', thinking: rest } : { content: rest, thinking: '' };
+    inThink = false;
+    return wasInThink
+      ? { content: '', thinking: rest }
+      : { content: rest, thinking: '' };
   }
 
   return { split, flush };
