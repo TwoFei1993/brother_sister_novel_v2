@@ -29,6 +29,7 @@ import {
   swipeLimitError,
   type BatchProgress,
 } from './generation-flow';
+import { isTruncatedText } from '../lib/truncation';
 import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { persistMessage } from './generation-pipeline';
 import { runGenerationStream } from './generation-runtime';
@@ -198,6 +199,16 @@ export function useGenerate(): UseGenerateResult {
           initialBuffer: '',
           promptDirective: directive + RETRY_SUFFIX[reason],
           persistMessageId: msg.id,
+        });
+      }
+      // 截断自动续写（feedback：续写没写完就停止）：正文以非收束标点结尾 = 上游按
+      // max_tokens 截断（推理模型思考吃预算的典型形态）→ 自动「继续」一次补完
+      if (msg && isTruncatedText(msg.content)) {
+        const partial = msg.content;
+        msg = await run(work, messages, buildContinueDirective(partial), {
+          targetId,
+          initialBuffer: partial,
+          promptDirective: directive,
         });
       }
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
