@@ -14,9 +14,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
+import { apiFetch } from '../api/client';
+
 import { buildGenerateBody } from '../api/llm';
 import { isCollapsedText } from '../engine/prompt/novel/collapse-detect';
 import { useGenerationStore } from '../stores/generation';
+import { useSettingsStore } from '../stores/settings';
 import { useWorkStore } from '../stores/work';
 
 import {
@@ -27,6 +30,7 @@ import {
   type BatchProgress,
 } from './generation-flow';
 import { runChunkLoop, runOutlineLoop } from './generation-batch';
+import { persistMessage } from './generation-pipeline';
 import { runGenerationStream } from './generation-runtime';
 import { META_ONLY_PLACEHOLDER } from '../engine/prompt/postprocess';
 import {
@@ -122,6 +126,8 @@ export function useGenerate(): UseGenerateResult {
             messages: fitted.messages,
             temperature: prefs.temperature,
             maxTokens: prefs.maxTokens,
+            frequencyPenalty: prefs.frequencyPenalty,
+            presencePenalty: prefs.presencePenalty,
             thinking: prefs.thinking !== false, // D4：缺省视为开（老用户 localStorage 无此字段也有💭）
           });
           return {
@@ -192,6 +198,38 @@ export function useGenerate(): UseGenerateResult {
           promptDirective: directive + RETRY_SUFFIX[reason],
           persistMessageId: msg.id,
         });
+      }
+      // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
+      // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）
+      const polishModel = useSettingsStore.getState().llmPrefs.polishModel;
+      if (msg && polishModel) {
+        try {
+          const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
+            method: 'POST',
+            body: JSON.stringify({
+              source: useSettingsStore.getState().llmPrefs.source,
+              model: polishModel,
+              stream: false,
+              params: { temperature: 0.6 },
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    '你是资深小说编辑。对下面的章节全文做语言润色：保持全部情节、对话与事实，字数变化不超过 10%；' +
+                    '提升语言质感、消除重复与平庸表达；不改变人称与叙事结构。只输出润色后的正文本身，禁止任何解释或元信息。',
+                },
+                { role: 'user', content: msg.content },
+              ],
+            }),
+          });
+          const polished = res.text?.trim();
+          if (polished) {
+            msg = { ...msg, content: polished, swipes: [polished] };
+            await persistMessage(work.id, msg); // 同 id 幂等覆盖：落库行更新为润色稿
+          }
+        } catch {
+          // 润色失败保留原稿（静默——正文本身已可用）
+        }
       }
       // 重试一次后仍无效（或本次即失败）：返回 null——调用方不上架（batch 以 null 终止）；
       // 库中该 id 行已被末次输出覆盖，不产生重复章节行

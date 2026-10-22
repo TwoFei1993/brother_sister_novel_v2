@@ -31,7 +31,7 @@ export default function LlmPanel() {
   const llmPrefs = useSettingsStore((s) => s.llmPrefs);
   const setLlmPrefs = useSettingsStore((s) => s.setLlmPrefs);
 
-  function onNumber(key: 'temperature' | 'maxTokens' | 'maxContext') {
+  function onNumber(key: 'temperature' | 'maxTokens' | 'maxContext' | 'frequencyPenalty' | 'presencePenalty') {
     return (e: ChangeEvent<HTMLInputElement>) => {
       setLlmPrefs({ [key]: parseOptionalNumber(e.target.value) });
     };
@@ -124,6 +124,42 @@ export default function LlmPanel() {
             <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">0–2，越高越发散</p>
           </div>
           <div>
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-frequency-penalty">
+              频率惩罚
+              <FieldHint text="采样层压制重复：正文反复用同一短语/句式时调到 0.3–0.6；过高会文笔变怪。仅 openai 兼容通道生效。" />
+            </label>
+            <input
+              id="llm-frequency-penalty"
+              type="number"
+              min={-2}
+              max={2}
+              step={0.1}
+              value={llmPrefs.frequencyPenalty ?? ''}
+              onChange={onNumber('frequencyPenalty')}
+              placeholder="0"
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">-2–2，治重复的采样层开关</p>
+          </div>
+          <div>
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-presence-penalty">
+              存在惩罚
+              <FieldHint text="鼓励引入新话题。与频率惩罚配合，建议 0–0.5 起步。" />
+            </label>
+            <input
+              id="llm-presence-penalty"
+              type="number"
+              min={-2}
+              max={2}
+              step={0.1}
+              value={llmPrefs.presencePenalty ?? ''}
+              onChange={onNumber('presencePenalty')}
+              placeholder="0"
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">-2–2，鼓励新内容</p>
+          </div>
+          <div>
             <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-max-tokens">
               最大输出 tokens
               <FieldHint text="单次生成长度上限，1 token ≈ 0.7 个汉字；一章 2000 字建议 4096 以上。" />
@@ -159,6 +195,22 @@ export default function LlmPanel() {
               历史装填预算 = 此值 − 最大输出
             </p>
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-polish-model">
+            润色模型（可选）
+            <FieldHint text="设置后每章生成完会用该模型二次润色全文（保持情节/字数）。留空关闭。建议填与主模型不同通道的强模型。" />
+          </label>
+          <input
+            id="llm-polish-model"
+            type="text"
+            value={llmPrefs.polishModel ?? ''}
+            onChange={(e) => setLlmPrefs({ polishModel: e.target.value.trim() || undefined })}
+            placeholder="留空 = 关闭润色"
+            data-testid="llm-polish-model"
+            className={inputCls}
+          />
         </div>
       </fieldset>
     </section>

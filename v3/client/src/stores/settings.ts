@@ -21,6 +21,12 @@ export interface LlmPrefs {
   maxContext?: number;
   /** 思考模式（D4）：claude 通道开启上游思考流；缺省（老用户无此字段）视为开，消费处用 !== false 判定 */
   thinking?: boolean;
+  /** 频率惩罚（-2~2，openai 通道透传）：采样层压制重复——治重复循环的三道防线之二 */
+  frequencyPenalty?: number;
+  /** 存在惩罚（-2~2，openai 通道透传）：鼓励新话题 */
+  presencePenalty?: number;
+  /** 润色模型（可选）：正文生成后用该模型二次润色（同通道）；留空关闭 */
+  polishModel?: string;
 }
 
 /**

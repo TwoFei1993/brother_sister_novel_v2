@@ -15,6 +15,7 @@ import VoiceMapEditor from '../tts/VoiceMapEditor';
 
 import WorkBindingsEditor from './dialog/WorkBindingsEditor';
 import WorkOutlineSection from './WorkOutlineSection';
+import MemorySection from './MemorySection';
 import WizardAssetsBind from './WizardAssetsBind';
 import StyleClonePanel from './dialog/StyleClonePanel';
 
@@ -184,6 +185,9 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
 
           {/* 章节大纲（反馈⑦）：完整可滚动可编辑列表 + 导入覆盖，独立 PATCH（乐观锁） */}
           <WorkOutlineSection work={work} onSaved={onSaved} />
+
+          {/* 自动记忆（人物状态卡+伏笔登记）：AI 每 3 章抽取，作者可编辑/标记回收 */}
+          <MemorySection work={work} onSaved={onSaved} />
 
           {/* 绑定向导最近资产（用户实测反馈⑥追问）：一键把向导最近导入的卡/书合并绑到本作品 */}
           <WizardAssetsBind work={work} onSaved={onSaved} />

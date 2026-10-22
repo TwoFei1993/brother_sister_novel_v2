@@ -20,7 +20,9 @@ import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, extractThinking, mergeThinking, postprocessMessage } from '../engine/prompt/postprocess';
 import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
+import { MEMORY_EXTRACT_SYSTEM, mergeForeshadows, parseMemoryExtract } from '../engine/prompt/novel/memory-extract';
 import { chapterOutlineDirective } from '../lib/outline/chapters';
+import { recallBlock } from '../lib/recall';
 import { scanWorldInfo } from '../engine/worldbook';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
@@ -167,6 +169,14 @@ export async function scanAndAssemble(
     tail.kind === 'directive'
       ? chapterOutlineDirective(work.settings.chapterOutlines, nextChapterIndex(messages))
       : '';
+  // 远距记忆检索（P2-1）：被预算裁掉的最旧章节按当前指令相关性召回 top3 窗口（仅 novel，仅进提示词）
+  const recallHint =
+    tail.kind === 'directive' && plan.dropped.length > 0
+      ? recallBlock(
+          [tail.text, ...messages.slice(-2).map((m) => m.content)].join('\n'),
+          plan.dropped.map((m) => m.content).join('\n\n'),
+        )
+      : '';
   // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）
   const guardPlan =
     tail.kind === 'directive'
@@ -183,7 +193,7 @@ export async function scanAndAssemble(
       ...(summary ? { summary } : {}),
       history,
       ...(tail.kind === 'directive'
-        ? { directive: tail.text + outlineHint, chapterRequirement: buildChapterRequirement(targetWords) }
+        ? { directive: tail.text + outlineHint + recallHint, chapterRequirement: buildChapterRequirement(targetWords) }
         : { userMessage: tail.text }),
       macroEnv: env,
       budgetTokens: budget,
@@ -222,6 +232,49 @@ export async function persistMessage(workId: string, message: Message): Promise<
 }
 
 /** 变量回写（引擎外持久化，best-effort）：作品级 PATCH work（带 revision），全局级 GET+merge+PUT config */
+/** 记忆抽取触发周期（每 N 章一次）：平衡抽取成本与状态新鲜度 */
+export const MEMORY_EXTRACT_EVERY = 3;
+
+/**
+ * 自动记忆抽取（后台 best-effort）：用当前 LLM 通道对最新一章做结构化抽取，
+ * 得到「人物状态卡 + 新埋伏笔」，合并进 settings.characterState/foreshadows 并 PATCH 落库，
+ * 同时同步 work store（避免批次内状态卡滞后一批）。任何失败静默（不影响本章已入库）。
+ */
+export async function extractAndStoreMemory(
+  work: Work,
+  chapterText: string,
+  chapterNumber: number,
+  prefs: LlmPrefs,
+): Promise<void> {
+  const body = {
+    source: prefs.source,
+    model: prefs.model,
+    stream: false,
+    params: { max_tokens: 800, temperature: 0.2 },
+    messages: [
+      { role: 'system', content: MEMORY_EXTRACT_SYSTEM },
+      { role: 'user', content: `【最新一章（第${chapterNumber}章）】\n${chapterText.slice(-6000)}` },
+    ],
+  };
+  const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const parsed = parseMemoryExtract(res.text ?? '');
+  if (!parsed) return;
+  const foreshadows = mergeForeshadows(work.settings.foreshadows, chapterNumber, parsed.foreshadows);
+  const settings = {
+    ...work.settings,
+    characterState: parsed.characterState,
+    foreshadows,
+  };
+  const updated = await apiFetch<Work>(`/api/works/${work.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ revision: work.revision, settings }),
+  });
+  useWorkStore.getState().setWork(updated);
+}
+
 export async function persistVariables(work: Work, pending: PendingVars): Promise<void> {
   if (pending.work.size === 0 && pending.global.size === 0) return;
   try {
@@ -309,6 +362,13 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
       throw new GenerationFlowError({ code: ge.code, message: `正文已生成，但入库失败：${ge.message}` });
     }
     await persistVariables(work, pending);
+    // 自动记忆抽取（每 3 章一次，后台不阻塞返回）：人物状态卡 + 伏笔登记 → settings
+    if (!swipeTarget && chapterIndex % 3 === 0) {
+      void extractAndStoreMemory(work, message.content, chapterIndex, prefs).catch((e) =>
+        console.warn('[memory-extract] 抽取失败（不影响本章入库）:', e?.message ?? e),
+      );
+    }
+
   }
   useGenerationStore.getState().finish();
   useGenerationStore.getState().reset();

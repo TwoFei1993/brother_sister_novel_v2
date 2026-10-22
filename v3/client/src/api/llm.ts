@@ -22,6 +22,8 @@ export interface GenerateParams {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
   /** 思考模式（D4）：true = claude 通道开启上游思考流（MiniMax M3 等默认关闭需显式开启） */
   thinking?: boolean;
 }
@@ -41,6 +43,9 @@ export interface BuildGenerateBodyInput {
   messages: GenerateMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** 频率/存在惩罚（openai 通道透传，采样层治重复） */
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   /** 思考模式开关（prefs.thinking !== false 由调用方判定；老用户 localStorage 缺省 = 开） */
   thinking?: boolean;
   stream?: boolean;
@@ -51,6 +56,8 @@ export function buildGenerateBody(input: BuildGenerateBodyInput): GenerateBody {
   const params: GenerateParams = {};
   if (input.temperature !== undefined) params.temperature = input.temperature;
   if (input.maxTokens !== undefined) params.max_tokens = input.maxTokens;
+  if (input.frequencyPenalty !== undefined) params.frequency_penalty = input.frequencyPenalty;
+  if (input.presencePenalty !== undefined) params.presence_penalty = input.presencePenalty;
   if (input.thinking === true) params.thinking = true;
   return {
     source: input.source,

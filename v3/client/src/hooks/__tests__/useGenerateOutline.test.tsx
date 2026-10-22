@@ -71,6 +71,10 @@ function stubOutlineRoute(): void {
     'fetch',
     vi.fn(async (path: string, init?: RequestInit) => {
       if (path === '/api/llm/generate') {
+        const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+        if (body.stream === false) {
+          return new Response(JSON.stringify({ text: '' }), { status: 200 });
+        }
         generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
         return sseResponse(['data: {"text":"章节正文内容，足够长的一段话。"}\n\n', 'data: [DONE]\n\n']);
       }
@@ -188,6 +192,10 @@ describe('useGenerate.runByOutline（📖按大纲生成，反馈⑤）', () => 
       'fetch',
       vi.fn(async (path: string, init?: RequestInit) => {
         if (path === '/api/llm/generate') {
+        const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+        if (body.stream === false) {
+          return new Response(JSON.stringify({ text: '' }), { status: 200 });
+        }
           generateCalls += 1;
           if (generateCalls === 2) {
             return sseResponse(['data: {"error":{"code":"LLM_TIMEOUT","message":"上游超时"}}\n\n']);

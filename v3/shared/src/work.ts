@@ -147,6 +147,19 @@ export const NovelSettingsSchema = z.strictObject({
   styleGuide: z.string().optional(),
   /** 章节大纲（一键导入大纲）：生成第 N 章时按 index 匹配把本章要点追加进指令；缺省视为无 */
   chapterOutlines: z.array(ChapterOutlineItemSchema).optional(),
+  /** 人物状态卡（自动记忆）：AI 每 N 章抽取的动态事实（位置/伤势/持有物/关系），随【作品设定】注入；作者可编辑=最终事实源 */
+  characterState: z.string().optional(),
+  /** 伏笔登记（自动抽取+人工维护）：plantedAt=埋设章号，resolved=已回收；未回收项注入上下文提醒 */
+  foreshadows: z
+    .array(
+      z.object({
+        id: z.string(),
+        desc: z.string(),
+        plantedAt: z.number().int(),
+        resolved: z.boolean().optional(),
+      }),
+    )
+    .optional(),
 });
 export type NovelSettings = z.infer<typeof NovelSettingsSchema>;
 

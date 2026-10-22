@@ -25,6 +25,7 @@ import ChatWorkspace from '../chat/ChatWorkspace';
 import EmptyGuide from './bench/EmptyGuide';
 import WorkbenchView from './bench/WorkbenchView';
 import CommandBar from './CommandBar';
+import SelectionTools from './SelectionTools';
 import DialogView from './dialog/DialogView';
 import ReadingView from './ReadingView';
 import WorkTtsBar from '../tts/WorkTtsBar';
@@ -251,6 +252,30 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
 
       {/* novel TTS 听书条（引擎常驻；A/B/C 三视图均显示，写作时也能随时听书；高亮由 ReadingView 读 tts store） */}
       {work.mode === 'novel' && <WorkTtsBar work={work} chapters={ttsChapters} />}
+
+      {/* 选段 AI 工具（润色/扩写/重写）：novel 模式挂载，应用后 PATCH 幂等覆盖（失败回滚本地） */}
+      {work.mode === 'novel' && (
+        <SelectionTools
+          getTarget={(sel) => {
+            for (const m of useWorkStore.getState().messages) {
+              if (m.content.includes(sel)) return { messageId: m.id, content: m.content };
+            }
+            return null;
+          }}
+          onApplied={(messageId, nextContent) => {
+            const store = useWorkStore.getState();
+            const m = store.messages.find((x) => x.id === messageId);
+            if (!m) return;
+            const updated: Message = {
+              ...m,
+              content: nextContent,
+              swipes: m.swipes.map((s, i) => (i === m.swipeId ? nextContent : s)),
+            };
+            store.upsertLocal(updated);
+            void patchMessage(work.id, updated).catch(() => store.upsertLocal(m)); // 持久化失败回滚本地
+          }}
+        />
+      )}
 
       {/* 长上下文质量警示（深度测试实测：累积 6 章起出现句式重复/节奏退化，可手动关闭） */}
       {work.mode === 'novel' && chapters.length >= 6 && !driftWarnDismissed && (

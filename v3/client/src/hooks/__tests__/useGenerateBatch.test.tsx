@@ -63,6 +63,11 @@ function stubBatchRoute(): void {
     vi.fn(async (path: string, init?: RequestInit) => {
       calls.push({ path, init: init ?? {} });
       if (path === '/api/llm/generate') {
+        const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+        if (body.stream === false) {
+          // 记忆抽取（每 3 章后台非流式）：返回空文本 → parse 失败静默，不计入章节数
+          return jsonRes({ text: '' });
+        }
         generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
         return sseResponse(['data: {"text":"章节正文内容，足够长的一段话。"}\n\n', 'data: [DONE]\n\n']);
       }

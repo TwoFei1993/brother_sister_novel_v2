@@ -14,6 +14,12 @@ export interface GenParams {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  /** 频率惩罚（openai 通道透传）：压制重复——治重复循环的采样层手段 */
+  frequency_penalty?: number;
+  /** 存在惩罚（openai 通道透传）：提高新话题出现概率 */
+  presence_penalty?: number;
+  /** top_k（claude 通道原生；openai 兼容端点支持不一，仅 claude 通道映射） */
+  top_k?: number;
   /** 思考模式（D4）：true = claude 通道组装 thinking 参数开启上游思考流 */
   thinking?: boolean;
   /** 透传通道差异参数（如 model） */
@@ -27,6 +33,8 @@ export interface OpenAIBody {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
 }
 
 /** Anthropic Messages 请求体（max_tokens 必填） */
@@ -37,6 +45,7 @@ export interface ClaudeBody {
   max_tokens: number;
   temperature?: number;
   top_p?: number;
+  top_k?: number;
   /** 扩展思考（D4）：Claude extended-thinking 同形；MiniMax anthropic 端点同参开启思考流 */
   thinking?: { type: 'enabled'; budget_tokens: number };
 }

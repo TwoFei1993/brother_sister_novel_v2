@@ -13,5 +13,8 @@ export function toOpenAI(messages: ChatMessage[], params: GenParams): OpenAIBody
   if (params.temperature !== undefined) body.temperature = params.temperature;
   if (params.top_p !== undefined) body.top_p = params.top_p;
   if (params.max_tokens !== undefined) body.max_tokens = params.max_tokens;
+  // 治重复的采样层手段（与提示词层 anti-slop、检测层重试互补）
+  if (params.frequency_penalty !== undefined) body.frequency_penalty = params.frequency_penalty;
+  if (params.presence_penalty !== undefined) body.presence_penalty = params.presence_penalty;
   return body;
 }
