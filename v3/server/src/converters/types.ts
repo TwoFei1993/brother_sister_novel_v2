@@ -18,6 +18,8 @@ export interface GenParams {
   frequency_penalty?: number;
   /** 存在惩罚（openai 通道透传）：提高新话题出现概率 */
   presence_penalty?: number;
+  /** 重复惩罚（claude 通道 / MiniMax M 系列官方参数）：>1 压制已出现内容再次生成的概率 */
+  repetition_penalty?: number;
   /** top_k（claude 通道原生；openai 兼容端点支持不一，仅 claude 通道映射） */
   top_k?: number;
   /** 思考模式（D4）：true = claude 通道组装 thinking 参数开启上游思考流 */
@@ -46,6 +48,8 @@ export interface ClaudeBody {
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  /** MiniMax M 系列扩展参数（端点实测接受；官方文档在册，默认 1=关闭） */
+  repetition_penalty?: number;
   /** 扩展思考（D4）：Claude extended-thinking 同形；MiniMax anthropic 端点同参开启思考流 */
   thinking?: { type: 'enabled'; budget_tokens: number };
 }

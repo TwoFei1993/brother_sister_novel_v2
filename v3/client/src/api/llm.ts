@@ -24,6 +24,8 @@ export interface GenerateParams {
   max_tokens?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
+  /** 重复惩罚（claude/MiniMax 通道）：>1 压制重复，默认 1=关闭 */
+  repetition_penalty?: number;
   /** 思考模式（D4）：true = claude 通道开启上游思考流（MiniMax M3 等默认关闭需显式开启） */
   thinking?: boolean;
 }
@@ -46,6 +48,8 @@ export interface BuildGenerateBodyInput {
   /** 频率/存在惩罚（openai 通道透传，采样层治重复） */
   frequencyPenalty?: number;
   presencePenalty?: number;
+  /** 重复惩罚（claude/MiniMax 通道）：>1 压制已出现内容的再次生成概率 */
+  repetitionPenalty?: number;
   /** 思考模式开关（prefs.thinking !== false 由调用方判定；老用户 localStorage 缺省 = 开） */
   thinking?: boolean;
   stream?: boolean;
@@ -58,6 +62,7 @@ export function buildGenerateBody(input: BuildGenerateBodyInput): GenerateBody {
   if (input.maxTokens !== undefined) params.max_tokens = input.maxTokens;
   if (input.frequencyPenalty !== undefined) params.frequency_penalty = input.frequencyPenalty;
   if (input.presencePenalty !== undefined) params.presence_penalty = input.presencePenalty;
+  if (input.repetitionPenalty !== undefined) params.repetition_penalty = input.repetitionPenalty;
   if (input.thinking === true) params.thinking = true;
   return {
     source: input.source,

@@ -31,7 +31,9 @@ export default function LlmPanel() {
   const llmPrefs = useSettingsStore((s) => s.llmPrefs);
   const setLlmPrefs = useSettingsStore((s) => s.setLlmPrefs);
 
-  function onNumber(key: 'temperature' | 'maxTokens' | 'maxContext' | 'frequencyPenalty' | 'presencePenalty') {
+  function onNumber(
+    key: 'temperature' | 'maxTokens' | 'maxContext' | 'frequencyPenalty' | 'presencePenalty' | 'repetitionPenalty',
+  ) {
     return (e: ChangeEvent<HTMLInputElement>) => {
       setLlmPrefs({ [key]: parseOptionalNumber(e.target.value) });
     };
@@ -158,6 +160,24 @@ export default function LlmPanel() {
               className={inputCls}
             />
             <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">-2–2，鼓励新内容</p>
+          </div>
+          <div>
+            <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-repetition-penalty">
+              重复惩罚
+              <FieldHint text="claude/MiniMax 通道的采样层治重复：出现复读时从 1.1 小步上调（上限 2）；官方建议默认关闭，过高会伤文笔。" />
+            </label>
+            <input
+              id="llm-repetition-penalty"
+              type="number"
+              min={1}
+              max={2}
+              step={0.05}
+              value={llmPrefs.repetitionPenalty ?? ''}
+              onChange={onNumber('repetitionPenalty')}
+              placeholder="1"
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-[hsl(var(--fg-muted))]">1=关闭；出现复读再小步上调</p>
           </div>
           <div>
             <label className="mb-1 flex items-center gap-1 text-sm" htmlFor="llm-max-tokens">

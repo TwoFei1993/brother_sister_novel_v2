@@ -40,6 +40,7 @@ const paramsSchema = z
     max_tokens: z.number().optional(),
     frequency_penalty: z.number().min(-2).max(2).optional(),
     presence_penalty: z.number().min(-2).max(2).optional(),
+    repetition_penalty: z.number().min(1).max(2).optional(),
     top_k: z.number().int().positive().optional(),
   })
   .passthrough();

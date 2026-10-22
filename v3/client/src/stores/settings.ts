@@ -25,6 +25,8 @@ export interface LlmPrefs {
   frequencyPenalty?: number;
   /** 存在惩罚（-2~2，openai 通道透传）：鼓励新话题 */
   presencePenalty?: number;
+  /** 重复惩罚（1~2，claude/MiniMax 通道）：出现重复时小步上调，默认关闭 */
+  repetitionPenalty?: number;
   /** 润色模型（可选）：正文生成后用该模型二次润色（同通道）；留空关闭 */
   polishModel?: string;
 }

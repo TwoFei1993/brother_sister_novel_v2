@@ -39,6 +39,8 @@ export function toClaude(messages: ChatMessage[], params: GenParams): ClaudeBody
   if (params.top_p !== undefined) body.top_p = params.top_p;
   // top_k（Anthropic 原生参数）：部分兼容端点不接受，仅在显式设置时透传
   if (params.top_k !== undefined) body.top_k = params.top_k;
+  // 重复惩罚（MiniMax M 系列扩展参数，端点实测接受）：治重复的采样层手段，默认 1=关闭
+  if (params.repetition_penalty !== undefined) body.repetition_penalty = params.repetition_penalty;
   // 思考模式（D4）：params.thinking=true → 组装 extended-thinking 参数开启上游思考流
   // （MiniMax anthropic 端点默认关闭思考，需显式开启才返回 thinking_delta）。
   // budget 取 max_tokens 一半且 ≥1024、< max_tokens（协议约束 budget_tokens ≥1024 且必须小于 max_tokens）。
