@@ -352,7 +352,8 @@ describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容）'
     await act(async () => {
       result = await latest!.generateChapter(baseWork(), [], '写第一章');
     });
-    expect(result!.extra.rawThinking).toBe('流式思考\n\n标签思考');
+    // openai 通道下 <think> 内联标签由 runtime 分流器实时并入思考流（mergeThinking 只剩单源）
+    expect(result!.extra.rawThinking).toBe('流式思考标签思考');
     expect(result!.content).toBe('正文开始。'); // 标签剥离干净
   });
 
