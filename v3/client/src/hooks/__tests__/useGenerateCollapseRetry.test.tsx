@@ -145,8 +145,8 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
     expect(useGenerationStore.getState().error).toBeNull();
   });
 
-  it('两次均崩溃 → 返回 null（不入库）且无错误置位', async () => {
-    generateTexts = [COLLAPSED, COLLAPSED];
+  it('两次均崩溃 → 链式补救救不回 → 不上架且三次落库同 id（无孤儿行）', async () => {
+    generateTexts = [COLLAPSED, COLLAPSED, VALID];
     stubGenerateRoute();
     await renderHook();
     let msg: Message | null = null;
@@ -154,11 +154,13 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
       msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
     });
 
-    expect(generateBodies).toHaveLength(2); // 恰重试一次
+    // 链式补救：初稿崩溃 → 反重复后缀重试 → 仍崩（结尾无标点被截断续写接管）→
+    // 续写内容拼在崩溃段后，isCollapsedText 仍命中 → 不上架（batch 以 null 终止）
+    expect(generateBodies).toHaveLength(3);
     expect(msg).toBeNull();
-    // 两次入库为同 id 覆盖（末次输出即落库内容），调用方不上架、本地不显示
-    expect(messageBodies).toHaveLength(2);
-    expect(messageBodies[0]!.id).toBe(messageBodies[1]!.id);
+    // 三次 run 各幂等入库一次且同一消息 id（末次覆盖，不产生重复章节行）
+    expect(messageBodies).toHaveLength(3);
+    expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
     expect(useGenerationStore.getState().error).toBeNull();
   });
 

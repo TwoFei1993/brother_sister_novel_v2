@@ -9,8 +9,9 @@
  */
 const ENDING_PUNCT = /[。！？…」』"’】\n]\s*$/;
 
-/** 正文是否疑似被截断（结尾无句末标点的连续叙述 ≥30 字） */
+/** 正文是否疑似被截断（结尾无句末标点的连续叙述 ≥30 字）；非字符串内容一律 false */
 export function isTruncatedText(content: string): boolean {
+  if (typeof content !== 'string') return false;
   const text = content.replace(/^#[^\n]*\n/, '').trim(); // 去首行标题
   if (text.length < 30) return false;
   if (ENDING_PUNCT.test(text)) return false;

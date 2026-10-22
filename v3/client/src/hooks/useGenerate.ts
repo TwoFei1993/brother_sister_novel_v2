@@ -209,6 +209,7 @@ export function useGenerate(): UseGenerateResult {
           targetId,
           initialBuffer: partial,
           promptDirective: directive,
+          persistMessageId: msg.id, // 补完结果同 id 覆盖（否则半成品行以孤儿形式残留，重载出现重复章节）
         });
       }
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
