@@ -128,6 +128,7 @@ export function useGenerate(): UseGenerateResult {
             maxTokens: prefs.maxTokens,
             frequencyPenalty: prefs.frequencyPenalty,
             presencePenalty: prefs.presencePenalty,
+            repetitionPenalty: prefs.repetitionPenalty,
             thinking: prefs.thinking !== false, // D4：缺省视为开（老用户 localStorage 无此字段也有💭）
           });
           return {
