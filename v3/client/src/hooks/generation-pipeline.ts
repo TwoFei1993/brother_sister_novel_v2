@@ -8,6 +8,7 @@ import type { Message } from '@shared/message';
 import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tavern';
 import type { CharacterAsset } from '@shared/card';
 import type { PresetAsset } from '@shared/preset';
+import type { FactionAsset } from '@shared/assets/faction';
 import type { WorldbookAsset } from '@shared/worldbook';
 import type { Work } from '@shared/work';
 import { DEFAULT_TARGET_CHAPTER_WORDS } from '@shared/work';
@@ -21,8 +22,10 @@ import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, extractThinking, mergeThinking, postprocessMessage } from '../engine/prompt/postprocess';
 import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
 import { MEMORY_EXTRACT_SYSTEM, mergeForeshadows, parseMemoryExtract } from '../engine/prompt/novel/memory-extract';
+import { NEW_ASSETS_HINT, parseNewAssets } from '../engine/prompt/novel/new-assets';
 import { chapterOutlineDirective } from '../lib/outline/chapters';
 import { recallBlock } from '../lib/recall';
+import { skeletonBlock } from '../lib/skeleton';
 import { scanWorldInfo } from '../engine/worldbook';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
@@ -54,6 +57,8 @@ export interface AssembleAssets {
   preset: TavernPreset | null;
   cards: TavernCardV2[];
   worldbooks: WorldbookAsset[];
+  /** 势力介绍（P2.2；整块注入提示词资料区，无逐条激活语义） */
+  factions: FactionAsset[];
   regexScripts: TavernRegexScript[];
 }
 
@@ -67,24 +72,49 @@ export async function loadRegexScripts(work: Work): Promise<TavernRegexScript[]>
   return list.filter((s): s is TavernRegexScript => s !== null);
 }
 
-/** 并行拉取作品绑定的四类资产；单项失败跳过不阻塞生成 */
-export async function loadAssembleAssets(work: Work): Promise<AssembleAssets> {
-  const [preset, cards, books, regexScripts] = await Promise.all([
+/**
+ * 章号感知的绑定生效集（P2.2 绑定三态，共识 D4）
+ *
+ * 写第 C 章时素材生效 = 初始绑定 ids ∪ bindings(active 且 fromChapter≤C)。
+ * chapterIndex 缺省（chat 模式/全量场景）= 不做章过滤，全部生效。
+ */
+export function effectiveAssetIds(
+  work: Work,
+  kind: 'character' | 'worldbook' | 'faction',
+  chapterIndex?: number,
+): string[] {
+  const initial =
+    kind === 'character' ? work.characterIds : kind === 'worldbook' ? work.worldbookIds : (work.factionIds ?? []);
+  if (chapterIndex === undefined) return initial;
+  const extra = (work.bindings ?? [])
+    .filter((b) => b.kind === kind && b.status === 'active' && b.fromChapter <= chapterIndex)
+    .map((b) => b.assetId);
+  return [...new Set([...initial, ...extra])];
+}
+
+/** 并行拉取作品绑定的资产；chapterIndex 给定时按绑定生效章过滤（novel 生成），缺省全量（chat） */
+export async function loadAssembleAssets(work: Work, chapterIndex?: number): Promise<AssembleAssets> {
+  const characterIds = effectiveAssetIds(work, 'character', chapterIndex);
+  const worldbookIds = effectiveAssetIds(work, 'worldbook', chapterIndex);
+  const factionIds = effectiveAssetIds(work, 'faction', chapterIndex);
+  const [preset, cards, books, factions, regexScripts] = await Promise.all([
     work.presetId
       ? apiFetch<PresetAsset>(`/api/presets/${work.presetId}`).then((a) => a.raw).catch(() => null)
       : Promise.resolve(null),
     Promise.all(
-      work.characterIds.map((id) =>
+      characterIds.map((id) =>
         apiFetch<CharacterAsset>(`/api/characters/${id}`).then((a) => a.card).catch(() => null),
       ),
     ),
-    Promise.all(work.worldbookIds.map((id) => apiFetch<WorldbookAsset>(`/api/worldbooks/${id}`).catch(() => null))),
+    Promise.all(worldbookIds.map((id) => apiFetch<WorldbookAsset>(`/api/worldbooks/${id}`).catch(() => null))),
+    Promise.all(factionIds.map((id) => apiFetch<FactionAsset>(`/api/factions/${id}`).catch(() => null))),
     loadRegexScripts(work),
   ]);
   return {
     preset,
     cards: cards.filter((c): c is TavernCardV2 => c !== null),
     worldbooks: books.filter((b): b is WorldbookAsset => b !== null),
+    factions: factions.filter((f): f is FactionAsset => f !== null),
     regexScripts,
   };
 }
@@ -177,6 +207,10 @@ export async function scanAndAssemble(
           plan.dropped.map((m) => m.content).join('\n\n'),
         )
       : '';
+  // 章节骨架兜底（失忆修复）：LLM 摘要失败（上游不稳）时被裁章节会在上下文完全消失——
+  // 骨架块纯本地压缩（标题+首段）永不在场失败，与摘要/回忆并存（仅进提示词）
+  const skeletonHint =
+    tail.kind === 'directive' && plan.dropped.length > 0 ? skeletonBlock(plan.dropped) : '';
   // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）
   const guardPlan =
     tail.kind === 'directive'
@@ -194,7 +228,9 @@ export async function scanAndAssemble(
       history,
       ...(tail.kind === 'directive'
         ? {
-            directive: tail.text + outlineHint + recallHint,
+            // NEW_ASSETS_HINT 仅在有真实指令的章追加：空指令（⚡连写推进章）保持纯净，
+            // 避免「剧情指引：」裸前缀被 hint 撑出（batch 测试锁定的语义）
+            directive: tail.text + outlineHint + recallHint + skeletonHint + (tail.text ? NEW_ASSETS_HINT : ''),
             chapterRequirement: buildChapterRequirement(targetWords),
           }
         : { userMessage: tail.text }),
@@ -333,14 +369,17 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
     stripChatter: true, // novel 入库轨闲聊前导剥离（对 System 寒暄等，见 chat-preamble.ts）
   });
   const generationMs = Date.now() - startedAt;
+  // P2.2 待绑定检测：剥离 <new_assets> 块（不进正文），清单进 extra.newAssets 供前端确认绑定
+  const { content: cleanContent, detected } = parseNewAssets(pp.content);
   const extra = {
     model: prefs.model || undefined,
     tokenCount: input.promptTokens,
     generationMs,
     ...(thinking ? { rawThinking: thinking } : {}),
+    ...(detected.length > 0 ? { newAssets: detected } : {}),
   };
   // 净化后一无所有 = 整轮输出只有思考/元信息：落占位提示（上层 isMetaOnly 据此自动重试一次）
-  const bodyContent = pp.content.trim() ? pp.content : META_ONLY_PLACEHOLDER;
+  const bodyContent = cleanContent.trim() ? cleanContent : META_ONLY_PLACEHOLDER;
   const message = swipeTarget
     ? appendSwipe(swipeTarget, bodyContent, extra)
     : buildChapterMessage({
@@ -353,6 +392,7 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
         statusSnapshot: pp.statusSnapshot,
         activatedEntries: input.activatedIds,
         rawThinking: thinking ?? undefined,
+        newAssets: detected.length > 0 ? detected : undefined,
         // 无效输出重试覆盖语义：重跑时携带首次消息 id，按 messageId 幂等覆盖落库行
         ...(input.messageId ? { id: input.messageId } : {}),
       });

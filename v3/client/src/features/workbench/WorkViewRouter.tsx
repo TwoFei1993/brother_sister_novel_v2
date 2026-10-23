@@ -43,6 +43,8 @@ export interface WorkViewRouterProps {
 export default function WorkViewRouter({ work, currentView, gen, hasMore, loadingOlder, loadOlder }: WorkViewRouterProps) {
   const messages = useWorkStore((s) => s.messages);
   const upsertLocal = useWorkStore((s) => s.upsertLocal);
+  /** 思考流缓冲（B 阅读视图正文上方滚动显示；A/C 视图不显示） */
+  const thinkingBuffer = useGenerationStore((s) => s.thinkingBuffer);
   const wb = useWorkbenchData(work);
   /** C 侧栏指令复填：非 null 时 CommandBar 注入输入框（消费后复位） */
   const [directiveSeed, setDirectiveSeed] = useState<string | null>(null);
@@ -128,12 +130,12 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     if (msg) upsertLocal(msg);
   }
 
-  /** A 视图：✏️ 编辑正文——写回当前候选位（swipe 切换恢复编辑后文本），PATCH 失败回滚 */
+  /** A 视图：✏️ 编辑正文——写回当前版本（版本切换恢复编辑后文本），PATCH 失败回滚 */
   async function handleEditContent(target: Message, content: string): Promise<void> {
     const updated: Message = {
       ...target,
       content,
-      swipes: target.swipes.map((s, i) => (i === target.swipeId ? content : s)),
+      swipes: target.swipes.map((v, i) => (i === target.swipeId ? { ...v, content } : v)),
     };
     upsertLocal(updated);
     try {
@@ -232,6 +234,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             messages={messages}
             streaming={gen.streaming}
             buffer={gen.buffer}
+            thinking={thinkingBuffer}
             regexScripts={regexScripts}
             hasMore={hasMore}
             loadingOlder={loadingOlder}
@@ -269,7 +272,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             const updated: Message = {
               ...m,
               content: nextContent,
-              swipes: m.swipes.map((s, i) => (i === m.swipeId ? nextContent : s)),
+              swipes: m.swipes.map((v, i) => (i === m.swipeId ? { ...v, content: nextContent } : v)),
             };
             store.upsertLocal(updated);
             void patchMessage(work.id, updated).catch(() => store.upsertLocal(m)); // 持久化失败回滚本地

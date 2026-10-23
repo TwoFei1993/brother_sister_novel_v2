@@ -163,18 +163,9 @@ describe('CommandBar 状态', () => {
   });
 });
 
-describe('生成中思考指示（推理模型思考期可视化，滚动显示思考尾部）', () => {
-  it('streaming 且 thinkingBuffer 非空 → 指示条含 💭 与思考尾部文本', async () => {
+describe('生成中思考指示（已移至 ReadingView 正文上方；指挥条不再显示）', () => {
+  it('streaming 且 thinkingBuffer 非空 → 指挥条不渲染思考指示（屏幕中间由阅读区负责）', async () => {
     useGenerationStore.setState({ streaming: true, thinkingBuffer: '思路'.repeat(700) });
-    const c = await renderBar({ streaming: true });
-    const ind = c.querySelector('[data-testid="thinking-indicator"]');
-    expect(ind?.textContent).toContain('💭');
-    expect(ind?.textContent).toContain('思路');
-    useGenerationStore.setState({ streaming: false, thinkingBuffer: '' });
-  });
-
-  it('无思考流（thinkingBuffer 空）→ 不显示指示', async () => {
-    useGenerationStore.setState({ streaming: true, thinkingBuffer: '' });
     const c = await renderBar({ streaming: true });
     expect(c.querySelector('[data-testid="thinking-indicator"]')).toBeNull();
     useGenerationStore.setState({ streaming: false, thinkingBuffer: '' });

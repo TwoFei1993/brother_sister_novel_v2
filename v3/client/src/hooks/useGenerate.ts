@@ -26,6 +26,7 @@ import {
   MAX_SWIPES,
   buildContinueDirective,
   historyBeforeTarget,
+  nextChapterIndex,
   swipeLimitError,
   type BatchProgress,
 } from './generation-flow';
@@ -115,7 +116,8 @@ export function useGenerate(): UseGenerateResult {
         },
         prepare: async ({ prefs, startedAt }) => {
           // ---------- 组装阶段（重试不复用之外的流请求） ----------
-          const assets: AssembleAssets = await loadAssembleAssets(work);
+          // P2.2 绑定三态：按本章章号过滤增量绑定素材（写第 C 章只带 fromChapter≤C 的生效素材）
+          const assets: AssembleAssets = await loadAssembleAssets(work, nextChapterIndex(messages));
           const pending: PendingVars = { work: new Map(), global: new Map() };
           const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
           // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）
@@ -201,9 +203,14 @@ export function useGenerate(): UseGenerateResult {
           persistMessageId: msg.id,
         });
       }
-      // 截断自动续写（feedback：续写没写完就停止）：正文以非收束标点结尾 = 上游按
-      // max_tokens 截断（推理模型思考吃预算的典型形态）→ 自动「继续」一次补完
-      if (msg && isTruncatedText(msg.content)) {
+      // 截断自动续写（feedback：经常没写完就结束）：双判据——
+      // 1) 上游 finish_reason='length'/'max_tokens'（决定性：输出被 max_tokens 腰斩，无论结尾标点）
+      // 2) 启发式：结尾无句末标点的连续叙述（断流等无 finish 帧场景的兜底）
+      // 最多续写 2 轮（每轮续完重新检测；推理模型思考吃预算的章常需两轮才补完）
+      for (let rounds = 0; rounds < 2 && msg; rounds += 1) {
+        const finish = useGenerationStore.getState().finishReason;
+        const outputTruncated = finish === 'length' || finish === 'max_tokens';
+        if (!outputTruncated && !isTruncatedText(msg.content)) break;
         const partial = msg.content;
         msg = await run(work, messages, buildContinueDirective(partial), {
           targetId,
@@ -236,8 +243,14 @@ export function useGenerate(): UseGenerateResult {
             }),
           });
           const polished = res.text?.trim();
-          if (polished) {
-            msg = { ...msg, content: polished, swipes: [polished] };
+          if (polished && msg) {
+            // 润色稿写回激活版本（新消息仅一支候选，等价旧 [polished] 重置语义）
+            const activeId = msg.swipeId;
+            msg = {
+              ...msg,
+              content: polished,
+              swipes: msg.swipes.map((v, i) => (i === activeId ? { ...v, content: polished } : v)),
+            };
             await persistMessage(work.id, msg); // 同 id 幂等覆盖：落库行更新为润色稿
           }
         } catch {

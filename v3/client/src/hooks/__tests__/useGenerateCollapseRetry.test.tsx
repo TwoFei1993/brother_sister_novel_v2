@@ -19,11 +19,13 @@ import { useGenerate } from '../useGenerate';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function sseResponse(text: string): Response {
+function sseResponse(text: string, finish?: string): Response {
   const encoder = new TextEncoder();
+  const frame: Record<string, unknown> = { text };
+  if (finish) frame.raw = { choices: [{ delta: {}, finish_reason: finish }] }; // 上游 raw 透传（finish_reason 提取源）
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
     },
@@ -33,8 +35,12 @@ function sseResponse(text: string): Response {
 
 const COLLAPSED = '正文。' + '刀——刀'.repeat(200); // 4-gram「刀——刀」×200 ≥100 → 崩溃
 const VALID = '第1章正文，足够长的一段叙述，含对话与场景，自然收束。';
+/** 句号完整收尾的半章（标点启发式不触发；只有 finish_reason='length' 能判出被腰斩） */
+const POLITE_HALF =
+  '清晨的阳光洒进窗台，主角推开房门走了出去，看到街上人来人往一切如常，他松了口气转身回了屋。';
 
-let generateTexts: string[] = [];
+type GenReply = string | { text: string; finish?: string };
+let generateTexts: GenReply[] = [];
 let generateBodies: { messages: { content: string }[] }[] = [];
 let messageBodies: { id?: string; directive?: string; content: string }[] = [];
 
@@ -44,8 +50,10 @@ function stubGenerateRoute(): void {
     vi.fn(async (path: string, init?: RequestInit) => {
       if (path === '/api/llm/generate') {
         generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
-        const text = generateTexts.shift() ?? VALID;
-        return sseResponse(text);
+        const item = generateTexts.shift();
+        const text = typeof item === 'string' ? item : (item?.text ?? VALID);
+        const finish = typeof item === 'string' ? undefined : item?.finish;
+        return sseResponse(text, finish);
       }
       if (path === '/api/tokenize') return new Response(JSON.stringify({ count: 10, approximate: false }), { status: 200 });
       if (path === '/api/works/w1/messages') {
@@ -178,5 +186,37 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
     expect(msg).not.toBeNull();
     expect(msg!.directive).toBe(DIRECTIVE);
     expect(messageBodies).toHaveLength(1);
+  });
+
+  it('finish_reason=length 但句号收尾（启发式漏检形态）→ 决定性信号触发续写 → 拼接补完入库', async () => {
+    generateTexts = [{ text: POLITE_HALF, finish: 'length' }, { text: VALID, finish: 'stop' }];
+    stubGenerateRoute();
+    await renderHook();
+    let msg: Message | null = null;
+    await act(async () => {
+      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+    });
+
+    // 首段句号结尾 → isTruncatedText=false；finish='length' 为决定性截断信号 → 自动续写一轮
+    expect(generateBodies).toHaveLength(2);
+    expect(msg).not.toBeNull();
+    expect(msg!.content).toBe(POLITE_HALF + VALID); // 半章为基底拼接补完（同 id 覆盖入库）
+    expect(messageBodies).toHaveLength(2);
+    expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
+    expect(useGenerationStore.getState().error).toBeNull();
+  });
+
+  it('finish_reason=stop 且标点完整 → 不触发续写（单次调用）', async () => {
+    generateTexts = [{ text: VALID, finish: 'stop' }];
+    stubGenerateRoute();
+    await renderHook();
+    let msg: Message | null = null;
+    await act(async () => {
+      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+    });
+
+    expect(generateBodies).toHaveLength(1);
+    expect(msg).not.toBeNull();
+    expect(msg!.content).toBe(VALID);
   });
 });

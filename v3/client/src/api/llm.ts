@@ -84,17 +84,33 @@ export interface StreamHandlers {
   onChunk: (text: string) => void;
   /** 思考流增量（D4：server thinking 帧；MiniMax M3 等思考模型的💭折叠数据源）。缺省时忽略 */
   onThinking?: (thinking: string) => void;
+  /** 上游结束原因（帧 raw 透传：openai finish_reason / claude stop_reason；截断自动续写的决定性信号） */
+  onFinish?: (reason: string) => void;
   /** 流正常结束（收到 [DONE]），恰一次；断流（streamIncomplete）不触发 */
   onDone: () => void;
   /** 收到流中错误帧 */
   onError: (error: LlmStreamError) => void;
 }
 
-/** SSE 帧形状（text/thinking 可同帧共存，与 error 互斥） */
+/** SSE 帧形状（text/thinking 可同帧共存，与 error 互斥；raw=上游原 chunk 透传） */
 interface SseFrame {
   text?: unknown;
   thinking?: unknown;
   error?: { code?: unknown; message?: unknown };
+  raw?: unknown;
+}
+
+/** 从上游原 chunk 提取结束原因（openai: choices[0].finish_reason；claude: delta.stop_reason / stop_reason） */
+export function extractFinishReason(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const choices = Array.isArray(r.choices) ? r.choices : [];
+  const c0 = typeof choices[0] === 'object' && choices[0] !== null ? (choices[0] as Record<string, unknown>) : null;
+  if (typeof c0?.finish_reason === 'string') return c0.finish_reason;
+  const delta = typeof r.delta === 'object' && r.delta !== null ? (r.delta as Record<string, unknown>) : null;
+  if (typeof delta?.stop_reason === 'string') return delta.stop_reason;
+  if (typeof r.stop_reason === 'string') return r.stop_reason;
+  return null;
 }
 
 /** 消费生成流：解析帧并分发；调用方以 AbortSignal 实现停止 */
@@ -117,6 +133,8 @@ export async function generateStream(
     if (typeof frame.text === 'string' && frame.text.length > 0) {
       handlers.onChunk(frame.text);
     }
+    const finish = extractFinishReason(frame.raw);
+    if (finish) handlers.onFinish?.(finish);
   }, signal);
   handlers.onDone();
 }

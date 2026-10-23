@@ -31,6 +31,8 @@ interface ReadingViewProps {
   streaming: boolean;
   /** 流式缓冲（生成中尾部呼吸块实时内容） */
   buffer: string;
+  /** 思考流缓冲（生成中在正文上方实时滚动思考尾部——用户反馈：💭应在阅读区而非底部指挥条） */
+  thinking?: string;
   /** 显示轨正则脚本（markdownOnly，§5.1②；WorkViewRouter 按 work 绑定拉取传入） */
   regexScripts?: TavernRegexScript[];
   hasMore: boolean;
@@ -85,6 +87,7 @@ export default function ReadingView({
   messages,
   streaming,
   buffer,
+  thinking,
   regexScripts,
   hasMore,
   loadingOlder,
@@ -237,6 +240,16 @@ export default function ReadingView({
 
           {streaming && (
             <div className="mb-10 animate-pulse rounded-lg border border-dashed border-[hsl(var(--accent))] p-4 opacity-80">
+              {/* 思考期可视化：正文上方实时滚动思考尾部（思考打字机；屏幕中间，用户反馈位置修正） */}
+              {thinking && thinking.trim().length > 0 && (
+                <p
+                  data-testid="thinking-indicator"
+                  className="mb-3 flex items-start gap-1.5 rounded-md bg-[hsl(var(--muted))]/60 px-2 py-1.5 text-xs leading-relaxed text-[hsl(var(--fg-muted))]"
+                >
+                  <span className="mt-1 inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+                  <span className="line-clamp-3 break-all">💭 {thinking.replace(/\s+/g, ' ').slice(-160)}</span>
+                </p>
+              )}
               <div className={MARKDOWN_CLASS}>
                 <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
                   {sanitizeMarkdownSource(applyDisplayRegex(buffer, regexScripts))}

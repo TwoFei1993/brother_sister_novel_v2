@@ -7,7 +7,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import ReadingView, { chapterAnchorId } from '../ReadingView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -19,7 +19,7 @@ function chapterMsg(id: string, index: number, title: string, content: string): 
     name: '小说家',
     content,
     createdAt: Date.now(),
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1')],
     swipeId: 0,
     chapter: { index, title },
     extra: {},
@@ -171,5 +171,22 @@ describe('ReadingView 思考折叠块（反馈⑨）', () => {
     expect(container.querySelector('[data-testid="thinking-content"]')?.textContent).toContain('<img');
     const clean = await renderView({ messages: [chapterMsg('c2', 2, '第2章', '正文二。')] });
     expect(clean.querySelector('[data-testid="thinking-block"]')).toBeNull();
+  });
+});
+
+describe('流式思考滚动（💭 移至阅读区正文上方——用户反馈位置修正）', () => {
+  it('streaming 且 thinking 非空 → 正文上方渲染 💭 滚动条（含思考尾部文本）', async () => {
+    const c = await renderView({ streaming: true, buffer: '正文开头。', thinking: '思路'.repeat(200) });
+    const ind = c.querySelector('[data-testid="thinking-indicator"]');
+    expect(ind).not.toBeNull();
+    expect(ind?.textContent).toContain('💭');
+    expect(ind?.textContent).toContain('思路'); // 尾部 160 字含最后一段思路
+  });
+
+  it('streaming 但 thinking 空 → 不渲染思考条；非 streaming → 不渲染', async () => {
+    const empty = await renderView({ streaming: true, buffer: '正文。', thinking: '' });
+    expect(empty.querySelector('[data-testid="thinking-indicator"]')).toBeNull();
+    const idle = await renderView({ streaming: false, buffer: '', thinking: '残留思考' });
+    expect(idle.querySelector('[data-testid="thinking-indicator"]')).toBeNull();
   });
 });

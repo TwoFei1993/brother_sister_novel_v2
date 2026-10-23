@@ -98,6 +98,8 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
             },
             // 思考流累积（D4）：经思考打字机匀速进 thinkingBuffer，finalize 时优先入 extra.rawThinking
             onThinking: (thinking) => thinkingPacer.push(thinking),
+            // 上游结束原因透传进 store（'length'/'max_tokens' = 输出被截断；截断自动续写的决定性信号）
+            onFinish: (reason) => useGenerationStore.getState().setFinishReason(reason),
             onDone: () => undefined,
             onError: (e) => {
               streamError = toGenerationError(e); // 流中错误帧：中止读取，统一走 catch

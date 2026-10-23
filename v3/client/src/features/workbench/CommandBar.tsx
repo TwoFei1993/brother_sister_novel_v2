@@ -11,7 +11,6 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
 import FieldHint from '../../components/FieldHint';
-import { useGenerationStore } from '../../stores/generation';
 
 interface CommandBarProps {
   streaming: boolean;
@@ -70,10 +69,7 @@ export default function CommandBar({
   // 📖按大纲弹层：点 📖 后展开「本次生成几章」选择（默认 3），确认才发起
   const [outlinePanelOpen, setOutlinePanelOpen] = useState(false);
   const [outlineLimit, setOutlineLimit] = useState(3);
-  // 思考流实时指示（推理模型点击后先思考几十秒才出正文，可视化避免「卡死」体感）
-  const thinkingBuffer = useGenerationStore((s) => s.thinkingBuffer);
-  const thinkingLen = thinkingBuffer.length;
-  const thinkingTail = thinkingBuffer.replace(/\s+/g, ' ').slice(-110);
+  // 思考流可视化已移至 ReadingView 正文上方（用户反馈：💭 应在屏幕中间而非底部指挥条）
 
   // 外部指令复填：注入输入框后立即回调复位（允许同一指令再次点击重新注入）
   useEffect(() => {
@@ -108,16 +104,7 @@ export default function CommandBar({
     <div className="safe-bottom border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4">
       {/* 审计 H2：移动端折行——输入框 basis-full 独占一行，按钮组换行右接；md 起恢复单行 */}
       <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
-        {/* 推理模型思考期可视化：独立整行滚动思考尾部（思考打字机），不挤占按钮行 */}
-        {streaming && thinkingLen > 0 && (
-          <div
-            data-testid="thinking-indicator"
-            className="flex basis-full items-center gap-1.5 overflow-hidden text-xs text-[hsl(var(--fg-muted))]"
-          >
-            <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
-            <span className="truncate">💭 {thinkingTail}</span>
-          </div>
-        )}
+        {/* 思考期可视化已移至阅读区（ReadingView）；指挥条只保留停止按钮与进度 */}
         {streaming ? (
           <button
             type="button"

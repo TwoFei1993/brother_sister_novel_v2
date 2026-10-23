@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildGenerateBody, generateStream, tokenizeMessages } from '../llm';
+import { buildGenerateBody, extractFinishReason, generateStream, tokenizeMessages } from '../llm';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -314,5 +314,24 @@ describe('tokenizeMessages', () => {
       source: 'gemini',
       messages: [{ content: 'x' }],
     });
+  });
+});
+
+describe('extractFinishReason（上游 raw 透传的结束原因——截断自动续写的决定性信号）', () => {
+  it('openai 形态：choices[0].finish_reason=length → length', () => {
+    expect(extractFinishReason({ choices: [{ delta: {}, finish_reason: 'length' }] })).toBe('length');
+    expect(extractFinishReason({ choices: [{ delta: {}, finish_reason: 'stop' }] })).toBe('stop');
+  });
+
+  it('claude 形态：delta.stop_reason / 顶层 stop_reason=max_tokens → max_tokens', () => {
+    expect(extractFinishReason({ type: 'message_delta', delta: { stop_reason: 'max_tokens' } })).toBe('max_tokens');
+    expect(extractFinishReason({ type: 'message_delta', delta: { stop_reason: 'end_turn' } })).toBe('end_turn');
+    expect(extractFinishReason({ stop_reason: 'max_tokens' })).toBe('max_tokens');
+  });
+
+  it('无 raw / 非对象 / 无结束字段 → null（不误触发）', () => {
+    expect(extractFinishReason(undefined)).toBeNull();
+    expect(extractFinishReason('junk')).toBeNull();
+    expect(extractFinishReason({ choices: [{ delta: { content: 'x' } }] })).toBeNull();
   });
 });

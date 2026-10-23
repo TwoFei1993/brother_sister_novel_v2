@@ -26,11 +26,15 @@ interface GenerationState {
   workId: string | null;
   /** 失败错误；用户主动停止为 null */
   error: GenerationError | null;
+  /** 上游结束原因（帧 raw 提取：'length'/'max_tokens'=输出被截断；截断自动续写的决定性信号） */
+  finishReason: string | null;
   /** 断流/停止后已产出部分保留在界面，可「继续」 */
   partialKept: boolean;
   /** 开始一次生成；initialBuffer 供「继续」场景作基底 */
   start: (workId: string, targetMessageId: string, initialBuffer?: string) => void;
   appendChunk: (text: string) => void;
+  /** 记录上游结束原因（finish_reason/stop_reason 提取后写入） */
+  setFinishReason: (reason: string) => void;
   /** 思考流增量累积（不走打字机——折叠块不需要逐字动画） */
   appendThinking: (text: string) => void;
   /** 正常完成（buffer 保留，入库成功后由调用方 reset） */
@@ -50,6 +54,7 @@ const INITIAL = {
   workId: null,
   error: null,
   partialKept: false,
+  finishReason: null,
 };
 
 export const useGenerationStore = create<GenerationState>()((set) => ({
@@ -57,9 +62,12 @@ export const useGenerationStore = create<GenerationState>()((set) => ({
   start: (workId, targetMessageId, initialBuffer = '') =>
     set({ ...INITIAL, streaming: true, buffer: initialBuffer, workId, targetMessageId }),
   appendChunk: (text) => set((s) => ({ buffer: s.buffer + text })),
+  setFinishReason: (reason) => set({ finishReason: reason }),
   appendThinking: (text) => set((s) => ({ thinkingBuffer: s.thinkingBuffer + text })),
   finish: () => set({ streaming: false }),
   fail: (error, partialKept) => set({ streaming: false, error, partialKept }),
   clearError: () => set({ error: null }),
-  reset: () => set({ ...INITIAL }),
+  // reset 清生成现场但保留 finishReason：它是「上次输出的结束原因」（结果元数据），
+  // 调用方（useGenerate 截断自动续写）在 finalize 内部 reset 之后才读取；start() 时复位
+  reset: () => set((s) => ({ ...INITIAL, finishReason: s.finishReason })),
 }));
