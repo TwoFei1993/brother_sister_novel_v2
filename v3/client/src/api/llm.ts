@@ -92,10 +92,12 @@ export interface StreamHandlers {
   onError: (error: LlmStreamError) => void;
 }
 
-/** SSE 帧形状（text/thinking 可同帧共存，与 error 互斥；raw=上游原 chunk 透传） */
+/** SSE 帧形状（text/thinking/finish 可同帧共存，与 error 互斥；raw=上游原 chunk 透传） */
 interface SseFrame {
   text?: unknown;
   thinking?: unknown;
+  /** 上游结束原因（server 从 finish_reason/stop_reason 提取透传；截断自动续写的决定性信号） */
+  finish?: unknown;
   error?: { code?: unknown; message?: unknown };
   raw?: unknown;
 }
@@ -133,8 +135,13 @@ export async function generateStream(
     if (typeof frame.text === 'string' && frame.text.length > 0) {
       handlers.onChunk(frame.text);
     }
-    const finish = extractFinishReason(frame.raw);
-    if (finish) handlers.onFinish?.(finish);
+    // 结束原因：优先显式 finish 字段（server 提取透传），raw 上游原 chunk 兜底
+    if (typeof frame.finish === 'string' && frame.finish) {
+      handlers.onFinish?.(frame.finish);
+    } else {
+      const finish = extractFinishReason(frame.raw);
+      if (finish) handlers.onFinish?.(finish);
+    }
   }, signal);
   handlers.onDone();
 }

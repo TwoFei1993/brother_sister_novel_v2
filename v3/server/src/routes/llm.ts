@@ -85,11 +85,12 @@ function openSse(res: Response): void {
 
 function sendEvent(res: Response, ev: StreamEvent): void {
   if (ev.kind === 'text') {
-    // 帧协议（D4）：text 与 thinking 可同帧共存，各自仅在非空时出现（无思考帧形状不变）
+    // 帧协议（D4）：text/thinking/finish 可同帧共存，各自仅在非空时出现（无思考帧形状不变）
     res.write(
       `data: ${JSON.stringify({
         ...(ev.text ? { text: ev.text } : {}),
         ...(ev.thinking ? { thinking: ev.thinking } : {}),
+        ...(ev.finish ? { finish: ev.finish } : {}),
         raw: ev.raw,
       })}\n\n`,
     );

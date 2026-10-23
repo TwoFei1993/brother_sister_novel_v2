@@ -74,14 +74,14 @@ export function buildUpstreamRequest(
 // ---------- 响应解析（三通道宽松形状，只声明消费的字段） ----------
 
 interface OpenAiChunk {
-  choices?: Array<{ delta?: { content?: string } }>;
+  choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>;
 }
 interface ClaudeChunk {
   type?: string;
-  delta?: { type?: string; text?: string; thinking?: string };
+  delta?: { type?: string; text?: string; thinking?: string; stop_reason?: string };
 }
 interface GeminiChunk {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> }; finishReason?: string }>;
 }
 interface OpenAiFull {
   choices?: Array<{ message?: { content?: string } }>;
@@ -94,6 +94,9 @@ export interface DeltaResult {
   text: string;
   /** 思考流增量（D4：claude thinking_delta / gemini thought part）；无思考时缺省 */
   thinking?: string;
+  /** 上游结束原因（openai finish_reason / claude stop_reason / gemini finishReason；
+   *  'length'/'max_tokens' = 输出被截断——客户端截断自动续写的决定性信号） */
+  finish?: string;
   done: boolean;
 }
 
@@ -101,11 +104,17 @@ export interface DeltaResult {
 export function extractStreamDelta(source: LlmSource, json: Record<string, unknown>): DeltaResult {
   if (source === 'openai') {
     const chunk = json as OpenAiChunk;
-    return { text: chunk.choices?.[0]?.delta?.content ?? '', done: false };
+    const finish = typeof chunk.choices?.[0]?.finish_reason === 'string' ? chunk.choices[0]!.finish_reason : undefined;
+    return { text: chunk.choices?.[0]?.delta?.content ?? '', ...(finish ? { finish } : {}), done: false };
   }
   if (source === 'claude') {
     const chunk = json as ClaudeChunk;
     if (chunk.type === 'message_stop') return { text: '', done: true };
+    if (chunk.type === 'message_delta') {
+      const finish = typeof chunk.delta?.stop_reason === 'string' ? chunk.delta.stop_reason : undefined;
+      const thinking = typeof chunk.delta?.thinking === 'string' ? chunk.delta.thinking : undefined;
+      return { text: '', ...(thinking ? { thinking } : {}), ...(finish ? { finish } : {}), done: false };
+    }
     if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
       return { text: chunk.delta.text ?? '', done: false };
     }
@@ -124,14 +133,16 @@ export function extractStreamDelta(source: LlmSource, json: Record<string, unkno
     return { text: '', done: false };
   }
   // gemini：candidates[0].content.parts[] 合并；thought:true 的 part 是思考流（不混入正文）
-  const parts = (json as GeminiChunk).candidates?.[0]?.content?.parts ?? [];
+  const gem = json as GeminiChunk;
+  const parts = gem.candidates?.[0]?.content?.parts ?? [];
   let text = '';
   let thinking = '';
   for (const p of parts) {
     if (p.thought === true) thinking += p.text ?? '';
     else text += p.text ?? '';
   }
-  return thinking ? { text, thinking, done: false } : { text, done: false };
+  const finish = typeof gem.candidates?.[0]?.finishReason === 'string' ? gem.candidates[0]!.finishReason : undefined;
+  return { text, ...(thinking ? { thinking } : {}), ...(finish ? { finish } : {}), done: false };
 }
 
 /** 非流式完整响应 → 全文（openai message.content / claude content[].text 合并 / gemini parts 合并） */

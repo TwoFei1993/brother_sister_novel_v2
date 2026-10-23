@@ -432,3 +432,53 @@ describe('上游空闲超时（反馈⑩：chunk 持续到达不误报）', () =
     );
   });
 });
+
+describe('上游结束原因透传（截断自动续写的决定性信号）', () => {
+  it('openai：finish_reason=length 独立帧 → finish 字段透传客户端', async () => {
+    await withUpstream(
+      (req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '半章正文' }, finish_reason: null }] })}\n\n`);
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send({ ...GEN_BODY, source: 'openai' });
+        expect(res.status).toBe(200);
+        const frames = sseFrames(res.text).filter((f) => f !== '[DONE]').map((f) => JSON.parse(f));
+        const finishFrame = frames.find((f) => f.finish);
+        expect(finishFrame?.finish).toBe('length');
+      },
+    );
+  });
+
+  it('claude：message_delta 的 stop_reason=max_tokens → finish 透传', async () => {
+    await withUpstream(
+      (req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.write(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: '被腰斩的' } })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'max_tokens' } })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
+        res.end();
+      },
+      async (baseUrl) => {
+        const app = createApp();
+        await seedSecrets(baseUrl);
+        const res = await request(app)
+          .post('/api/llm/generate')
+          .set('Cookie', await loginCookie(app))
+          .send({ ...GEN_BODY, source: 'claude' });
+        expect(res.status).toBe(200);
+        const frames = sseFrames(res.text).filter((f) => f !== '[DONE]').map((f) => JSON.parse(f));
+        const finishFrame = frames.find((f) => f.finish);
+        expect(finishFrame?.finish).toBe('max_tokens');
+      },
+    );
+  });
+});

@@ -50,9 +50,9 @@ export interface GenerateInput {
   signal?: AbortSignal;
 }
 
-/** 统一流事件：text=增量（thinking=同帧思考流增量 D4；raw 为上游原 chunk 供调试透传）、done=正常收束、error=分类错误 */
+/** 统一流事件：text=增量（thinking=同帧思考流增量 D4；finish=上游结束原因透传；raw 为上游原 chunk 供调试透传）、done=正常收束、error=分类错误 */
 export type StreamEvent =
-  | { kind: 'text'; text: string; thinking?: string; raw: unknown }
+  | { kind: 'text'; text: string; thinking?: string; finish?: string; raw: unknown }
   | { kind: 'done' }
   | { kind: 'error'; code: LlmErrorCode; message: string };
 
@@ -180,10 +180,11 @@ export async function* runGenerate(input: GenerateInput): AsyncGenerator<StreamE
       } catch {
         continue; // 非 JSON 行（注释/心跳）跳过
       }
-      const { text, thinking, done } = extractStreamDelta(input.source, json);
-      if (text || thinking) {
+      const { text, thinking, finish, done } = extractStreamDelta(input.source, json);
+      // finish 帧（delta 空只有结束原因）也必须透传——客户端截断自动续写的决定性信号
+      if (text || thinking || finish) {
         emitted = true;
-        yield { kind: 'text', text, ...(thinking ? { thinking } : {}), raw: json };
+        yield { kind: 'text', text, ...(thinking ? { thinking } : {}), ...(finish ? { finish } : {}), raw: json };
       }
       if (done) break;
     }
