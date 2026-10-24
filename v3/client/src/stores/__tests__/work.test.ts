@@ -4,7 +4,7 @@
  * API 层模块级 mock，不触网。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
 import { deleteMessage, getWork } from '../../api/works';
@@ -21,13 +21,14 @@ const deleteMessageMock = vi.mocked(deleteMessage);
 const getWorkMock = vi.mocked(getWork);
 
 function msg(id: string, createdAt: number): Message {
+  const content = `${id} 正文`;
   return {
     id,
     role: 'assistant',
     name: '小说家',
-    content: `${id} 正文`,
+    content,
     createdAt,
-    swipes: [`${id} 正文`],
+    swipes: [aiVersion(content, 'v1', createdAt)],
     swipeId: 0,
     extra: {},
   };

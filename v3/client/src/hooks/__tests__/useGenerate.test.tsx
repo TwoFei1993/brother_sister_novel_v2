@@ -8,7 +8,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
 import { useGenerationStore } from '../../stores/generation';
@@ -54,7 +54,7 @@ function baseWork(): Work {
 }
 
 function userMsg(id: string, content: string): Message {
-  return { id, role: 'user', name: '用户', content, createdAt: 1, swipes: [content], swipeId: 0, extra: {} };
+  return { id, role: 'user', name: '用户', content, createdAt: 1, swipes: [aiVersion(content, 'v1', 1)], swipeId: 0, extra: {} };
 }
 
 // ---------- fetch stub：按路径分发并记录调用 ----------
@@ -169,14 +169,14 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
       promptTokens: 1,
       generationMs: 1,
     });
-    target.swipes = Array.from({ length: 20 }, (_, i) => `v${i + 1}`);
+    target.swipes = Array.from({ length: 50 }, (_, i) => aiVersion(`第${i + 1}支`, `v${i + 1}`, i));
     let result: Message | null = null;
     await act(async () => {
       result = await latest!.swipeRegenerate(baseWork(), [target], target);
     });
     expect(result).toBeNull();
     expect(useGenerationStore.getState().error).toMatchObject({ code: 'SWIPE_LIMIT' });
-    expect(useGenerationStore.getState().error?.message).toContain('20');
+    expect(useGenerationStore.getState().error?.message).toContain('50');
     expect(useGenerationStore.getState().partialKept).toBe(false);
     expect(calls).toHaveLength(0); // 未发任何流/入库请求
   });
@@ -215,7 +215,7 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
     const allText = JSON.stringify(captured!.messages);
     expect(allText).not.toContain('旧候选正文XYZ'); // 被重 roll 的旧候选不进上下文（review #10）
     expect(allText).toContain('前面的剧情'); // 之前的历史保留
-    expect(result!.swipes).toEqual(['旧候选正文XYZ', '新候选']); // 候选追加同 id upsert
+    expect(result!.swipes.map((v) => v.content)).toEqual(['旧候选正文XYZ', '新候选']); // 候选追加同 id upsert
   });
 });
 
@@ -242,13 +242,13 @@ describe('useGenerate.swipeRegenerate（连续两次重roll 回归——用户�
     await act(async () => {
       r = await latest!.swipeRegenerate(baseWork(), all, target);
     });
-    expect(r!.swipes).toEqual(['v1', '重roll候选1']);
+    expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1']);
     all = [prev, r!];
     await act(async () => {
       r = await latest!.swipeRegenerate(baseWork(), all, r!);
     });
-    // 第二次重roll：候选累加不覆盖，swipeId 指向最新候选
-    expect(r!.swipes).toEqual(['v1', '重roll候选1', '重roll候选2']);
+    // 第二次重roll：候选累加不覆盖（自动命名 v2/v3），swipeId 指向最新候选
+    expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1', '重roll候选2']);
     expect(r!.swipeId).toBe(2);
     expect(r!.content).toBe('重roll候选2');
   });

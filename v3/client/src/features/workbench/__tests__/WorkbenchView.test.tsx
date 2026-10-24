@@ -7,7 +7,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import StatusPanel from '../bench/StatusPanel';
 import DirectiveHistory from '../bench/DirectiveHistory';
 import WorkbenchView from '../bench/WorkbenchView';
@@ -34,7 +34,7 @@ function msg(partial: Partial<Message> & { id: string; role: Message['role'] }):
     name: partial.role === 'user' ? '作者' : '小说家',
     content: '正文',
     createdAt: Date.now(),
-    swipes: ['正文'],
+    swipes: [aiVersion('正文', 'v1')],
     swipeId: 0,
     extra: {},
     ...partial,

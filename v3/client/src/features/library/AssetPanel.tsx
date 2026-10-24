@@ -8,10 +8,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import {
-  ASSET_META, describeAsset, deleteAsset, duplicatePreset, exportAsset, getAsset, importAsset, listAssets,
+  ASSET_META, copyAssetToBook, describeAsset, deleteAsset, duplicatePreset, exportAsset, getAsset, importAsset, listAssets,
   renameAsset,
   type AssetType, type LibraryAssetRef,
 } from '../../api/library';
+import { listWorks } from '../../api/works';
 
 interface AssetPanelProps {
   type: AssetType;
@@ -119,6 +120,32 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
     }
   };
 
+  /** 复制到书（P2.1）：输入目标书名关键字 → 唯一匹配即复制（副本挂目标书，原素材不动） */
+  const onCopyToBook = async (id: string, name: string) => {
+    const keyword = window.prompt(`把「${name}」复制到哪本书？输入书名关键字：`)?.trim();
+    if (!keyword) return;
+    setBusy(true);
+    try {
+      const works = await listWorks();
+      const hits = works.filter((w) => w.title.includes(keyword));
+      if (hits.length === 0) {
+        notify('err', `找不到书名含「${keyword}」的作品`);
+        return;
+      }
+      if (hits.length > 1) {
+        notify('err', `匹配到 ${hits.length} 本（${hits.slice(0, 3).map((w) => w.title).join('、')}…），请换更精确的关键字`);
+        return;
+      }
+      const created = await copyAssetToBook(type === 'presets' || type === 'regex-scripts' ? 'characters' : type, id, hits[0]!.id);
+      notify('ok', `已复制到《${hits[0]!.title}》：「${created.name}」`);
+      await reload();
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : '复制失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** 排序后的列表（最近添加 / 最早添加 / 名称）；无时间戳的旧数据排在其余之后 */
   const sorted = (() => {
     const list = [...(items ?? [])];
@@ -212,6 +239,17 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
               >
                 编辑
               </button>
+              {(type === 'characters' || type === 'worldbooks') && (
+                <button
+                  type="button"
+                  onClick={() => void onCopyToBook(it.id, it.name)}
+                  data-testid="asset-copy-to-book"
+                  title="深拷贝到另一本书（副本挂目标书，原素材不动）"
+                  className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
+                >
+                  复制到书
+                </button>
+              )}
               {type === 'presets' && (
                 <button
                   type="button"

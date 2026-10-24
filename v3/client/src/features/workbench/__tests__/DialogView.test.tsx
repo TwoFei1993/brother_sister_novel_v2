@@ -7,7 +7,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import DialogView from '../dialog/DialogView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,7 +20,7 @@ function chapterMsg(overrides: Partial<Message> = {}): Message {
     name: '小说家',
     content,
     createdAt: Date.now(),
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1')],
     swipeId: 0,
     chapter: { index: 1, title: '第一章 起点' },
     directive: '写一个开头',
@@ -94,7 +94,7 @@ describe('DialogView 气泡流', () => {
   it('无 directive 的章节不渲染指令气泡；多候选显示 ◀ n/m ▶', async () => {
     const content = '第二支内容';
     const c = await renderView({
-      messages: [chapterMsg({ directive: undefined, swipes: ['第一支', content], swipeId: 1, content })],
+      messages: [chapterMsg({ directive: undefined, swipes: [aiVersion('第一支', 'v1'), aiVersion(content, 'v2')], swipeId: 1, content })],
     });
     expect(c.querySelector('[data-testid="directive-bubble"]')).toBeNull();
     expect(c.querySelector('[data-testid="swipe-count"]')?.textContent).toBe('2/2');
@@ -110,7 +110,7 @@ describe('DialogView 气泡流', () => {
     await act(async () => {
       root.render(
         <DialogView
-          messages={[chapterMsg({ swipes: ['a', 'b'], swipeId: 0, content: 'a' })]}
+          messages={[chapterMsg({ swipes: [aiVersion('a', 'v1'), aiVersion('b', 'v2')], swipeId: 0, content: 'a' })]}
           streaming={false}
           buffer=""
           targetMessageId={null}

@@ -110,7 +110,7 @@ export const useWorkStore = create<WorkState>()((set, get) => ({
     if (!work) return;
     const target = messages.find((m) => m.id === messageId);
     if (!target || !target.swipes[swipeId]) return;
-    const updated: Message = { ...target, swipeId, content: target.swipes[swipeId] };
+    const updated: Message = { ...target, swipeId, content: target.swipes[swipeId]!.content };
     set((s) => ({
       messages: s.messages.map((m) => (m.id === messageId ? updated : m)),
     }));

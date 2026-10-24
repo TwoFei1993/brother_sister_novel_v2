@@ -58,6 +58,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // host: true → 监听 0.0.0.0：安卓真机经局域网 IP 联调（Capacitor 壳 server.url 指向 http://<PC-IP>:5173）
+    host: true,
     proxy: {
       '/api': 'http://localhost:3001',
     },

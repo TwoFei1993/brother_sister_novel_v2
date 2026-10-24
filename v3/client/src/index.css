@@ -379,3 +379,163 @@ a,
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
 }
+
+/* ---------- 纸墨书房（移动端视觉重设计，安卓 app /m/*） ----------
+ * 亮=宣纸（暖纸白底 + 墨字 + 朱砂 accent）；暗=墨玉（墨蓝黑底 + 暖纸字 + 琥珀金 accent）。
+ * 作用域：.m-shell 容器内覆盖组件变量（桌面路由零影响）；标题/书名走 Noto Serif SC 衬线。
+ * MePage 的 uiTheme 按钮写入 'm-paper' / 'm-ink'（此前 dark/light 两值无对应主题，属无效按钮，本次修复）。 */
+[data-theme='m-ink'] {
+  --background: 220 18% 7%;
+  --foreground: 42 28% 90%;
+  --card: 220 14% 10%;
+  --card-foreground: 42 28% 90%;
+  --primary: 38 62% 56%;
+  --primary-foreground: 220 30% 8%;
+  --muted: 220 10% 55%;
+  --accent: 38 62% 56%;
+  --accent-foreground: 220 30% 8%;
+  --destructive: 0 60% 55%;
+  --border: 220 12% 18%;
+  --bg: 220 18% 7%;
+  --surface: var(--card);
+  --border-soft: var(--border);
+  --fg: var(--foreground);
+  --fg-muted: var(--muted);
+  --accent: var(--primary);
+  --accent-fg: var(--primary-foreground);
+  --danger: var(--destructive);
+  --theme-font-heading: 'Noto Serif SC', 'STSong', serif;
+}
+
+[data-theme='m-paper'] {
+  --background: 42 42% 94%;
+  --foreground: 30 22% 14%;
+  --card: 42 48% 97%;
+  --card-foreground: 30 22% 14%;
+  --primary: 8 62% 44%;
+  --primary-foreground: 42 50% 97%;
+  --muted: 30 10% 42%;
+  --accent: 8 62% 44%;
+  --accent-foreground: 42 50% 97%;
+  --destructive: 0 68% 42%;
+  --border: 38 22% 84%;
+  --bg: 42 42% 94%;
+  --surface: var(--card);
+  --border-soft: var(--border);
+  --fg: var(--foreground);
+  --fg-muted: var(--muted);
+  --accent: var(--primary);
+  --accent-fg: var(--primary-foreground);
+  --danger: var(--destructive);
+  --theme-font-heading: 'Noto Serif SC', 'STSong', serif;
+}
+
+/* 壳内容器级覆盖：data-paper-mode 存在时压过 :root/题材变量（用户显式选题材则不设该属性，题材照常穿透） */
+.m-shell[data-paper-mode='m-ink'] {
+  --bg: 220 18% 7%;
+  --surface: 220 14% 10%;
+  --border-soft: 220 12% 18%;
+  --fg: 42 28% 90%;
+  --fg-muted: 220 10% 55%;
+  --accent: 38 62% 56%;
+  --accent-fg: 220 30% 8%;
+  --danger: 0 60% 55%;
+}
+.m-shell[data-paper-mode='m-paper'] {
+  --bg: 42 42% 94%;
+  --surface: 42 48% 97%;
+  --border-soft: 38 22% 84%;
+  --fg: 30 22% 14%;
+  --fg-muted: 30 10% 42%;
+  --accent: 8 62% 44%;
+  --accent-fg: 42 50% 97%;
+  --danger: 0 68% 42%;
+}
+
+/* 移动端壳：纸纹氛围 + 衬线标题（变量作用域内覆盖，桌面不受影响） */
+.m-shell {
+  --m-serif: 'Noto Serif SC', 'STSong', 'SimSun', serif;
+  --m-radius: 10px;
+  position: relative;
+}
+.m-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+/* 注：不给壳的直接子元素设 z-index——兄弟层 z-1 的原子上下文会压过弹层 z-50
+ * （NewWorkDialog「创建」按钮被 tabbar 拦截的根因）。纸纹 ::before z-0 以半透明噪点
+ * 叠于内容之上（pointer-events:none 不碍交互），fixed 弹层 z-50 正常置顶。 */
+.m-shell [data-theme] { font-family: var(--theme-font-body); }
+
+/* 衬线标题/书名 */
+.m-serif { font-family: var(--m-serif); letter-spacing: 0.02em; }
+
+/* 书脊卡：左侧竖色条如书脊，按压微沉 */
+.m-book-card {
+  position: relative;
+  border-radius: var(--m-radius);
+  border: 1px solid hsl(var(--border-soft));
+  background: hsl(var(--surface));
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.m-book-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(to bottom, hsl(var(--accent) / 0.9), hsl(var(--accent) / 0.35));
+}
+.m-book-card:active { transform: scale(0.985); }
+
+/* tab 印点：选中项下方一枚小方印 */
+.m-tab { position: relative; }
+.m-tab[data-active='true']::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translateX(-50%) rotate(45deg);
+  background: hsl(var(--accent));
+  border-radius: 1px;
+}
+
+/* 内容渐入上浮（tab 切换/列表首屏） */
+@keyframes m-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.m-rise { animation: m-rise 0.28s ease both; }
+
+/* 阅读器正文：衬线 + 舒展段距 + 章节眉花线 */
+.m-reader-body p { font-family: var(--m-serif); }
+.m-reader-ornament {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: hsl(var(--fg-muted));
+  font-size: 10px;
+  letter-spacing: 0.4em;
+}
+.m-reader-ornament::before,
+.m-reader-ornament::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, hsl(var(--border-soft)), transparent);
+}
+
+/* 印章式主按钮（方形圆角小、字距拉开） */
+.m-seal-btn {
+  font-family: var(--m-serif);
+  letter-spacing: 0.18em;
+  border-radius: 8px;
+}

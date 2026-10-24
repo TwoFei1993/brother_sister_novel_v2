@@ -178,3 +178,13 @@ export function describeAsset(asset: AnyAsset): string {
   }
   return '';
 }
+
+/** 跨书复制素材（P2.1 纯复制语义）：深拷贝出新实体挂到目标书，原实体不动 */
+export async function copyAssetToBook(assetType: 'characters' | 'worldbooks' | 'factions', assetId: string, targetBookId: string): Promise<{ id: string; name: string }> {
+  const r = await apiFetch<{ created: { id: string; name: string }[]; missing: string[] }>('/api/copy', {
+    method: 'POST',
+    body: JSON.stringify({ assetType, assetIds: [assetId], targetBookId }),
+  });
+  if (r.created.length === 0) throw new Error('素材不存在，复制失败');
+  return r.created[0]!;
+}

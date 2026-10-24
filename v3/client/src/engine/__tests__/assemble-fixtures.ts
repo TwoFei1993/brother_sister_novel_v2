@@ -1,6 +1,7 @@
 /**
  * 装配测试脚手架（worldbook-fixtures 同款拆分，控制单文件行数）
  */
+import { aiVersion } from '@shared/message';
 import { defaultNovelSettings } from '@shared/work';
 import type { TavernCardV2, TavernPreset, TavernPrompt } from '@shared/tavern';
 
@@ -73,7 +74,7 @@ export function makeHistory(contents: string[]) {
     name: i % 2 === 0 ? '爱丽丝' : '作者',
     content,
     createdAt: i,
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1', i)],
     swipeId: 0,
     extra: {},
   }));

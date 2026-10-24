@@ -6,7 +6,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
 import { MessageBubble, UserBubble } from '../ChatBubbles';
@@ -20,7 +20,7 @@ function assistantMsg(content: string): Message {
     name: '妹妹',
     content,
     createdAt: 1,
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1', 1)],
     swipeId: 0,
     extra: {},
   };

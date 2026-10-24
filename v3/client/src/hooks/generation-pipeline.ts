@@ -110,11 +110,35 @@ export async function loadAssembleAssets(work: Work, chapterIndex?: number): Pro
     Promise.all(factionIds.map((id) => apiFetch<FactionAsset>(`/api/factions/${id}`).catch(() => null))),
     loadRegexScripts(work),
   ]);
+  const factionList = factions.filter((f): f is FactionAsset => f !== null);
+  // 势力注入（D4「整块注入」）：构造成伪世界书 constant 条目，复用世界书引擎的既有注入路径（不动引擎）
+  const factionBook: WorldbookAsset | null =
+    factionList.length > 0
+      ? {
+          id: '__factions__',
+          name: '势力设定（绑定生效）',
+          raw: {
+            entries: Object.fromEntries(
+              factionList.map((f, i) => [
+                String(i),
+                {
+                  uid: i,
+                  key: [f.name],
+                  content: `【势力设定：${f.name}】${f.description}${f.relations ? `\n与其他势力的关系：${f.relations}` : ''}${f.members?.length ? `\n主要成员：${f.members.join('、')}` : ''}`,
+                  constant: true,
+                  enabled: true,
+                  insertion_order: 40,
+                },
+              ]),
+            ),
+          },
+        }
+      : null;
   return {
     preset,
     cards: cards.filter((c): c is TavernCardV2 => c !== null),
-    worldbooks: books.filter((b): b is WorldbookAsset => b !== null),
-    factions: factions.filter((f): f is FactionAsset => f !== null),
+    worldbooks: [...books.filter((b): b is WorldbookAsset => b !== null), ...(factionBook ? [factionBook] : [])],
+    factions: factionList,
     regexScripts,
   };
 }

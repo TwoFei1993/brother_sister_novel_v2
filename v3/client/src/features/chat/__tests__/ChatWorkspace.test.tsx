@@ -8,7 +8,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
 import { useGenerationStore } from '../../../stores/generation';
@@ -159,8 +159,8 @@ describe('ChatWorkspace 断流「继续」（review #2）', () => {
   it('重 roll 断流后 continue：ref 为空时回退消息流反查（既有轮次文本）', async () => {
     // 预置一轮已入库的历史：user 问 + assistant 答
     const history: Message[] = [
-      { id: 'u0', role: 'user', name: '用户', content: '早上好', createdAt: 1, swipes: ['早上好'], swipeId: 0, extra: {} },
-      { id: 'a0', role: 'assistant', name: '小柔', content: '早呀', createdAt: 2, swipes: ['早呀'], swipeId: 0, extra: {} },
+      { id: 'u0', role: 'user', name: '用户', content: '早上好', createdAt: 1, swipes: [aiVersion('早上好', 'v1', 1)], swipeId: 0, extra: {} },
+      { id: 'a0', role: 'assistant', name: '小柔', content: '早呀', createdAt: 2, swipes: [aiVersion('早呀', 'v1', 2)], swipeId: 0, extra: {} },
     ];
     useWorkStore.setState({ work: baseWork(), messages: history });
     const generateBodies: { messages: { role: string; content: string }[] }[] = [];

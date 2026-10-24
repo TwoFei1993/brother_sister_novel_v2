@@ -72,7 +72,7 @@ export function MessageBubble({
     name?: string;
     content: string;
     id: string;
-    swipes: string[];
+    swipes: { id: string; content: string }[];
     swipeId: number;
     /** extra.rawThinking 非空时渲染「💭 思考过程」折叠块（反馈⑨；结构子集，Message 可直接传入） */
     extra?: { rawThinking?: string };
@@ -91,7 +91,7 @@ export function MessageBubble({
   }
   // 显示时净化：旧数据的思维流/预设片段/名字前缀等残留（生成时的净化只覆盖新消息）
   const content = presentable(
-    message.swipes[message.swipeId] ?? message.content,
+    message.swipes[message.swipeId]?.content ?? message.content,
     message.name,
     memberNames,
   );

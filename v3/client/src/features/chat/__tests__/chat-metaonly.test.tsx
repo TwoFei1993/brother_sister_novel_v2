@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultNovelSettings, type Work } from '@shared/work';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 
 import { useGenerationStore } from '../../../stores/generation';
 import { useSettingsStore } from '../../../stores/settings';
@@ -60,7 +60,7 @@ async function finalizeWith(buffer: string): Promise<{ turn: Awaited<ReturnType<
     userText: '晚上吃什么',
     speaker: SPEAKER,
     swipeTarget: null,
-    assets: { preset: null, cards: [], worldbooks: [], regexScripts: [] },
+    assets: { preset: null, cards: [], worldbooks: [], factions: [], regexScripts: [] },
     env: buildChatMacroEnv(chatWork(), SPEAKER, { work: new Map(), global: new Map() }),
     prefs: { source: 'openai', model: 'm3' },
     promptTokens: 100,
@@ -94,7 +94,7 @@ function fakeRun(script: Array<ChatTurn | null>): {
 function metaOnlyTurn(): ChatTurn {
   return {
     user: null,
-    assistant: { id: 'a1', role: 'assistant', name: '哥哥', content: '', createdAt: 1, swipes: [''], swipeId: 0, extra: {} },
+    assistant: { id: 'a1', role: 'assistant', name: '哥哥', content: '', createdAt: 1, swipes: [aiVersion('', 'v1', 1)], swipeId: 0, extra: {} },
     metaOnly: true,
   };
 }
@@ -102,7 +102,7 @@ function metaOnlyTurn(): ChatTurn {
 function okTurn(): ChatTurn {
   return {
     user: null,
-    assistant: { id: 'a2', role: 'assistant', name: '哥哥', content: '哥哥点点头：「好啊，一起吃。」', createdAt: 1, swipes: ['x'], swipeId: 0, extra: {} },
+    assistant: { id: 'a2', role: 'assistant', name: '哥哥', content: '哥哥点点头：「好啊，一起吃。」', createdAt: 1, swipes: [aiVersion('x', 'v1', 1)], swipeId: 0, extra: {} },
   };
 }
 

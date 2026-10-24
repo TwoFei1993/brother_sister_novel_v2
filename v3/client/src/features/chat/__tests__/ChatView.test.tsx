@@ -6,7 +6,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 
 import ChatView, { type ChatViewProps } from '../ChatView';
 
@@ -19,7 +19,7 @@ const MEMBERS = [
 ];
 
 function msg(partial: Pick<Message, 'id' | 'role' | 'name' | 'content'> & Partial<Message>): Message {
-  return { createdAt: 1, swipes: [partial.content], swipeId: 0, extra: {}, ...partial };
+  return { createdAt: 1, swipes: [aiVersion(partial.content ?? '', 'v1', 1)], swipeId: 0, extra: {}, ...partial };
 }
 
 function baseProps(overrides: Partial<ChatViewProps> = {}): ChatViewProps {
@@ -125,7 +125,7 @@ describe('ChatView', () => {
     const onRegenerate = vi.fn();
     const c = await renderView(
       baseProps({
-        messages: [msg({ id: 'a1', role: 'assistant', name: '妹妹', content: '候选一', swipes: ['候选一', '候选二'] })],
+        messages: [msg({ id: 'a1', role: 'assistant', name: '妹妹', content: '候选一', swipes: [aiVersion('候选一', 'v1', 1), aiVersion('候选二', 'v2', 2)] })],
         onSwipe,
         onRegenerate,
       }),

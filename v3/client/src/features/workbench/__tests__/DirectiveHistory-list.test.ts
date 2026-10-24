@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 
 import { directiveList } from '../bench/DirectiveHistory';
 
@@ -15,7 +15,7 @@ function chapterMsg(id: string, directive: string | undefined): Message {
     name: '小说家',
     content: '正文'.repeat(30),
     createdAt: 1700000000000,
-    swipes: ['正文'.repeat(30)],
+    swipes: [aiVersion('正文'.repeat(30), 'v1')],
     swipeId: 0,
     chapter: { index: 1, title: '第一章' },
     ...(directive ? { directive } : {}),
@@ -28,7 +28,7 @@ function userMsg(id: string, content: string): Message {
     role: 'user',
     content,
     createdAt: 1700000000001,
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1')],
     swipeId: 0,
   } as Message;
 }

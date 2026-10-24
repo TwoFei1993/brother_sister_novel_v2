@@ -7,7 +7,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
 import { useWorkStore } from '../../../stores/work';
@@ -60,7 +60,7 @@ function chapterMsg(index: number): Message {
     name: '小说家',
     content,
     createdAt: Date.now(),
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1')],
     swipeId: 0,
     chapter: { index, title: `第${index}章 标题` },
     directive: `第${index}章指令`,

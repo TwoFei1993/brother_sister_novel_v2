@@ -7,7 +7,7 @@
  * 语义对齐 hooks/generation-pipeline.ts 的 scanAndAssemble（同一扫描池 + EMPTY_PRESET 兜底）。
  * 断言记录器与报告见 quality-assert.ts（自本模块单向导入 SseUsage/MODEL）。
  */
-import type { Message, MessageExtra } from '@shared/message';
+import { aiVersion, type Message, type MessageExtra } from '@shared/message';
 import { defaultNovelSettings, type NovelSettings } from '@shared/work';
 import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tavern';
 import type { WorldbookAsset } from '@shared/worldbook';
@@ -250,13 +250,14 @@ export async function createWork(input: {
 
 /** Message 公共骨架（id/时间戳/swipes 骨架；三个 build 复用） */
 function baseMessage(role: 'user' | 'assistant', name: string, content: string, extra: MessageExtra): Message {
+  const createdAt = Date.now();
   return {
     id: crypto.randomUUID(),
     role,
     name,
     content,
-    createdAt: Date.now(),
-    swipes: [content],
+    createdAt,
+    swipes: [aiVersion(content, 'v1', createdAt)],
     swipeId: 0,
     extra,
   };

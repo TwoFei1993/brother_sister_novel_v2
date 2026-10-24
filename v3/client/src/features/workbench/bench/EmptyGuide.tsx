@@ -5,7 +5,7 @@
  * 含角色卡备选开场（alternate_greetings）一键入库（幂等 upsert）。
  */
 import { useEffect, useState } from 'react';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
 import { upsertMessage } from '../../../api/works';
@@ -35,13 +35,14 @@ export default function EmptyGuide({ work, onCreated }: EmptyGuideProps) {
 
   async function importGreeting(text: string): Promise<void> {
     setImporting(true);
+    const createdAt = Date.now();
     const message: Message = {
       id: uuid(),
       role: 'assistant',
       name: '小说家',
       content: text,
-      createdAt: Date.now(),
-      swipes: [text],
+      createdAt,
+      swipes: [aiVersion(text, 'v1', createdAt)],
       swipeId: 0,
       chapter: { index: 1, title: '序章' },
       extra: {},

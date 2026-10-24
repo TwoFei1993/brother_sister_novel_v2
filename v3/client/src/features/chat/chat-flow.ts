@@ -11,7 +11,7 @@
  *   title，会误剥 chat 正文首行的「#」文本）
  * 流编排共享内核见 hooks/generation-runtime.ts。
  */
-import type { Message, MessageExtra } from '@shared/message';
+import { aiVersion, type Message, type MessageExtra } from '@shared/message';
 import { CHAT_REPLY_LENGTH_RANGE, DEFAULT_CHAT_REPLY_LENGTH, type ChatReplyLength, type Work } from '@shared/work';
 
 import type { MacroEnv } from '../../engine/types';
@@ -43,15 +43,16 @@ export function buildChatMacroEnv(work: Work, speaker: ChatMember, pending: Pend
   return { ...buildMacroEnv(work, speaker.name, pending), user: '用户' };
 }
 
-/** 用户对话消息（§4.2）：role=user / name=「用户」/ swipes=[text] */
+/** 用户对话消息（§4.2）：role=user / name=「用户」/ swipes=[首版本 v1] */
 export function buildUserTurn(text: string): Message {
+  const createdAt = Date.now();
   return {
     id: uuid(),
     role: 'user',
     name: '用户',
     content: text,
-    createdAt: Date.now(),
-    swipes: [text],
+    createdAt,
+    swipes: [aiVersion(text, 'v1', createdAt)],
     swipeId: 0,
     extra: {},
   };
@@ -59,13 +60,14 @@ export function buildUserTurn(text: string): Message {
 
 /** AI 回复消息（chat 语义）：无 chapter 元数据，name=激活角色 */
 function buildAssistantTurn(input: { content: string; speakerName: string; extra: MessageExtra }): Message {
+  const createdAt = Date.now();
   return {
     id: uuid(),
     role: 'assistant',
     name: input.speakerName,
     content: input.content,
-    createdAt: Date.now(),
-    swipes: [input.content],
+    createdAt,
+    swipes: [aiVersion(input.content, 'v1', createdAt)],
     swipeId: 0,
     extra: input.extra,
   };

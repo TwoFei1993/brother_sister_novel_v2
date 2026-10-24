@@ -8,6 +8,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'rea
 
 import { apiFetch } from './api/client';
 import { useUserTheme } from './lib/theme';
+import { useAuthStore, type AuthUser } from './stores/auth';
 import { useSettingsStore, type ConfigDto } from './stores/settings';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -17,6 +18,14 @@ const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const OutlineWizard = lazy(() => import('./features/misc/OutlineWizard'));
 const PlannerPage = lazy(() => import('./features/planner/PlannerPage'));
+// 安卓 app 移动端路由树（/m/*，独立于桌面路由；见 discuss/2026-10-22-安卓app设计共识.md）
+const MobileShell = lazy(() => import('./features/mobile/MobileShell'));
+const MobileBookshelf = lazy(() => import('./features/mobile/create/MobileBookshelf'));
+const MobileWork = lazy(() => import('./features/mobile/create/MobileWork'));
+const ReadShelf = lazy(() => import('./features/mobile/read/ReadShelf'));
+const Reader = lazy(() => import('./features/mobile/read/Reader'));
+const CommunityPage = lazy(() => import('./features/mobile/misc/CommunityPage'));
+const MePage = lazy(() => import('./features/mobile/misc/MePage'));
 
 function PageLoading() {
   return (
@@ -43,6 +52,10 @@ function AuthGuard() {
             .then((c) => useSettingsStore.getState().setConfig(c))
             .catch(() => {});
         }
+        // P3.1：身份同样内存态，刷新后补拉（评论署名/角色入口显隐依赖）
+        apiFetch<{ user: AuthUser | null }>('/api/auth/me')
+          .then((me) => useAuthStore.getState().setUser(me.user))
+          .catch(() => {});
         setChecked(true);
       })
       .catch(() => {
@@ -78,6 +91,15 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/wizard" element={<OutlineWizard />} />
             <Route path="/planner" element={<PlannerPage />} />
+            <Route path="/m" element={<MobileShell />}>
+              <Route index element={<Navigate to="/m/create" replace />} />
+              <Route path="create" element={<MobileBookshelf />} />
+              <Route path="work/:id" element={<MobileWork />} />
+              <Route path="read" element={<ReadShelf />} />
+              <Route path="read/:id" element={<Reader />} />
+              <Route path="community" element={<CommunityPage />} />
+              <Route path="me" element={<MePage />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

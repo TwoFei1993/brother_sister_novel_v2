@@ -137,13 +137,22 @@ export default function PlannerPage() {
           <span>🪄</span>
           <h1 className="text-base font-semibold">AI 创作向导</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
-        >
-          返回书架
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => navigate('/m/create')}
+            className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+          >
+            📱 移动端
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+          >
+            返回书架
+          </button>
+        </div>
       </header>
 
       {/* 聊天流 + 策划案卡片 */}

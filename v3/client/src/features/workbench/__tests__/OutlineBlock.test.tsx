@@ -7,7 +7,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import MessageBubble from '../dialog/MessageBubble';
 import ReadingView from '../ReadingView';
 
@@ -27,7 +27,7 @@ function chapterMsg(id: string, index: number, title: string, content: string): 
     name: '小说家',
     content,
     createdAt: Date.now(),
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1')],
     swipeId: 0,
     chapter: { index, title },
     extra: {},

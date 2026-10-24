@@ -8,7 +8,7 @@
  *
  * 不依赖 React、store 与 api 层，全部可单测。编排辅助见 generation-pipeline.ts。
  */
-import type { Message, MessageExtra } from '@shared/message';
+import { aiVersion, manualVersion, manualVersionName, nextAiVersionName, type DetectedAsset, type Message, type MessageExtra } from '@shared/message';
 
 import { ApiError } from '../api/client';
 
@@ -149,9 +149,11 @@ export interface ChapterMessageInput {
   activatedEntries?: string[];
   /** 模型思考流原文（用户反馈⑨；审计进 extra.rawThinking，前端折叠展示） */
   rawThinking?: string;
+  /** 本章新素材检测清单（P2.2 side-channel；进 extra.newAssets 供前端确认绑定） */
+  newAssets?: DetectedAsset[];
 }
 
-/** 构造入库消息（§4.2）：assistant /「小说家」/ swipes=[content] / chapter 元数据 */
+/** 构造入库消息（§4.2）：assistant /「小说家」/ swipes=[首版本 v1] / chapter 元数据 */
 export function buildChapterMessage(input: ChapterMessageInput): Message {
   const extra: MessageExtra = {
     model: input.model,
@@ -160,14 +162,16 @@ export function buildChapterMessage(input: ChapterMessageInput): Message {
     ...(input.statusSnapshot ? { statusSnapshot: input.statusSnapshot } : {}),
     ...(input.activatedEntries ? { activatedEntries: input.activatedEntries } : {}),
     ...(input.rawThinking ? { rawThinking: input.rawThinking } : {}),
+    ...(input.newAssets && input.newAssets.length > 0 ? { newAssets: input.newAssets } : {}),
   };
+  const createdAt = Date.now();
   return {
     id: input.id ?? uuid(),
     role: 'assistant',
     name: '小说家',
     content: input.content,
-    createdAt: Date.now(),
-    swipes: [input.content],
+    createdAt,
+    swipes: [aiVersion(input.content, 'v1', createdAt)],
     swipeId: 0,
     chapter: { index: input.chapterIndex, title: input.title },
     ...(input.directive ? { directive: input.directive } : {}),
@@ -175,19 +179,35 @@ export function buildChapterMessage(input: ChapterMessageInput): Message {
   };
 }
 
-/** swipe 重生成：新候选 push 进既有消息并切换指向（同 id 幂等 upsert） */
+/** swipe 重生成：新版本（AI，自动命名）push 进既有消息并切换指向（同 id 幂等 upsert） */
 export function appendSwipe(target: Message, content: string, extra: MessageExtra): Message {
+  const version = aiVersion(content, nextAiVersionName(target.swipes.map((v) => v.name)));
   return {
     ...target,
     content,
-    swipes: [...target.swipes, content],
+    swipes: [...target.swipes, version],
     swipeId: target.swipes.length,
     extra: { ...target.extra, ...extra },
   };
 }
 
-/** swipe 候选上限（前端控制；server MessageSchema 保持宽松不设限，review #13） */
-export const MAX_SWIPES = 20;
+/**
+ * 「生成新的版本并手改」（安卓 app Phase1）：复制当前版本全部内容为新版本（origin='手改'，
+ * 命名「<基底名>手改M」），切换指向新版本；正文由作者在编辑器里继续修改后手动保存。
+ */
+export function forkManualVersion(target: Message): Message {
+  const base = target.swipes[target.swipeId];
+  if (!base) return target;
+  const version = manualVersion(
+    base.content,
+    manualVersionName(base.name, target.swipes.map((v) => v.name)),
+  );
+  const swipes = [...target.swipes, version];
+  return { ...target, content: version.content, swipes, swipeId: swipes.length - 1 };
+}
+
+/** 版本上限（前端控制；server MessageSchema 保持宽松不设限，review #13）；手改版本占同一数组 */
+export const MAX_SWIPES = 50;
 
 /** 候选满额错误（swipeRegenerate 追加前检查；上限调整只需改 MAX_SWIPES） */
 export function swipeLimitError(): GenerationError {

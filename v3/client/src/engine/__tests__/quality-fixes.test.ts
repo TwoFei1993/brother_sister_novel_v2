@@ -4,6 +4,7 @@
  * - 兜底预设 buildFallbackPreset：novel/chat 双模式主提示词
  */
 import { describe, expect, it } from 'vitest';
+import { aiVersion } from '@shared/message';
 
 import { postprocessMessage, sanitizeOutput } from '../prompt/postprocess';
 import { buildFallbackPreset } from '../../hooks/generation-pipeline';
@@ -105,7 +106,7 @@ describe('提纲分离 splitOutline', () => {
 describe('防失忆：planContext 上下文规划', () => {
   it('预算充足时全量保留', async () => {
     const { planContext } = await import('../../hooks/generation-pipeline');
-    const msgs = [1, 2, 3].map((i) => ({ id: `m${i}`, role: 'assistant' as const, name: '小说家', content: '短'.repeat(50), createdAt: i, swipes: ['短'.repeat(50)], swipeId: 0, extra: {} }));
+    const msgs = [1, 2, 3].map((i) => ({ id: `m${i}`, role: 'assistant' as const, name: '小说家', content: '短'.repeat(50), createdAt: i, swipes: [aiVersion('短'.repeat(50), 'v1', i)], swipeId: 0, extra: {} }));
     const r = planContext(msgs, 10000);
     expect(r.dropped).toHaveLength(0);
     expect(r.kept).toHaveLength(3);
@@ -114,7 +115,7 @@ describe('防失忆：planContext 上下文规划', () => {
   it('超预算时从最旧侧切出待摘要区（保留最新）', async () => {
     const { planContext } = await import('../../hooks/generation-pipeline');
     const long = '字'.repeat(3000);
-    const msgs = [1, 2, 3, 4].map((i) => ({ id: `m${i}`, role: 'assistant' as const, name: '小说家', content: long, createdAt: i, swipes: [long], swipeId: 0, extra: {} }));
+    const msgs = [1, 2, 3, 4].map((i) => ({ id: `m${i}`, role: 'assistant' as const, name: '小说家', content: long, createdAt: i, swipes: [aiVersion(long, 'v1', i)], swipeId: 0, extra: {} }));
     const r = planContext(msgs, 5000); // 每条约 4500 token，预算只装得下 1 条
     expect(r.kept).toHaveLength(1);
     expect(r.kept[0].id).toBe('m4');

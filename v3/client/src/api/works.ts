@@ -19,6 +19,8 @@ export interface WorkSummary {
   genre: string;
   updatedAt: number;
   stats?: WorkStats;
+  /** 书架分类标签（Phase2；缺省=未分类） */
+  shelfTag?: string;
 }
 
 /** 新建作品入参（绑定三类资产 id；regexScriptIds/voiceMap 走默认；settings 可整体指定） */
@@ -52,6 +54,8 @@ export interface UpdateWorkSettingsInput {
   viewPreference?: Work['viewPreference'];
   /** 角色名 → TTS 声音 id（TTS 分声绑定，Task 29） */
   voiceMap?: Work['voiceMap'];
+  /** 书架分类标签（Phase2；空串=清除） */
+  shelfTag?: string;
 }
 
 export async function listWorks(): Promise<WorkSummary[]> {

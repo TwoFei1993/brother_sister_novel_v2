@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 
 import {
   MAX_SWIPES,
@@ -95,7 +95,7 @@ function baseMessage(partial: Partial<Message>): Message {
     name: '小说家',
     content: '',
     createdAt: 0,
-    swipes: [''],
+    swipes: [aiVersion('', 'v1', 0)],
     swipeId: 0,
     extra: {},
     ...partial,
@@ -119,7 +119,7 @@ describe('buildChapterMessage（§4.2 消息模型）', () => {
       role: 'assistant',
       name: '小说家',
       content: '正文',
-      swipes: ['正文'],
+      swipes: [{ name: 'v1', content: '正文', origin: 'ai' }],
       swipeId: 0,
       chapter: { index: 1, title: '第一章 开端' },
       directive: '写一个开场',
@@ -152,14 +152,17 @@ describe('appendSwipe（swipe 重生成：push 候选并切换）', () => {
     const target = baseMessage({
       id: 'm9',
       content: '旧版本',
-      swipes: ['旧版本'],
+      swipes: [aiVersion('旧版本', 'v1', 0)],
       swipeId: 0,
       chapter: { index: 2, title: '二' },
       directive: '写第二章',
     });
     const next = appendSwipe(target, '新版本', { model: 'gpt-4o', tokenCount: 9, generationMs: 9 });
     expect(next.id).toBe('m9');
-    expect(next.swipes).toEqual(['旧版本', '新版本']);
+    expect(next.swipes.map((v) => ({ name: v.name, content: v.content }))).toEqual([
+      { name: 'v1', content: '旧版本' },
+      { name: 'v2', content: '新版本' },
+    ]);
     expect(next.swipeId).toBe(1);
     expect(next.content).toBe('新版本');
     expect(next.chapter).toEqual({ index: 2, title: '二' });
@@ -168,18 +171,18 @@ describe('appendSwipe（swipe 重生成：push 候选并切换）', () => {
 });
 
 describe('swipe 上限（review #13）', () => {
-  it('MAX_SWIPES=20；swipeLimitError 携带 code 与含上限的人话消息', () => {
-    expect(MAX_SWIPES).toBe(20);
+  it('MAX_SWIPES=50；swipeLimitError 携带 code 与含上限的人话消息', () => {
+    expect(MAX_SWIPES).toBe(50);
     const ge = swipeLimitError();
     expect(ge.code).toBe('SWIPE_LIMIT');
-    expect(ge.message).toContain('20');
+    expect(ge.message).toContain('50');
   });
 });
 
 describe('historyBeforeTarget（review #10：重 roll 上下文取 target 之前）', () => {
   const list = [
     baseMessage({ id: 'u1', role: 'user', name: '用户', content: '开头' }),
-    baseMessage({ id: 'a1', content: '旧候选章节', swipes: ['旧候选章节'], swipeId: 0 }),
+    baseMessage({ id: 'a1', content: '旧候选章节', swipes: [aiVersion('旧候选章节', 'v1', 0)], swipeId: 0 }),
     baseMessage({ id: 'u2', role: 'user', name: '用户', content: '后续' }),
   ];
 

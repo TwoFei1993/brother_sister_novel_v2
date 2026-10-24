@@ -18,7 +18,7 @@ import type { Message } from '@shared/message';
 
 const PREFS: LlmPrefs = { source: 'claude', model: 'MiniMax-M3', maxContext: 100000, maxTokens: 8192, temperature: 0.8 };
 
-const ASSETS: AssembleAssets = { preset: null, cards: [], worldbooks: [], regexScripts: [] };
+const ASSETS: AssembleAssets = { preset: null, cards: [], worldbooks: [], factions: [], regexScripts: [] };
 
 function workFixture(chapterOutlines: Work['settings']['chapterOutlines']): Work {
   return {

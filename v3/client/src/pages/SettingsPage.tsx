@@ -38,6 +38,13 @@ export default function SettingsPage() {
           ←
         </Link>
         <h1 className="text-xl font-semibold">设置</h1>
+        <Link
+          to="/m/me"
+          aria-label="返回移动端"
+          className="ml-auto flex h-9 items-center rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))]"
+        >
+          📱 移动端
+        </Link>
       </header>
 
       <nav
