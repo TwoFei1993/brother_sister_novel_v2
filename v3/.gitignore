@@ -20,3 +20,11 @@ client/playwright-report/
 # 日志与杂项
 *.log
 .DS_Store
+
+# 安卓壳（mobile/）：依赖与构建产物不入库；android/ 工程模板与配置入库
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/local.properties
+mobile/android/capacitor-cordova-android-plugins/

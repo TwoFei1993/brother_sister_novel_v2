@@ -1,0 +1,17 @@
+{
+  "name": "@v3/mobile",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Capacitor 安卓壳工程：WebView 指向已部署的 v3 服务（/m/* 移动端路由），APK 构建需 JDK17+Android SDK",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "build:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/core": "^7.4.4"
+  }
+}
