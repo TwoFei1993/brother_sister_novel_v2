@@ -4,7 +4,7 @@
  * → 确认导入：建角色卡 + 世界书 → 创建作品（携带章节大纲与资产绑定）→ 跳转写作台。
  * LLM 协议见 planner-llm.ts；导入复用 misc/wizard/importAllAssets。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { apiFetch } from '../../api/client';
@@ -20,6 +20,9 @@ import {
   type PlannerProposal,
 } from './planner-llm';
 
+const SESSION_KEY = 'v3-planner-session-v1';
+const WELCOME = '描述你的创作想法吧——题材、主角、核心冲突，一两句话就够。我会先问你几个关键问题，聊清楚了再出完整策划案。';
+
 interface Turn {
   role: 'user' | 'assistant';
   /** user=用户输入；assistant=模型 reply 文本 */
@@ -30,15 +33,27 @@ interface Turn {
   failed?: boolean;
 }
 
+/** 恢复持久会话（localStorage；坏数据回退欢迎语） */
+function loadSession(): { turns: Turn[]; proposal: PlannerProposal | null } {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw) {
+      const d = JSON.parse(raw) as { turns?: Turn[]; proposal?: PlannerProposal | null };
+      if (Array.isArray(d.turns) && d.turns.length > 0) {
+        return { turns: d.turns, proposal: d.proposal ?? null };
+      }
+    }
+  } catch {
+    /* 存储坏 → 欢迎语 */
+  }
+  return { turns: [{ role: 'assistant', text: WELCOME }], proposal: null };
+}
+
 export default function PlannerPage() {
   const navigate = useNavigate();
-  const [turns, setTurns] = useState<Turn[]>([
-    {
-      role: 'assistant',
-      text: '描述你的创作想法吧——题材、主角、核心冲突，一两句话就够。我会产出完整策划案（人物/世界观/章节大纲），咱们聊着改，满意就一键开书。',
-    },
-  ]);
-  const [proposal, setProposal] = useState<PlannerProposal | null>(null);
+  const initial = useMemo(loadSession, []);
+  const [turns, setTurns] = useState<Turn[]>(initial.turns);
+  const [proposal, setProposal] = useState<PlannerProposal | null>(initial.proposal);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   /** 流式打字机：生成中的增量原文（null=未在流式） */
@@ -50,6 +65,21 @@ export default function PlannerPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [turns, proposal]);
+
+  // 持久会话：对话与策划案落 localStorage，刷新/重进不丢
+  useEffect(() => {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ turns, proposal }));
+    } catch {
+      /* 隐私模式静默 */
+    }
+  }, [turns, proposal]);
+
+  function resetSession(): void {
+    if (!window.confirm('清空对话与策划案，重新开始？')) return;
+    setTurns([{ role: 'assistant', text: WELCOME }]);
+    setProposal(null);
+  }
 
   async function send(text: string, opts: { isReroll?: boolean } = {}): Promise<void> {
     const trimmed = text.trim();
@@ -74,6 +104,7 @@ export default function PlannerPage() {
       const callPlanner = (maxTokens: number): Promise<string> =>
         new Promise((resolve, reject) => {
           let full = '';
+          let thinkingFull = '';
           void generateStream(
             buildGenerateBody({
               source: prefs.source,
@@ -93,8 +124,10 @@ export default function PlannerPage() {
                 full += delta;
                 setStreamingText(full);
               },
-              onThinking: () => {
-                if (!streaming) setStreamingText('💭');
+              onThinking: (delta) => {
+                streaming = true;
+                thinkingFull += delta;
+                setStreamingText('💭' + thinkingFull.slice(-500)); // 思考流打字机（尾部 500 字）
               },
               onError: (e) => reject(new Error(e.message)),
               onDone: () => undefined,
@@ -169,6 +202,14 @@ export default function PlannerPage() {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={resetSession}
+            data-testid="planner-reset"
+            className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+          >
+            🗑 重开
+          </button>
+          <button
+            type="button"
             onClick={() => navigate('/m/create')}
             className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
           >
@@ -215,13 +256,10 @@ export default function PlannerPage() {
               className="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-4 py-2.5 text-sm leading-relaxed"
               data-testid="planner-streaming"
             >
-              {streamingText === '💭' ? (
-                <span className="text-[hsl(var(--fg-muted))]">
-                  <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
-                  深度思考中…
-                </span>
+              {streamingText.startsWith('💭') ? (
+                <span className="text-xs leading-5 text-[hsl(var(--fg-muted))]">{streamingText.slice(1)}▌</span>
               ) : (
-                streamingText.slice(-600)
+                streamingText.slice(-800)
               )}
             </div>
           </div>
