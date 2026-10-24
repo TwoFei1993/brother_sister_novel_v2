@@ -18,7 +18,7 @@ import { confirmPendingAsset } from './pending-assets';
 import OutlineIterChat from './OutlineIterChat';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
-type Gen = Pick<UseGenerateResult, 'streaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate'>;
+type Gen = Pick<UseGenerateResult, 'streaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate' | 'thinkingBuffer'>;
 
 /** 章节选择条：横向滚动 chips，选中高亮 */
 export function ChapterChips({
@@ -126,23 +126,6 @@ export function TextPane({
     <div className="pb-4">
       <ChapterChips chapters={chapters} currentId={current?.id} onPick={onPick} />
 
-      {/* 流式生成中：实时 buffer */}
-      {gen.streaming && (
-        <div className="mx-4 mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4" data-testid="mobile-streaming">
-          <p className="mb-1 text-xs text-[hsl(var(--fg-muted))]">AI 写作中…</p>
-          <p className="whitespace-pre-wrap text-sm leading-7">{gen.buffer || '（等待模型输出…）'}</p>
-          {gen.partialKept && (
-            <button
-              type="button"
-              onClick={() => void gen.continueFromPartial(work, useWorkStore.getState().messages, gen.buffer).then(onDone)}
-              className="mt-2 h-8 rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs"
-            >
-              ⏵ 接着写
-            </button>
-          )}
-        </div>
-      )}
-
       {gen.error && (
         <div className="mx-4 mb-3 flex items-center gap-2 rounded-xl border border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger))]/10 px-3 py-2 text-xs text-[hsl(var(--danger))]">
           <span className="min-w-0 flex-1">{gen.error.message}</span>
@@ -196,6 +179,29 @@ export function TextPane({
             />
           ) : (
             <p className="whitespace-pre-wrap text-sm leading-7">{current.content}</p>
+          )}
+        </div>
+      )}
+
+      {/* 流式生成中（DeepSeek 式）：💭思考可折叠 + 正文接着文章位置内联续写 */}
+      {gen.streaming && (
+        <div className="mx-4 mt-3" data-testid="mobile-streaming">
+          {gen.thinkingBuffer && <ThinkingInline text={gen.thinkingBuffer} done={Boolean(gen.buffer)} />}
+          <div className="rounded-xl border border-[hsl(var(--accent))]/40 bg-[hsl(var(--surface))] p-4">
+            <p className="mb-1 text-xs text-[hsl(var(--accent))]">
+              <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+              AI 续写中（第{chapters.length + 1}章）…
+            </p>
+            <p className="m-reader-body whitespace-pre-wrap text-[15px] leading-8">{gen.buffer || '（思考中，正文即将开始…）'}</p>
+          </div>
+          {gen.partialKept && (
+            <button
+              type="button"
+              onClick={() => void gen.continueFromPartial(work, useWorkStore.getState().messages, gen.buffer).then(onDone)}
+              className="mt-2 h-8 rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs"
+            >
+              ⏵ 接着写
+            </button>
           )}
         </div>
       )}
@@ -336,6 +342,34 @@ export function AssetsPane({ work, nextIndex }: { work: Work; nextIndex: number 
           })}
         </ol>
       </section>
+    </div>
+  );
+}
+
+/** 💭 思考折叠块（DeepSeek 式）：流式中默认展开跟随思考，正文开始后自动收起为一行 */
+function ThinkingInline({ text, done }: { text: string; done: boolean }) {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    if (done) setOpen(false);
+  }, [done]);
+  return (
+    <div className="mb-3 overflow-hidden rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        data-testid="mobile-thinking-toggle"
+        className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-[hsl(var(--fg-muted))]"
+      >
+        <span aria-hidden>💭</span>
+        {done ? '已深度思考（点击展开）' : '深度思考中…'}
+        <span className="ml-auto">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="max-h-56 overflow-y-auto px-3 pb-2 text-xs leading-5 whitespace-pre-wrap text-[hsl(var(--fg-muted))]">
+          {text.slice(-2000)}
+        </div>
+      )}
     </div>
   );
 }

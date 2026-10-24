@@ -63,6 +63,8 @@ interface RunOptions {
 export interface UseGenerateResult {
   streaming: boolean;
   buffer: string;
+  /** 思考流原文（推理模型💭；移动端 DeepSeek 式折叠块消费） */
+  thinkingBuffer: string;
   error: { code: string; message: string } | null;
   partialKept: boolean;
   targetMessageId: string | null;
@@ -123,12 +125,16 @@ export function useGenerate(): UseGenerateResult {
           // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）
           const tail: AssembleTail = { kind: 'directive', text: opts.promptDirective ?? directive };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
+          // 推理模型预算（对齐向导 ed735c0 修复）：思考开启时输出预算翻倍——
+          // 思考流会吃掉大量 max_tokens，8192 常被思考耗尽 → 正文 0 字 → 「只剩元信息」占位
+          const effMaxTokens =
+            prefs.thinking !== false ? (prefs.maxTokens ?? 8192) * 2 : (prefs.maxTokens ?? 8192);
           const body = buildGenerateBody({
             source: prefs.source,
             model: prefs.model,
             messages: fitted.messages,
             temperature: prefs.temperature,
-            maxTokens: prefs.maxTokens,
+            maxTokens: effMaxTokens,
             frequencyPenalty: prefs.frequencyPenalty,
             presencePenalty: prefs.presencePenalty,
             repetitionPenalty: prefs.repetitionPenalty,
@@ -327,6 +333,7 @@ export function useGenerate(): UseGenerateResult {
   return {
     streaming: useGenerationStore((s) => s.streaming),
     buffer: useGenerationStore((s) => s.buffer),
+    thinkingBuffer: useGenerationStore((s) => s.thinkingBuffer),
     error: useGenerationStore((s) => s.error),
     partialKept: useGenerationStore((s) => s.partialKept),
     targetMessageId: useGenerationStore((s) => s.targetMessageId),

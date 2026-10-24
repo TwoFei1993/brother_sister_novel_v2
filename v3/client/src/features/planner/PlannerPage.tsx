@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { apiFetch } from '../../api/client';
+import { buildGenerateBody, generateStream } from '../../api/llm';
 import { createWork } from '../../api/works';
 import { defaultNovelSettings } from '@shared/work';
 import { useSettingsStore } from '../../stores/settings';
@@ -40,6 +41,8 @@ export default function PlannerPage() {
   const [proposal, setProposal] = useState<PlannerProposal | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  /** 流式打字机：生成中的增量原文（null=未在流式） */
+  const [streamingText, setStreamingText] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -66,27 +69,52 @@ export default function PlannerPage() {
     try {
       const msgs = plannerMessages(history, proposal);
       const prefs = useSettingsStore.getState().llmPrefs;
-      const callPlanner = (maxTokens: number) =>
-        apiFetch<{ text?: string }>('/api/llm/generate', {
-          method: 'POST',
-          body: JSON.stringify({
-            source: prefs.source,
-            model: prefs.model,
-            stream: false,
-            params: { max_tokens: maxTokens, temperature: opts.isReroll ? 0.9 : 0.8 },
-            messages: msgs,
-          }),
+      // 流式打字机（推理模型思考久，无流式会像卡死）：增量文本实时显示；思考帧进「思考中」态
+      let streaming = false;
+      const callPlanner = (maxTokens: number): Promise<string> =>
+        new Promise((resolve, reject) => {
+          let full = '';
+          void generateStream(
+            buildGenerateBody({
+              source: prefs.source,
+              model: prefs.model,
+              messages: msgs,
+              temperature: opts.isReroll ? 0.9 : 0.8,
+              maxTokens,
+              thinking: prefs.thinking !== false,
+              stream: true,
+            }),
+            {
+              onChunk: (delta) => {
+                if (!streaming) {
+                  streaming = true;
+                  setStreamingText('');
+                }
+                full += delta;
+                setStreamingText(full);
+              },
+              onThinking: () => {
+                if (!streaming) setStreamingText('💭');
+              },
+              onError: (e) => reject(new Error(e.message)),
+              onDone: () => undefined,
+            },
+          )
+            .then(() => resolve(full)) // think 剥离在 parsePlannerReply 内部处理
+            .catch(reject);
         });
-      // 推理模型可能把预算吃在思考上：空文本（含被截断的坏 JSON）→ 加倍预算重试一次
-      let res = await callPlanner(8000);
-      let parsed = parsePlannerReply(res.text ?? '');
-      if (!parsed && !(res.text ?? '').trim()) {
-        res = await callPlanner(16000);
-        parsed = parsePlannerReply(res.text ?? '');
+
+      // 推理模型可能把预算吃在思考上（JSON 半截/空文本）→ 加倍预算重试一次（ed735c0 同模式）
+      let text = await callPlanner(8000);
+      let parsed = parsePlannerReply(text);
+      if (!parsed) {
+        setStreamingText(null); // 清首轮打字机，重试重新流式
+        text = await callPlanner(16000);
+        parsed = parsePlannerReply(text);
       }
       if (!parsed) {
-        // 无 JSON：当纯讨论展示
-        setTurns((prev) => [...prev, { role: 'assistant', text: (res.text ?? '').trim() || '（空回复）' }]);
+        // 无 JSON：当纯讨论展示（剥掉思考块后正文）
+        setTurns((prev) => [...prev, { role: 'assistant', text: text.trim() || '（空回复）' }]);
         return;
       }
       setTurns((prev) => [...prev, { role: 'assistant', text: parsed.reply, questions: parsed.questions }]);
@@ -94,6 +122,7 @@ export default function PlannerPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败，请重试');
     } finally {
+      setStreamingText(null);
       setBusy(false);
     }
   }
@@ -180,7 +209,24 @@ export default function PlannerPage() {
           </div>
         ))}
 
-        {busy && (
+        {busy && streamingText && (
+          <div className="flex justify-start">
+            <div
+              className="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-4 py-2.5 text-sm leading-relaxed"
+              data-testid="planner-streaming"
+            >
+              {streamingText === '💭' ? (
+                <span className="text-[hsl(var(--fg-muted))]">
+                  <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+                  深度思考中…
+                </span>
+              ) : (
+                streamingText.slice(-600)
+              )}
+            </div>
+          </div>
+        )}
+        {busy && !streamingText && (
           <div className="flex justify-start">
             <div className="rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-4 py-2.5 text-sm text-[hsl(var(--fg-muted))]">
               <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />

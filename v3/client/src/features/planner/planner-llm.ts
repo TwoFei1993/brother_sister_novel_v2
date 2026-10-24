@@ -33,12 +33,49 @@ export const PLANNER_SYSTEM = `你是网文创作向导。用户描述创作想�
 - 纯闲聊/问答（无策划变更）→ outline 传 null，reply 正常聊天
 - characters 至少 2 名，兄妹核心关系优先`;
 
-/** 从模型原始输出解析（容忍 ```json 包裹/尾随文字）；无合法 JSON → null（当纯讨论处理） */
+/**
+ * 从模型原始输出解析。推理模型（MiniMax-M3 等）常见两类污染：
+ * 1. <think> 块（内含大括号会干扰朴素正则）——先剥离
+ * 2. ```json 围栏——剥离
+ * 之后用**括号平衡扫描**逐个候选 {…} 尝试解析（贪婪 [\s\S]* 会被思考中的 { 提前截断）；
+ * 全部失败 → null（当纯讨论处理）。
+ */
 export function parsePlannerReply(raw: string): ParsedPlannerReply | null {
-  const m = /\{[\s\S]*\}/.exec(raw);
-  if (!m) return null;
+  const cleaned = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/```(?:json)?/gi, '');
+  const candidates: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < cleaned.length; i += 1) {
+    const ch = cleaned[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{') { if (depth === 0) start = i; depth += 1; continue; }
+    if (ch === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) candidates.push(cleaned.slice(start, i + 1));
+    }
+  }
+  for (const candidate of candidates) {
+    const parsed = tryParseReply(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+/** 单个 JSON 候选的结构化校验 */
+function tryParseReply(candidate: string): ParsedPlannerReply | null {
   try {
-    const j = JSON.parse(m[0]) as {
+    const j = JSON.parse(candidate) as {
       reply?: unknown;
       questions?: unknown;
       title?: unknown;
