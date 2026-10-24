@@ -24,7 +24,11 @@ import {
   TavernWorldInfoEntrySchema,
   WorldbookAssetSchema,
   WorkSchema,
+  aiVersion,
   defaultNovelSettings,
+  manualVersionName,
+  nextAiVersionName,
+  normalizeSwipes,
 } from '../index';
 
 // ---------- 真实样本加载 ----------
@@ -73,7 +77,10 @@ describe('MessageSchema（内部，strict）', () => {
     name: '小说家',
     content: '# 第1章 风起\n正文……',
     createdAt: 1_760_000_000_000,
-    swipes: ['第一版', '第二版'],
+    swipes: [
+      { id: 'v-1', name: 'v1', content: '第一版', origin: 'ai', createdAt: 1_760_000_000_000 },
+      { id: 'v-2', name: 'v2', content: '第二版', origin: 'ai', createdAt: 1_760_000_000_000 },
+    ],
     swipeId: 0,
     chapter: { index: 1, title: '风起' },
     directive: '写第一章，兄妹初遇',
@@ -96,6 +103,52 @@ describe('MessageSchema（内部，strict）', () => {
 
   it('role 非法值拒绝', () => {
     expect(MessageSchema.safeParse({ ...valid, role: 'system' }).success).toBe(false);
+  });
+});
+
+describe('版本命名与归一化（安卓 app Phase1）', () => {
+  it('nextAiVersionName：跳过手改版本不占 v 序号', () => {
+    expect(nextAiVersionName([])).toBe('v1');
+    expect(nextAiVersionName(['v1', 'v2'])).toBe('v3');
+    expect(nextAiVersionName(['v1', 'v2手改1', 'v2手改2'])).toBe('v2');
+    expect(nextAiVersionName(['随便什么名字'])).toBe('v1');
+  });
+
+  it('manualVersionName：基底剥后缀 + 同基底最大 M+1', () => {
+    expect(manualVersionName('v1', [])).toBe('v1手改1');
+    expect(manualVersionName('v1', ['v1手改1'])).toBe('v1手改2');
+    expect(manualVersionName('v2手改1', ['v2手改1', 'v2手改2'])).toBe('v2手改3');
+    expect(manualVersionName('初稿', ['v1手改1'])).toBe('初稿手改1');
+  });
+
+  it('normalizeSwipes：string[] → 结构化（v1… 顺序命名）；已结构化原引用返回', () => {
+    const now = 1_760_000_000_000;
+    const migrated = normalizeSwipes(['甲', '乙'], now);
+    expect(migrated.map((v) => ({ name: v.name, content: v.content, origin: v.origin }))).toEqual([
+      { name: 'v1', content: '甲', origin: 'ai' },
+      { name: 'v2', content: '乙', origin: 'ai' },
+    ]);
+    expect(migrated.every((v) => v.id.length > 0 && v.createdAt === now)).toBe(true);
+
+    const structured = [aiVersion('正文', 'v1', now)];
+    expect(normalizeSwipes(structured, now)).toBe(structured); // 幂等判据：引用不变
+    expect(normalizeSwipes([], now)).toHaveLength(1); // 空数组兜底单空版本
+    expect(normalizeSwipes(undefined, now)).toHaveLength(1); // 脏形态兜底
+  });
+
+  it('normalizeSwipes 迁移产物可过 MessageSchema strict 校验', () => {
+    const msg = {
+      id: 'm-1',
+      role: 'assistant',
+      name: '小说家',
+      content: '甲',
+      createdAt: 1,
+      swipes: normalizeSwipes(['甲', '乙'], 1),
+      swipeId: 0,
+      chapter: { index: 1, title: '一章', publishedVersionId: null },
+      extra: {},
+    };
+    expect(MessageSchema.safeParse(msg).success).toBe(true);
   });
 });
 

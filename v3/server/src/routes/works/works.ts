@@ -26,6 +26,7 @@ import {
   defaultNovelSettings,
   type Work,
   type WorkStats,
+  AssetBindingSchema,
 } from '@shared/work';
 
 // ---------- 路径解析（实时读 DATA_DIR，测试注入临时目录） ----------
@@ -67,12 +68,14 @@ export const createWorkSchema = z.strictObject({
   genre: z.string().min(1, '题材不能为空'),
   characterIds: z.array(z.string()).default([]),
   worldbookIds: z.array(z.string()).default([]),
+  factionIds: z.array(z.string()).default([]),
   presetId: z.string().default(''),
   regexScriptIds: z.array(z.string()).default([]),
   settings: NovelSettingsSchema.optional(),
   allowCardOverride: z.boolean().optional(),
   voiceMap: z.record(z.string(), z.string()).default({}),
   viewPreference: ViewPreferenceSchema.optional(),
+  shelfTag: z.string().optional(),
 });
 export type CreateWorkInput = z.infer<typeof createWorkSchema>;
 
@@ -83,29 +86,36 @@ export const updateWorkSchema = z.strictObject({
   genre: z.string().min(1).optional(),
   characterIds: z.array(z.string()).optional(),
   worldbookIds: z.array(z.string()).optional(),
+  factionIds: z.array(z.string()).optional(),
   presetId: z.string().optional(),
   regexScriptIds: z.array(z.string()).optional(),
   settings: NovelSettingsSchema.optional(),
   allowCardOverride: z.boolean().optional(),
   voiceMap: z.record(z.string(), z.string()).optional(),
   viewPreference: ViewPreferenceSchema.optional(),
+  shelfTag: z.string().optional(),
+  bindings: z.array(AssetBindingSchema).optional(),
 });
 export type UpdateWorkInput = z.infer<typeof updateWorkSchema>;
 
 // ---------- GET /works：浅列表（书架卡片所需字段，按最近更新排序） ----------
-export const listWorks: RequestHandler = async (_req, res) => {
+// P3.1 读者过滤：读者只见有上架章节的书（无 publishedChapterCount 的旧 stats 视为未上架）
+export const listWorks: RequestHandler = async (req, res) => {
+  const isReader = req.auth?.role === 'reader';
   const names = await listDir(worksDir());
   const works = await Promise.all(names.map((name) => readJson<Work>(workFile(name))));
   const items = works
     .filter((w): w is Work => w !== null)
+    .filter((w) => !isReader || (w.stats?.publishedChapterCount ?? 0) > 0)
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map(({ id, title, mode, genre, updatedAt, stats }) => ({
+    .map(({ id, title, mode, genre, updatedAt, stats, shelfTag }) => ({
       id,
       title,
       mode,
       genre,
       updatedAt,
       stats,
+      shelfTag,
     }));
   res.json(items);
 };
@@ -129,10 +139,12 @@ export const createWork: RequestHandler = async (req, res) => {
     genre: input.genre,
     characterIds: input.characterIds,
     worldbookIds: input.worldbookIds,
+    factionIds: input.factionIds,
     presetId: input.presetId,
     regexScriptIds: input.regexScriptIds,
     settings: input.settings ?? defaultNovelSettings,
     ...(input.allowCardOverride !== undefined ? { allowCardOverride: input.allowCardOverride } : {}),
+    ...(input.shelfTag !== undefined ? { shelfTag: input.shelfTag } : {}),
     voiceMap: input.voiceMap,
     stats: { messageCount: 0, chapterCount: 0, charCount: 0 },
     createdAt: now,
@@ -168,12 +180,15 @@ export const updateWork: RequestHandler = async (req, res) => {
       genre: input.genre ?? current.genre,
       characterIds: input.characterIds ?? current.characterIds,
       worldbookIds: input.worldbookIds ?? current.worldbookIds,
+      factionIds: input.factionIds ?? current.factionIds,
       presetId: input.presetId ?? current.presetId,
       regexScriptIds: input.regexScriptIds ?? current.regexScriptIds,
       settings: input.settings ?? current.settings,
       allowCardOverride: input.allowCardOverride ?? current.allowCardOverride,
       voiceMap: input.voiceMap ?? current.voiceMap,
       viewPreference: input.viewPreference ?? current.viewPreference,
+      shelfTag: input.shelfTag ?? current.shelfTag,
+      bindings: input.bindings ?? current.bindings,
       revision: current.revision + 1,
       updatedAt: Date.now(),
     };

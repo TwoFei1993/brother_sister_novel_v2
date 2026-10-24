@@ -210,8 +210,29 @@ export const WorkStatsSchema = z.strictObject({
   chapterCount: z.number().int().nonnegative(),
   /** 正文总字数 */
   charCount: z.number().int().nonnegative(),
+  /** 已上架章节数（chapter.publishedVersionId 非空；安卓 app 阅读书架判据，旧数据重算前缺省） */
+  publishedChapterCount: z.number().int().nonnegative().optional(),
 });
 export type WorkStats = z.infer<typeof WorkStatsSchema>;
+
+/**
+ * 素材绑定记录（安卓 app Phase2，共识 D4 绑定三态）
+ *
+ * characterIds/worldbookIds/factionIds 保持「初始绑定」（全书生效）语义不变；
+ * bindings 管理推进中的增量绑定：
+ * - active + fromChapter=N：第 N 章及之后生效（N=1 等价初始绑定）
+ * - pending：AI 检出待作者确认（确认 → active + 素材实体入库 + 归属本书）
+ * 生成第 C 章时素材生效 = 初始绑定 ids ∪ bindings(active 且 fromChapter≤C)。
+ */
+export const AssetBindingSchema = z.strictObject({
+  assetId: z.string().min(1),
+  kind: z.enum(['character', 'worldbook', 'faction']),
+  fromChapter: z.number().int().min(1),
+  status: z.enum(['active', 'pending']),
+  /** 来源备注（如「第3章首次出现（AI 检测）」） */
+  note: z.string().optional(),
+});
+export type AssetBinding = z.infer<typeof AssetBindingSchema>;
 
 export const WorkSchema = z.strictObject({
   id: z.string().min(1),
@@ -224,6 +245,10 @@ export const WorkSchema = z.strictObject({
   genre: z.string(),
   characterIds: z.array(z.string()),
   worldbookIds: z.array(z.string()),
+  /** 势力介绍绑定（安卓 app Phase2；缺省=旧数据兼容空） */
+  factionIds: z.array(z.string()).optional(),
+  /** 增量绑定记录（三态：fromChapter 生效章 / pending 待确认；缺省=旧数据无增量绑定） */
+  bindings: z.array(AssetBindingSchema).optional(),
   presetId: z.string(),
   regexScriptIds: z.array(z.string()),
   settings: NovelSettingsSchema,
@@ -234,6 +259,8 @@ export const WorkSchema = z.strictObject({
   /** 书架统计缓存：消息写入方维护（updateWorkStats），未写入前缺省 */
   stats: WorkStatsSchema.optional(),
   viewPreference: ViewPreferenceSchema.optional(),
+  /** 书架分类标签（安卓 app Phase2；自定义自由文本，缺省=未分类） */
+  shelfTag: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

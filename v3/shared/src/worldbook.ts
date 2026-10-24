@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { TavernWorldInfoFileSchema } from './tavern';
+import { AssetOriginSchema } from './assets/origin';
 
 export const WorldbookAssetSchema = z.strictObject({
   id: z.string().min(1),
@@ -12,6 +13,8 @@ export const WorldbookAssetSchema = z.strictObject({
   name: z.string(),
   /** 入库时间（毫秒时间戳；服务端生成，列表排序用） */
   createdAt: z.number().optional(),
+  /** 归属三态（可选，缺省=无归属；安卓 app Phase2） */
+  origin: AssetOriginSchema.optional(),
   /** 酒馆原生世界书文件 { entries: { "<uid>": entry } } */
   raw: TavernWorldInfoFileSchema,
 });

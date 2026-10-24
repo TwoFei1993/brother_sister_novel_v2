@@ -4,6 +4,10 @@
  * 酒馆原生格式：世界书 / 预设 / 正则 / V2 卡（passthrough 宽松，roundtrip 不丢字段）
  */
 export * from './message';
+export * from './comment';
+export * from './community';
+export * from './assets/origin';
+export * from './assets/faction';
 export * from './work';
 export * from './card';
 export * from './worldbook';

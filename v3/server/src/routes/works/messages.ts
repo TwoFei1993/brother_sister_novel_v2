@@ -54,20 +54,31 @@ export const listMessages: RequestHandler = async (req, res) => {
         : ({ kind: 'tail', n: parsePositive(req.query.tail, 50) } as const);
 
   const { messages, hasMore } = await readWindow<Message>(messagesFile(id), mode);
-  res.json(hasMore === undefined ? { messages } : { messages, hasMore });
+  // P3.1 读者过滤：只回已上架章节的正文消息（含作者指令行一并隐藏——草稿与剧情指令不外泄）
+  const out = req.auth?.role === 'reader' ? messages.filter(readerVisible) : messages;
+  res.json(hasMore === undefined ? { messages: out } : { messages: out, hasMore });
 };
+
+/** 读者可见判据：assistant 章节消息且上架指针非空 */
+function readerVisible(m: Message): boolean {
+  return m.role === 'assistant' && m.chapter !== undefined && m.chapter.publishedVersionId != null;
+}
 
 // ---------- stats 重算（§4.6：写入方维护缓存） ----------
 
-/** 统计口径：总数 / 带 chapter 元数据的消息数（章）/ assistant 正文总长（字） */
+/** 统计口径：总数 / 带 chapter 元数据的消息数（章）/ assistant 正文总长（字）/ 已上架章数 */
 function computeStats(messages: Message[]): WorkStats {
   let chapterCount = 0;
   let charCount = 0;
+  let publishedChapterCount = 0;
   for (const m of messages) {
-    if (m.chapter !== undefined) chapterCount += 1;
+    if (m.chapter !== undefined) {
+      chapterCount += 1;
+      if (m.chapter.publishedVersionId) publishedChapterCount += 1;
+    }
     if (m.role === 'assistant') charCount += m.content.length;
   }
-  return { messageCount: messages.length, chapterCount, charCount };
+  return { messageCount: messages.length, chapterCount, charCount, publishedChapterCount };
 }
 
 // ---------- POST：幂等 upsert（§9.2 生成完成入库） ----------

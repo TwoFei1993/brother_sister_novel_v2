@@ -14,7 +14,7 @@ import { worksRouter } from '../../../routes/works';
 import { signToken } from '../../../middleware/auth';
 import { HttpError } from '../../../middleware/validate';
 import { readAll } from '../../../storage/jsonl';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 
 process.env.ACCESS_PASSWORD = 'test123';
 
@@ -63,7 +63,7 @@ function msg(i: number, over: Partial<Message> = {}): Message {
     name: i % 2 === 0 ? '小说家' : '作者',
     content,
     createdAt: 1700000000000 + i,
-    swipes: [content],
+    swipes: [aiVersion(content, 'v1', 1700000000000 + i)],
     swipeId: 0,
     chapter: i % 2 === 0 ? { index: i / 2, title: `第${i / 2}章` } : undefined,
     extra: {},
@@ -211,7 +211,7 @@ describe('POST 幂等 upsert（§9.2 生成入库）', () => {
     // 种子 60 条（assistant 30×5 字=150，chapter 30）；新增 assistant +5 字 +1 章
     const m61 = msg(61, { role: 'assistant', chapter: { index: 31, title: '第31章' } });
     await authed(testApp()).post(`/api/works/${workId}/messages`).send(m61);
-    expect(await diskStats(workId)).toEqual({ messageCount: 61, chapterCount: 31, charCount: 155 });
+    expect(await diskStats(workId)).toEqual({ messageCount: 61, chapterCount: 31, charCount: 155, publishedChapterCount: 0 });
   });
 
   it('非法 body：缺 swipes 字段 → 400（strict schema）', async () => {
@@ -237,7 +237,7 @@ describe('PATCH last-write-wins（swipe 切换/编辑）', () => {
   });
 
   it('PATCH 切换 swipeId → GET 回读新 swipeId（swipe 候选追加）', async () => {
-    const swiped = msg(2, { swipes: ['内容002', '第二支候选'], swipeId: 1 });
+    const swiped = msg(2, { swipes: [aiVersion('内容002', 'v1'), aiVersion('第二支候选', 'v2')], swipeId: 1 });
     const res = await authed(testApp()).patch(`/api/works/${workId}/messages/m002`).send(swiped);
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
@@ -245,7 +245,7 @@ describe('PATCH last-write-wins（swipe 切换/编辑）', () => {
     const back = await authed(testApp()).get(`/api/works/${workId}/messages?tail=3`);
     const m2 = back.body.messages.find((m: Message) => m.id === 'm002');
     expect(m2.swipeId).toBe(1);
-    expect(m2.swipes).toEqual(['内容002', '第二支候选']);
+    expect(m2.swipes.map((v: { content: string }) => v.content)).toEqual(['内容002', '第二支候选']);
     expect(back.body.messages).toHaveLength(3); // 不新增行
   });
 
@@ -257,6 +257,24 @@ describe('PATCH last-write-wins（swipe 切换/编辑）', () => {
     const back = await authed(testApp()).get(`/api/works/${workId}/messages?tail=3`);
     const m2 = back.body.messages.find((m: Message) => m.id === 'm002');
     expect(m2.content).toBe('改写后的长正文');
+  });
+
+  it('上架：PATCH publishedVersionId → GET 回读 + stats.publishedChapterCount 重算（双指针独立于 swipeId）', async () => {
+    const versions = [aiVersion('第一章 v1', 'v1'), aiVersion('第一章 v2', 'v2')];
+    // 先给 m002 补两个版本，v2 上架、激活仍指 v1（swipeId=0）
+    const published = msg(2, { swipes: versions, swipeId: 0, chapter: { index: 1, title: '第1章', publishedVersionId: versions[1].id } });
+    const res = await authed(testApp()).patch(`/api/works/${workId}/messages/m002`).send(published);
+    expect(res.status).toBe(200);
+
+    const back = await authed(testApp()).get(`/api/works/${workId}/messages?tail=3`);
+    const m2 = back.body.messages.find((m: Message) => m.id === 'm002');
+    expect(m2.chapter.publishedVersionId).toBe(versions[1].id);
+    expect(m2.swipeId).toBe(0); // 上架指针不影响激活指针
+
+    // 撤销上架（null）→ 计数回落
+    const unpublished = msg(2, { swipes: versions, swipeId: 0, chapter: { index: 1, title: '第1章', publishedVersionId: null } });
+    await authed(testApp()).patch(`/api/works/${workId}/messages/m002`).send(unpublished);
+    expect((await diskStats(workId)).publishedChapterCount).toBe(0);
   });
 
   it('body.id 与路径 mid 不一致 → 400', async () => {
@@ -287,7 +305,7 @@ describe('DELETE 单条', () => {
 
     const all = await readAll<Message>(join(root, 'works', workId, 'messages.jsonl'));
     expect(all.map((m) => m.id)).toEqual(['m001', 'm003']);
-    expect(await diskStats(workId)).toEqual({ messageCount: 2, chapterCount: 0, charCount: 0 });
+    expect(await diskStats(workId)).toEqual({ messageCount: 2, chapterCount: 0, charCount: 0, publishedChapterCount: 0 });
   });
 
   it('DELETE 不存在的 mid → 404', async () => {

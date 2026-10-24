@@ -15,7 +15,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import { MessageSchema, type Message } from '@shared/message';
+import { aiVersion, MessageSchema, type Message } from '@shared/message';
 import {
   WorkSchema,
   defaultNovelSettings,
@@ -76,7 +76,7 @@ function mapSettings(raw: Record<string, unknown> | undefined, worldContent: str
   return { ...mapped, ...(worldContent === '' ? {} : { legacyWorldBuilding: worldContent }) };
 }
 
-/** 单章节 → 消息：swipes 以 versions 数组为准，content 取当前选中版本（缺失兜底 chapter.content） */
+/** 单章节 → 消息：swipes 以 versions 数组为准（结构化版本，命名 v1…），content 取当前选中版本（缺失兜底 chapter.content） */
 function chapterToMessage(
   chapter: LegacyChapter,
   index: number,
@@ -84,16 +84,19 @@ function chapterToMessage(
 ): Message {
   const fallback = chapter.content ?? '';
   const versions = chapter.versions ?? [];
+  const createdAt = baseTime + index * CHAPTER_STEP_MS;
   const swipes =
-    versions.length > 0 ? versions.map((v) => v.content ?? '') : [fallback];
+    versions.length > 0
+      ? versions.map((v, i) => aiVersion(v.content ?? '', `v${i + 1}`, createdAt))
+      : [aiVersion(fallback, 'v1', createdAt)];
   const rawSwipeId = chapter.currentVersionIndex ?? 0;
   const swipeId = Math.min(Math.max(0, Math.trunc(rawSwipeId)), swipes.length - 1);
   return {
     id: randomUUID(),
     role: 'assistant',
     name: '小说家',
-    content: swipes[swipeId] ?? fallback,
-    createdAt: baseTime + index * CHAPTER_STEP_MS,
+    content: swipes[swipeId]?.content ?? fallback,
+    createdAt,
     swipes,
     swipeId,
     chapter: { index, title: chapter.title ?? '' },

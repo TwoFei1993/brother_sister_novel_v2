@@ -6,6 +6,7 @@
  */
 import { z } from 'zod';
 import { TavernCardV2Schema } from './tavern';
+import { AssetOriginSchema } from './assets/origin';
 
 export const CharacterAssetSchema = z.strictObject({
   id: z.string().min(1),
@@ -15,6 +16,8 @@ export const CharacterAssetSchema = z.strictObject({
   createdAt: z.number().optional(),
   /** 头像引用（data URL 或相对路径，可空） */
   avatar: z.string().optional(),
+  /** 归属三态（可选，缺省=无归属；安卓 app Phase2） */
+  origin: AssetOriginSchema.optional(),
   /** 酒馆原生 V2 卡（含 spec/spec_version/data 全量字段，原样保存） */
   card: TavernCardV2Schema,
 });

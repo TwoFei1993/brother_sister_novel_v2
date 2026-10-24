@@ -105,26 +105,33 @@ describe('migrateNovelHistory 纯函数', () => {
     expect(msgs.map((m) => m.chapter?.title)).toEqual(['初入异世', '宗门试炼', '意外收获']);
   });
 
-  it('versions → swipes 映射：content=当前版本正文、swipeId=currentVersionIndex', () => {
+  it('versions → 结构化 swipes 映射：命名 v1…、content=当前版本正文、swipeId=currentVersionIndex', () => {
     const { works } = migrateNovelHistory(makeLegacyProjects() as never[]);
     const msgs = works[0].messages;
-    expect(msgs[0].swipes).toEqual(['第一章正文v1', '第一章正文v2']);
+    expect(msgs[0].swipes.map((v) => ({ name: v.name, content: v.content, origin: v.origin }))).toEqual([
+      { name: 'v1', content: '第一章正文v1', origin: 'ai' },
+      { name: 'v2', content: '第一章正文v2', origin: 'ai' },
+    ]);
     expect(msgs[0].swipeId).toBe(1);
     expect(msgs[0].content).toBe('第一章正文v2');
-    expect(msgs[1].swipes).toEqual(['第二章正文v1', '第二章正文v2', '第二章正文v3']);
+    expect(msgs[1].swipes.map((v) => v.content)).toEqual(['第二章正文v1', '第二章正文v2', '第二章正文v3']);
+    expect(msgs[1].swipes.map((v) => v.name)).toEqual(['v1', 'v2', 'v3']);
     expect(msgs[1].swipeId).toBe(2);
     expect(msgs[1].content).toBe('第二章正文v3');
   });
 
-  it('无版本章节兜底：swipes=[content]、swipeId=0', () => {
+  it('无版本章节兜底：swipes=[单版本]、swipeId=0', () => {
     const { works } = migrateNovelHistory(makeLegacyProjects() as never[]);
     const only = works[1].messages[0];
     expect(only.content).toBe('唯一章节正文');
-    expect(only.swipes).toEqual(['唯一章节正文']);
+    expect(only.swipes).toHaveLength(1);
+    expect(only.swipes[0].content).toBe('唯一章节正文');
+    expect(only.swipes[0].name).toBe('v1');
     expect(only.swipeId).toBe(0);
     // A 的第三章（无 versions 字段）同样兜底
     const third = works[0].messages[2];
-    expect(third.swipes).toEqual(['第三章正文']);
+    expect(third.swipes).toHaveLength(1);
+    expect(third.swipes[0].content).toBe('第三章正文');
     expect(third.swipeId).toBe(0);
   });
 

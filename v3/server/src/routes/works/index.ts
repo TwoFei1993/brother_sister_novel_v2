@@ -9,6 +9,7 @@ import { Router } from 'express';
 
 import { authRequired } from '../../middleware/auth';
 import { zodBody } from '../../middleware/validate';
+import { commentsRouter } from './comments';
 import { messagesRouter } from './messages';
 import {
   createWork,
@@ -33,3 +34,6 @@ worksRouter.delete('/works/:id', wrap(deleteWork));
 
 // messages 子路由（JSONL 消息流，设计 §6）：读三窗口 + 写三操作，见 messages.ts
 worksRouter.use('/works/:id/messages', messagesRouter);
+
+// comments 子路由（安卓 app 划线评论）：全量读 + 幂等 upsert + 删除，见 comments.ts
+worksRouter.use('/works/:id/comments', commentsRouter);

@@ -4,16 +4,29 @@
  * 覆盖：登录密码校验、HttpOnly cookie 下发、authRequired 拦截、
  * 签名篡改拒绝、过期 token 拒绝。supertest 直接打内存 app，不起真实端口。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Response } from 'supertest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { createApp } from '../../app';
 import { signToken } from '../../middleware/auth';
 
-// auth 模块每次请求实时读 env，beforeEach 设定即可覆盖全部用例
-beforeEach(() => {
+// auth 模块每次请求实时读 env，beforeEach 设定即可覆盖全部用例。
+// P3 起登录会 seedAuthor(users.jsonl)：必须注入临时 DATA_DIR，杜绝触碰真实 data/。
+let root = '';
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'auth-test-'));
+  process.env.DATA_DIR = root;
   process.env.ACCESS_PASSWORD = 'test123';
+});
+
+afterEach(async () => {
+  delete process.env.DATA_DIR;
+  delete process.env.ACCESS_PASSWORD;
+  await rm(root, { recursive: true, force: true });
 });
 
 /** 从 set-cookie 响应头提取 token=xxx 的值（供带 cookie 复访用） */

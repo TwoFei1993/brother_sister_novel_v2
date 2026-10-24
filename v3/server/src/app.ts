@@ -17,7 +17,9 @@ import multer from 'multer';
 import { ZodError } from 'zod';
 
 import { httpLogger, logger } from './middleware/logger';
+import { requireAuthor } from './middleware/auth';
 import { HttpError, formatZodError } from './middleware/validate';
+import { communityRouter } from './routes/community';
 import { coreRouter } from './routes/core';
 import { dataDir } from './routes/core/paths';
 import { extractRouter } from './routes/extract';
@@ -91,10 +93,32 @@ export function createApp(): Express {
 
   // API 路由组（设计 §6）
   app.use('/api', coreRouter);
-  app.use('/api', libraryRouter); // library/ 角色卡·世界书·预设·正则
+  // P3.1 权限分级 guard：
+  //  - 读者可写：评论 POST（/works/:id/comments）、留言板（自带 authRequired 分级）
+  //  - 读者禁入：创作域平铺路由（characters/worldbooks/presets/regex-scripts/factions/copy/io/llm/extract，
+  //    library 组挂载无 /library 前缀——曾误写 startsWith('/library') 致素材对读者裸奔，50 例实测抓出）
+  //  - 其余非 GET（works/messages 写操作）：作者专属
+  //  - GET 其余（works/messages 读）：放行至路由层（读者过滤见 works.ts/messages.ts）
+  const AUTHOR_ONLY_PREFIXES = [
+    '/library', '/characters', '/worldbooks', '/presets', '/regex-scripts',
+    '/factions', '/copy', '/io', '/llm', '/extract',
+  ];
+  app.use('/api', (req, res, next) => {
+    const p = req.path;
+    if (p.startsWith('/auth/')) return next(); // 登录/注册/登出
+    if (p.startsWith('/community')) return next(); // 留言板：路由内 authRequired 分级
+    if (p.startsWith('/works/') && p.endsWith('/comments')) return next(); // 评论：读者可写
+    if (AUTHOR_ONLY_PREFIXES.some((pre) => p === pre || p.startsWith(`${pre}/`))) {
+      return requireAuthor(req, res, next); // 创作域整组作者专属（读写在内）
+    }
+    if (req.method === 'GET') return next();
+    return requireAuthor(req, res, next);
+  });
+  app.use('/api', libraryRouter); // library/ 角色卡·世界书·预设·正则（+factions/copy，作者专属）
   app.use('/api', worksRouter);   // works/ 作品 CRUD + 消息流（messages 子路由 Task 8）
-  app.use('/api', llmRouter);     // llm/ 生成代理（SSE）+ 探活 + tokenize（Task 17）
-  app.use('/api/extract', extractRouter); // extract/ Word 文档文本提取（向导导入）
+  app.use('/api', llmRouter);     // llm/ 生成代理（SSE）+ 探活 + tokenize（Task 17，作者专属）
+  app.use('/api/extract', extractRouter); // extract/ Word 文档文本提取（向导导入，作者专属）
+  app.use('/api/community', communityRouter); // P3.2 留言板（登录即可读写，回复作者专属）
   // ---- 后续任务预留挂载位 ----
 
   // SPA 历史回退：非 API/静态资源且无扩展名的 GET → index.html（react-router 深链接/刷新；

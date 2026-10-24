@@ -12,6 +12,8 @@ import { charactersRouter } from './characters';
 import { worldbooksRouter } from './worldbooks';
 import { presetsRouter } from './presets';
 import { regexRouter } from './regex';
+import { factionsRouter } from './factions';
+import { copyRouter } from './copy';
 import { ioCardRouter } from './io/io-card';
 import { ioAssetsRouter } from './io/io-assets';
 import { resourcesRouter } from './io/resources';
@@ -24,6 +26,9 @@ libraryRouter.use('/characters', charactersRouter);
 libraryRouter.use('/worldbooks', worldbooksRouter);
 libraryRouter.use('/presets', presetsRouter);
 libraryRouter.use('/regex-scripts', regexRouter);
+// 势力介绍（安卓 app Phase2 新增素材类型）+ 跨书复制（共识 D4 纯复制语义）
+libraryRouter.use('/factions', factionsRouter);
+libraryRouter.use('/copy', copyRouter);
 
 // ---- Task 24：io-card（角色卡 PNG 导入/导出，V2/V3 转换）→ /api/io/characters/* ----
 libraryRouter.use('/io', ioCardRouter);
