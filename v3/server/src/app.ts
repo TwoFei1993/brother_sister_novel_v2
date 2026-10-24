@@ -81,9 +81,17 @@ export function createApp(): Express {
     avatarStatic(req, res, next);
   });
 
-  // 静态托管前端构建产物（构建后存在才挂，开发期跳过避免干扰）
+  // 静态托管前端构建产物（构建后存在才挂，开发期跳过避免干扰）。
+  // index.html 设 no-cache：部署新版后浏览器立取最新入口（JS/CSS 自带 contenthash 长缓存不受影响），
+  // 否则用户会因缓存旧入口「部署了却看不到新功能」。
   if (existsSync(PUBLIC_DIR)) {
-    app.use(express.static(PUBLIC_DIR));
+    app.use(
+      express.static(PUBLIC_DIR, {
+        setHeaders(res, filePath) {
+          if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+        },
+      }),
+    );
   }
 
   // 探活（dev.sh 联动验证用，免鉴权）
