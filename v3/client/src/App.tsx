@@ -4,9 +4,10 @@
  * 页面全部 React.lazy 懒加载（Suspense 兜底），为后续大页面按路由分包。
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { apiFetch } from './api/client';
+import { isMobileDevice } from './lib/device';
 import { useUserTheme } from './lib/theme';
 import { useAuthStore, type AuthUser } from './stores/auth';
 import { useSettingsStore, type ConfigDto } from './stores/settings';
@@ -77,10 +78,34 @@ function GlobalTheme() {
   return null;
 }
 
+/**
+ * 移动设备自动路由守卫（安卓 app Phase3 闭环）：移动设备访问任何桌面路由
+ * 一律重定向到 /m/* 对应页——手机上永不落入桌面版（APK WebView UA 含 Android 天然生效）。
+ * 映射：/ → 创作书架；/work/:id → 同 id 移动创作页；/settings → 我的；其余桌面页 → 创作书架。
+ * 桌面浏览器（含窄窗口想用桌面版）不受影响——逃生门见 lib/device.ts。
+ */
+function MobileRedirect() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!isMobileDevice()) return;
+    if (pathname.startsWith('/m') || pathname === '/login') return;
+    if (pathname.startsWith('/work/')) {
+      navigate(`/m${pathname}`, { replace: true });
+    } else if (pathname.startsWith('/settings')) {
+      navigate('/m/me', { replace: true });
+    } else {
+      navigate('/m/create', { replace: true });
+    }
+  }, [pathname, navigate]);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <GlobalTheme />
+      <MobileRedirect />
       <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
