@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { apiFetch } from '../../api/client';
-import { buildGenerateBody } from '../../api/llm';
+import { generateTextOnce } from '../../api/llm';
 import { applySelectionResult, selectionPrompt, SELECTION_MODES, type SelectionMode } from '../../lib/selection-actions';
 import { useSettingsStore } from '../../stores/settings';
 import { useWorkStore } from '../../stores/work';
@@ -58,19 +58,20 @@ export default function SelectionTools({ getTarget, onApplied }: SelectionToolsP
       const idx = target.content.indexOf(selText);
       const contextBefore = idx > 0 ? target.content.slice(Math.max(0, idx - 400), idx) : '';
       const prefs = useSettingsStore.getState().llmPrefs;
-      const body = buildGenerateBody({
-        source: prefs.source,
-        model: prefs.model,
-        stream: false,
-        maxTokens: 3000,
-        temperature: 0.7,
-        messages: [{ role: 'user', content: selectionPrompt(mode, selText, contextBefore) }],
-      });
-      const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      const text = (res.text ?? '').trim();
+      // 推理模型兜底：空输出（思考吃满预算）自动加倍预算重试一次；思考跟随用户设置
+      const text = (
+        await generateTextOnce(
+          {
+            source: prefs.source,
+            model: prefs.model,
+            temperature: 0.7,
+            maxTokens: 3000,
+            thinking: prefs.thinking !== false,
+            messages: [{ role: 'user', content: selectionPrompt(mode, selText, contextBefore) }],
+          },
+          3000,
+        )
+      ).trim();
       if (!text) {
         setError('模型未返回内容，请重试或更换模型');
         return;

@@ -9,7 +9,7 @@ import { useMemo, useRef, useState } from 'react';
 
 import { apiFetch } from '../../../api/client';
 import type { GenerateMessage } from '../../../api/llm';
-import { buildGenerateBody } from '../../../api/llm';
+import { buildGenerateBody, generateTextOnce } from '../../../api/llm';
 import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
@@ -66,19 +66,18 @@ export default function OutlineIterChat({
   }
 
   async function callLlm(messages: GenerateMessage[]): Promise<string> {
-    const body = buildGenerateBody({
-      source: prefs.source,
-      model: prefs.model,
-      messages,
-      temperature: prefs.temperature,
-      maxTokens: Math.max(prefs.maxTokens ?? 8192, 8192),
-      thinking: false,
-    });
-    const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
-      method: 'POST',
-      body: JSON.stringify({ ...body, stream: false }),
-    });
-    return extractRewriteText(res.text ?? '');
+    // generateTextOnce：思考跟随用户设置 + 空输出自动加倍预算重试一次（推理模型思考吃满预算的通用兜底）
+    return generateTextOnce(
+      {
+        source: prefs.source,
+        model: prefs.model,
+        messages,
+        temperature: prefs.temperature,
+        maxTokens: 16000,
+        thinking: prefs.thinking !== false,
+      },
+      16000,
+    ).then(extractRewriteText);
   }
 
   async function rewriteLockedChapter(brief: string): Promise<void> {

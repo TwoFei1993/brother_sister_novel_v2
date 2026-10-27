@@ -146,6 +146,29 @@ export async function generateStream(
   handlers.onDone();
 }
 
+/**
+ * 非流式文本生成（一次性拿全文）：向导/选段工具/记忆抽取等场景共用。
+ *
+ * 推理模型预算兜底（ed735c0 同模式）：思考流会吃掉大量 max_tokens——
+ * 首选预算拿到的 text 为空（思考吃满/被截断的半截）时，自动以加倍预算重试一次。
+ * 调用方仍需对空 text 做业务兜底（重试后仍空属上游异常）。
+ */
+export async function generateTextOnce(
+  input: Omit<BuildGenerateBodyInput, 'stream'>,
+  budget = 8192,
+): Promise<string> {
+  const call = (maxTokens: number): Promise<string> => {
+    const body = buildGenerateBody({ ...input, maxTokens, stream: false });
+    return apiFetch<{ text?: string }>('/api/llm/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).then((r) => r.text ?? '');
+  };
+  const first = await call(budget);
+  if (first.trim()) return first;
+  return call(budget * 2);
+}
+
 /** POST /api/tokenize：按 source 精确/启发式计数（server 返回 {count, approximate}） */
 export function tokenizeMessages(
   source: LlmSource,
