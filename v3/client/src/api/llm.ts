@@ -7,7 +7,7 @@
  * 结束（收到 [DONE]）后恰调用一次；静默断流（流结束/连接中断而未见 [DONE]）
  * 抛 ApiError{code:'streamIncomplete'}，不触发 onDone（§9.2 半成品不得 finalize）。
  */
-import { apiFetch, apiStream } from './client';
+import { apiFetch, apiStream, ApiError } from './client';
 import type { LlmSource } from '../stores/settings';
 
 /** 组装后的单条消息（与 server generateSchema 的 messageSchema 同形） */
@@ -151,22 +151,31 @@ export async function generateStream(
  *
  * 推理模型预算兜底（ed735c0 同模式）：思考流会吃掉大量 max_tokens——
  * 首选预算拿到的 text 为空（思考吃满/被截断的半截）时，自动以加倍预算重试一次。
- * 调用方仍需对空 text 做业务兜底（重试后仍空属上游异常）。
+ * 上游偶发 5xx/网络抖动同样触发重试（4xx 业务错误直接抛）。
+ * 重试后仍空 → 抛人话错误（调用方展示）。
  */
 export async function generateTextOnce(
   input: Omit<BuildGenerateBodyInput, 'stream'>,
   budget = 8192,
 ): Promise<string> {
-  const call = (maxTokens: number): Promise<string> => {
+  const call = async (maxTokens: number): Promise<string> => {
     const body = buildGenerateBody({ ...input, maxTokens, stream: false });
-    return apiFetch<{ text?: string }>('/api/llm/generate', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }).then((r) => r.text ?? '');
+    try {
+      const r = await apiFetch<{ text?: string }>('/api/llm/generate', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return r.text ?? '';
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err; // 4xx 业务错误不重试
+      return ''; // 5xx/网络抖动按空输出处理，交由外层加倍重试
+    }
   };
   const first = await call(budget);
   if (first.trim()) return first;
-  return call(budget * 2);
+  const second = await call(budget * 2);
+  if (second.trim()) return second;
+  throw new Error('模型无输出（已自动加倍预算重试），请稍后重试或更换模型');
 }
 
 /** POST /api/tokenize：按 source 精确/启发式计数（server 返回 {count, approximate}） */
