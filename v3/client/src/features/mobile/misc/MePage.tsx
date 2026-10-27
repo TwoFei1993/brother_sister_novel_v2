@@ -10,6 +10,8 @@ import { useLogout } from '../../../hooks/useLogout';
 import { displayNameOf, useAuthStore } from '../../../stores/auth';
 import { useSettingsStore } from '../../../stores/settings';
 
+// 无独立导入：llmPrefs/thinking 走 settingsStore（与桌面 LlmPanel 同一状态源）
+
 const THEMES = [
   { id: 'm-ink', label: '墨玉 · 夜' },
   { id: 'm-paper', label: '宣纸 · 昼' },
@@ -18,6 +20,8 @@ const THEMES = [
 export default function MePage() {
   const uiTheme = useSettingsStore((s) => s.uiTheme);
   const setUiTheme = useSettingsStore((s) => s.setUiTheme);
+  const thinkingOn = useSettingsStore((s) => s.llmPrefs.thinking !== false);
+  const setThinking = useSettingsStore((s) => s.setLlmPrefs);
   const user = useAuthStore((s) => s.user);
   const logout = useLogout();
   const isReader = user?.role === 'reader';
@@ -35,6 +39,36 @@ export default function MePage() {
         <p className="mt-0.5 text-xs text-[hsl(var(--fg-muted))]">
           {user ? (user.role === 'author' ? '作者 · 全部权限' : '读者 · 阅读 / 评论 / 留言') : '未登录'}
         </p>
+      </section>
+
+      {/* 💭 思考模式开关（生成速度/质量权衡，高频需求） */}
+      <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4" data-testid="thinking-toggle-card">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">💭 深度思考模式</h2>
+            <p className="mt-0.5 text-xs leading-5 text-[hsl(var(--fg-muted))]">
+              开：模型先推理再写作，质量高但每章约 2-4 分钟且多耗 token
+              <br />
+              关：直接写作，速度快约一半
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={thinkingOn}
+            data-testid="thinking-switch"
+            onClick={() => setThinking({ thinking: !thinkingOn })}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+              thinkingOn ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--fg-muted))]/30'
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                thinkingOn ? 'left-6' : 'left-1'
+              }`}
+            />
+          </button>
+        </div>
       </section>
 
       {!isReader && (
