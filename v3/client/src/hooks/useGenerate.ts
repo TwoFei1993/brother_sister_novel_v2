@@ -56,6 +56,8 @@ interface RunOptions {
   promptDirective?: string;
   /** 无效输出重试：携带首次消息 id，落库行按 messageId 幂等覆盖（不产生重复章节行） */
   persistMessageId?: string;
+  /** 输出预算倍率（meta/崩溃重试对症「思考吃满 max_tokens」：预算不变的重试注定再失败） */
+  maxTokensScale?: number;
 }
 
 /** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
@@ -125,10 +127,12 @@ export function useGenerate(): UseGenerateResult {
           // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）
           const tail: AssembleTail = { kind: 'directive', text: opts.promptDirective ?? directive };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
-          // 推理模型预算（对齐向导 ed735c0 修复）：思考开启时输出预算翻倍——
-          // 思考流会吃掉大量 max_tokens，8192 常被思考耗尽 → 正文 0 字 → 「只剩元信息」占位
-          const effMaxTokens =
-            prefs.thinking !== false ? (prefs.maxTokens ?? 8192) * 2 : (prefs.maxTokens ?? 8192);
+          // 推理模型预算：思考流会吃掉大量 max_tokens 且上游不遵守 budget_tokens 上限
+          // （M3.1 实测：budget 3000 烧到 4798，正文 0 字）——thinking 开启时输出预算
+          // 翻倍且保底 16384（小预算注定「只剩元信息」）；重试轮再乘 maxTokensScale
+          const thinkingOn = prefs.thinking !== false;
+          const rawMax = (prefs.maxTokens ?? 8192) * (opts.maxTokensScale ?? 1);
+          const effMaxTokens = Math.min(Math.max(rawMax, thinkingOn ? 16384 : 0), 64000);
           const body = buildGenerateBody({
             source: prefs.source,
             model: prefs.model,
@@ -201,12 +205,14 @@ export function useGenerate(): UseGenerateResult {
       let msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
       const reason = invalidReasonOf(msg);
       if (msg && reason) {
-        // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；落库按首次消息 id 幂等覆盖）
+        // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；落库按首次消息 id 幂等覆盖）。
+        // meta 的本质常是「思考吃满输出预算」——重试同时把预算提到 3 倍（封顶 64000），只换提示词注定再失败
         msg = await run(work, messages, directive, {
           targetId,
           initialBuffer: '',
           promptDirective: directive + RETRY_SUFFIX[reason],
           persistMessageId: msg.id,
+          maxTokensScale: 3,
         });
       }
       // 截断自动续写（feedback：经常没写完就结束）：双判据——
@@ -223,6 +229,7 @@ export function useGenerate(): UseGenerateResult {
           initialBuffer: partial,
           promptDirective: directive,
           persistMessageId: msg.id, // 补完结果同 id 覆盖（否则半成品行以孤儿形式残留，重载出现重复章节）
+          maxTokensScale: 2, // 腰斩常因思考挤占预算——续写轮同样抬预算（2 倍）
         });
       }
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），

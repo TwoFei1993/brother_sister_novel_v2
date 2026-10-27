@@ -61,6 +61,15 @@ const q = (c: HTMLElement, id: string): HTMLElement => {
   return el as HTMLElement;
 };
 
+/** 打开首行的「更多操作」菜单（行内操作已收进菜单——先展开才能触达复制/重命名菜单项） */
+async function openMenu(c: HTMLElement): Promise<void> {
+  const more = c.querySelector('[data-testid^="asset-more-"]');
+  if (!more) throw new Error('missing asset-more toggle');
+  await act(async () => {
+    (more as HTMLElement).click();
+  });
+}
+
 beforeEach(() => {
   listAssetsMock.mockReset().mockResolvedValue(refs);
   duplicatePresetMock.mockClear();
@@ -80,6 +89,7 @@ afterEach(async () => {
 describe('AssetPanel 预设复制/重命名', () => {
   it('复制：携「 原名 副本」调用 duplicatePreset 并重拉列表', async () => {
     const c = await mountPanel();
+    await openMenu(c);
     await act(async () => {
       q(c, 'asset-copy').click();
     });
@@ -92,6 +102,7 @@ describe('AssetPanel 预设复制/重命名', () => {
   it('重命名：prompt 输入新名 → renameAsset 携类型与 trimmed 新名', async () => {
     vi.spyOn(window, 'prompt').mockReturnValue('  新名字  ');
     const c = await mountPanel();
+    await openMenu(c);
     await act(async () => {
       q(c, 'asset-rename').click();
     });
@@ -103,6 +114,7 @@ describe('AssetPanel 预设复制/重命名', () => {
   it('重命名：prompt 取消/空输入不发起请求', async () => {
     vi.spyOn(window, 'prompt').mockReturnValue(null);
     const c = await mountPanel();
+    await openMenu(c);
     await act(async () => {
       q(c, 'asset-rename').click();
     });
@@ -113,6 +125,7 @@ describe('AssetPanel 预设复制/重命名', () => {
   it('非预设类型不渲染复制按钮，但保留重命名（反馈②）', async () => {
     listAssetsMock.mockResolvedValue([{ id: 'w1', name: '主世界书' }]);
     const c = await mountPanel('worldbooks');
+    await openMenu(c);
     expect(c.querySelector('[data-testid="asset-copy"]')).toBeNull();
     expect(c.querySelector('[data-testid="asset-rename"]')).not.toBeNull();
   });
@@ -127,6 +140,7 @@ describe('AssetPanel 预设复制/重命名', () => {
       listAssetsMock.mockResolvedValue([{ id, name }]);
       vi.spyOn(window, 'prompt').mockReturnValue(`${name}·新`);
       const c = await mountPanel(type);
+      await openMenu(c);
       await act(async () => {
         q(c, 'asset-rename').click();
       });
@@ -139,6 +153,7 @@ describe('AssetPanel 预设复制/重命名', () => {
   it('复制失败：err 通知且不重拉', async () => {
     duplicatePresetMock.mockRejectedValueOnce(new Error('磁盘已满'));
     const c = await mountPanel();
+    await openMenu(c);
     await act(async () => {
       q(c, 'asset-copy').click();
     });

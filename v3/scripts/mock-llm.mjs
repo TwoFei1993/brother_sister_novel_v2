@@ -60,38 +60,53 @@ function captureRequest(body) {
   }
 }
 
+/** 章号从请求历史推断（无次序依赖）：历史已有第 N 章 → 返回 N+1；新作品 → 第 1 章。
+ *  修复：此前按调用次数递增，多次跑 smoke/演练时计数错位（第 2 次起标题断言必挂）。 */
+function nextChapterNo(body) {
+  const msgs = Array.isArray(body?.messages) ? body.messages : [];
+  let max = 0;
+  for (const m of msgs) {
+    for (const mm of String(m?.content ?? '').matchAll(/第(\d+)章/g)) {
+      max = Math.max(max, Number(mm[1]));
+    }
+  }
+  return max + 1;
+}
+
 const server = createServer((req, res) => {
   if (req.method === 'POST' && (req.url ?? '').includes('/chat/completions')) {
     calls += 1;
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
+      let parsedBody;
       try {
-        captureRequest(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        parsedBody = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        captureRequest(parsedBody);
       } catch {
         /* 非 JSON body 跳过捕获 */
       }
+      const text = chapterText(nextChapterNo(parsedBody));
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      let i = 0;
+      const timer = setInterval(() => {
+        if (i >= text.length) {
+          clearInterval(timer);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+        res.write(`data: ${frame(text.slice(i, i + CHUNK_CHARS))}\n\n`);
+        i += CHUNK_CHARS;
+      }, TICK_MS);
+      // 客户端真断开才停止推送。不能监听 req 'close'：Node ≥16 中请求流读完 body 即触发
+      // 'close'（M3 验收发现——捕获 body 后必然触发，会误杀推送），响应流 'close' 才等于连接断开。
+      res.on('close', () => clearInterval(timer));
     });
-    const text = chapterText(calls);
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    });
-    let i = 0;
-    const timer = setInterval(() => {
-      if (i >= text.length) {
-        clearInterval(timer);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
-      res.write(`data: ${frame(text.slice(i, i + CHUNK_CHARS))}\n\n`);
-      i += CHUNK_CHARS;
-    }, TICK_MS);
-    // 客户端真断开才停止推送。不能监听 req 'close'：Node ≥16 中请求流读完 body 即触发
-    // 'close'（M3 验收发现——捕获 body 后必然触发，会误杀推送），响应流 'close' 才等于连接断开。
-    res.on('close', () => clearInterval(timer));
     return;
   }
   // 探活

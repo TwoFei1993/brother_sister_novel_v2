@@ -100,7 +100,8 @@ async function main() {
       name: '小说家',
       content: full,
       createdAt: Date.now(),
-      swipes: [full],
+      // 结构化版本候选（MessageVersionSchema：strict——字符串形态会被 400 拒绝）
+      swipes: [{ id: crypto.randomUUID(), name: 'v1', content: full, origin: 'ai', createdAt: Date.now() }],
       swipeId: 0,
       chapter: { index: 1, title: titleMatch ? titleMatch[1].trim() : '第1章' },
       extra: { model: 'mock-novel' },
