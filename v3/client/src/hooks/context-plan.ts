@@ -72,14 +72,15 @@ export function buildChatMainPrompt(replyLength: ChatReplyLength): TavernPrompt 
   };
 }
 
-/** 通用兜底收尾层：禁止元信息与思维过程外泄 */
+/** 通用兜底收尾层：禁止元信息与思维过程外泄 + 语言纯度（推理模型英文思考/自我纠错渗入正文的实测修复） */
 const FALLBACK_JAILBREAK: TavernPrompt = {
   identifier: 'jailbreak',
   name: '内置收尾要求',
   role: 'system',
   system_prompt: true,
   content:
-    '输出要求（最高优先级）：你的输出就是正文/对话本身——禁止任何旁白解释、写作提纲、思维过程（如 <thinking> 块）或「以下是/本章完」类元信息。',
+    '输出要求（最高优先级）：你的输出就是正文/对话本身——禁止任何旁白解释、写作提纲、思维过程（如 <thinking> 块）或「以下是/本章完」类元信息。\n' +
+    '语言纯度（最高优先级）：全文只允许出现简体中文——思考也必须用简体中文；正文中禁止出现任何英文单词、英文字母、拼音、英文自我纠错（如 Wait/Stop/correct this 之类）；如果你发现自己在用英文，立即改为中文重写该句。',
 };
 
 /** 按模式构建兜底预设（marker 骨架 + 中文主提示词；卡覆盖开关仍可替换 main）。

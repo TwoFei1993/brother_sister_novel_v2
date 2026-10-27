@@ -289,3 +289,25 @@ export function stripSystemDirectiveBlocks(content: string): string {
   out = out.replace(/（系统(?:续写|重试)指令：[\s\S]*$/g, '');
   return out;
 }
+
+/** 英文句剥离（后处理安全网）：推理模型英文自我纠错/英文独白渗入正文的句子整句剥除。
+ *  判定：一个「句子」（英文标点收尾）完全由英文字母/数字/空格/常用英文标点构成、
+ *  含 ≥6 个英文字母且无中文字符。合法残留（AI、OK 等极短词）不剥。 */
+export function stripEnglishSentences(content: string): string {
+  const parts = content.split(/(?<=[.!?。！？；])(\s+)/);
+  const kept: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const sentence = parts[i] ?? '';
+    const sep = parts[i + 1] ?? '';
+    if (isLeakedEnglishSentence(sentence)) continue; // 剥句（连同其后分隔符）
+    kept.push(sentence + sep);
+  }
+  return kept.join('');
+}
+
+/** 纯英文泄漏句判定：≥6 个英文字母、无中文字符（混中文句子保留防误杀） */
+function isLeakedEnglishSentence(sentence: string): boolean {
+  if (!/[A-Za-z]{2,}/.test(sentence)) return false;
+  if (/[一-龥]/.test(sentence)) return false;
+  return (sentence.match(/[A-Za-z]/g) ?? []).length >= 6;
+}

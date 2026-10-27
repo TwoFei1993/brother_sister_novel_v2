@@ -16,7 +16,7 @@ import type { TavernRegexScript } from '@shared/tavern';
 import type { MacroEnv } from '../types';
 import { stripChatPreamble } from './novel/chat-preamble';
 import { getRegexedString } from './regex';
-import { extractThinking, sanitizeOutput, stripSystemDirectiveBlocks } from './sanitize';
+import { extractThinking, sanitizeOutput, stripEnglishSentences, stripSystemDirectiveBlocks } from './sanitize';
 
 // ---- 净化器公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
 export {
@@ -28,6 +28,7 @@ export {
   stripLooseThinking,
   stripTailMeta,
   stripSystemDirectiveBlocks,
+  stripEnglishSentences,
   META_ONLY_PLACEHOLDER,
 } from './sanitize';
 export { stripChatPreamble, isChatterLine } from './novel/chat-preamble';
@@ -162,8 +163,10 @@ export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): Pos
   );
 
   const { statusSnapshot, content: withoutStatus } = parseStatusBlock(cleaned);
+  // 英文句剥离放 status 解析之后：```status 块本身是英文键值，先剥会破坏状态快照
+  const englishCleaned = stripEnglishSentences(withoutStatus);
   const { title, content } = parseChapterTitle(
-    withoutStatus,
+    englishCleaned,
     opts.directive,
     opts.chapterIndex ?? 0,
   );
