@@ -17,15 +17,22 @@ export interface PlannerProposal {
   extracted: ExtractedOutline;
 }
 
+/** 反问条目：问题 + 可点选的候选项（含一个自由填写提示；superpowers 式确认） */
+export interface PlannerQuestion {
+  q: string;
+  options: string[];
+}
+
 export interface ParsedPlannerReply {
   reply: string;
-  questions: string[];
+  questions: PlannerQuestion[];
   proposal: PlannerProposal | null;
 }
 
 export const PLANNER_SYSTEM = `你是网文创作向导。用户描述创作想法后，你负责**先问清楚、再产出**一份可直接开书的策划案（像资深编辑的选题面谈，不要自顾自脑补）。
 每次回复输出严格 JSON（无其他文字）：
-{"reply":"给用户的话（口语化）","questions":["需要用户拍板的问题"],"title":"书名","genre":"题材","outline":{...}或null}
+{"reply":"给用户的话（口语化）","questions":[{"q":"需要用户拍板的问题","options":["候选项一","候选项二","候选项三","其他（自行说明）"]}],"title":"书名","genre":"题材","outline":{...}或null}
+questions 规则：每个问题必须带 2-3 个具体候选项，最后一项固定为「其他（可自行说明）」；无问题则 questions 传空数组。
 交互协议（grill 式面谈，严格按阶段走）：
 - 阶段一·提问（默认）：想法尚浅时**只提问、不产出策划案**（outline=null）。每轮 questions 问 2-3 个最关键的拍板问题（主角性别与金手指、题材基调、核心冲突、兄妹关系定位、篇幅节奏），等用户回答。禁止在问题未回答前就输出完整策划案。
 - 阶段二·出案：关键问题已被回答后，一次性产出完整策划案（outline 填全），reply 用几句话概括亮点；仍有小分歧可在 questions 里列出（1-2 个），但策划案必须完整给出。
@@ -87,7 +94,19 @@ function tryParseReply(candidate: string): ParsedPlannerReply | null {
       outline?: unknown;
     };
     const reply = typeof j.reply === 'string' ? j.reply : '';
-    const questions = Array.isArray(j.questions) ? j.questions.filter((q): q is string => typeof q === 'string') : [];
+    const questions: PlannerQuestion[] = Array.isArray(j.questions)
+      ? j.questions
+          .map((item) => {
+            if (typeof item === 'string') return { q: item, options: [] as string[] }; // 旧格式容错
+            if (typeof item !== 'object' || item === null) return null;
+            const rec = item as { q?: unknown; options?: unknown };
+            const q = typeof rec.q === 'string' ? rec.q.trim() : '';
+            if (!q) return null;
+            const options = Array.isArray(rec.options) ? rec.options.filter((o): o is string => typeof o === 'string' && o.trim() !== '') : [];
+            return { q, options };
+          })
+          .filter((x): x is PlannerQuestion => x !== null)
+      : [];
     const o = j.outline as ExtractedOutline | null | undefined;
     const validOutline =
       o !== null &&

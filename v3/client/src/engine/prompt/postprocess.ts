@@ -165,10 +165,14 @@ export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): Pos
   const { statusSnapshot, content: withoutStatus } = parseStatusBlock(cleaned);
   // 英文句剥离放 status 解析之后：```status 块本身是英文键值，先剥会破坏状态快照
   const englishCleaned = stripEnglishSentences(withoutStatus);
-  const { title, content } = parseChapterTitle(
+  const { title, content: chapterContent } = parseChapterTitle(
     englishCleaned,
     opts.directive,
     opts.chapterIndex ?? 0,
   );
-  return { content, title, statusSnapshot, ...(thinking ? { thinking } : {}) };
+  // 句号收尾规范化（联测反馈）：正文非空且结尾不是收尾标点（句号/问叹号/引号/括号/省略号）时补句号
+  const trimmed = chapterContent.trimEnd();
+  const finalContent =
+    trimmed.length > 0 && !/[。！？…”』」)]$/.test(trimmed) ? `${trimmed}。` : trimmed;
+  return { content: finalContent, title, statusSnapshot, ...(thinking ? { thinking } : {}) };
 }

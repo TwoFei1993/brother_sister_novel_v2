@@ -7,10 +7,15 @@
  */
 import type { PlannerProposal } from './planner-llm';
 
+export interface PlannerQuestion {
+  q: string;
+  options: string[];
+}
+
 export interface PlannerTurn {
   role: 'user' | 'assistant';
   text: string;
-  questions?: string[];
+  questions?: PlannerQuestion[];
   failed?: boolean;
 }
 

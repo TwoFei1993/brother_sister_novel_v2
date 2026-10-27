@@ -105,7 +105,7 @@ export default function PlannerPage() {
       const prefs = useSettingsStore.getState().llmPrefs;
       // 流式打字机（推理模型思考久，无流式会像卡死）：思考流/正文增量实时显示
       let streaming = false;
-      const callPlanner = (maxTokens: number): Promise<string> =>
+      const callPlanner = (maxTokens: number): Promise<{ text: string; thinkingFull: string }> =>
         new Promise((resolve, reject) => {
           let full = '';
           let thinkingFull = '';
@@ -137,16 +137,18 @@ export default function PlannerPage() {
               onDone: () => undefined,
             },
           )
-            .then(() => resolve(full)) // think 剥离在 parsePlannerReply 内部处理
+            .then(() => resolve({ text: full, thinkingFull })) // think 剥离在 parsePlannerReply 内部处理
             .catch(reject);
         });
 
       // 推理模型可能把预算吃在思考上（JSON 半截/空文本）→ 加倍预算重试一次（ed735c0 同模式）
-      let text = await callPlanner(8000);
+      let result = await callPlanner(8000);
+      let text = result.text;
       let parsed = parsePlannerReply(text);
       if (!parsed) {
         setStreamingText(null); // 清首轮打字机，重试重新流式
-        text = await callPlanner(16000);
+        result = await callPlanner(16000);
+        text = result.text;
         parsed = parsePlannerReply(text);
       }
       if (!parsed) {
@@ -154,9 +156,12 @@ export default function PlannerPage() {
         updateActive((s) => ({ ...s, turns: [...s.turns, { role: 'assistant', text: text.trim() || '（空回复）' }] }));
         return;
       }
+      // 思考显示兜底：流式 thinking 帧缺失的模型，从正文里提取 <think> 块为可折叠思考
+      const thinkMatch = /<think>([\s\S]*?)<\/think>/i.exec(text);
+      const thinkShown = result.thinkingFull || (thinkMatch ? thinkMatch[1].trim() : '');
       updateActive((s) => ({
         ...s,
-        turns: [...s.turns, { role: 'assistant', text: parsed.reply, questions: parsed.questions }],
+        turns: [...s.turns, { role: 'assistant', text: parsed.reply, questions: parsed.questions, thinking: thinkShown || undefined }],
       }));
       if (parsed.proposal) {
         const proposalParsed = parsed.proposal;
@@ -273,9 +278,27 @@ export default function PlannerPage() {
                 >
                   {t.text}
                   {t.questions && t.questions.length > 0 && (
-                    <ul className="mt-2 space-y-1 border-t border-[hsl(var(--border-soft))] pt-2 text-xs opacity-80" data-testid="planner-questions">
-                      {t.questions.map((q, qi) => (
-                        <li key={qi}>❓ {q}</li>
+                    <ul className="mt-2 space-y-2 border-t border-[hsl(var(--border-soft))] pt-2 text-xs" data-testid="planner-questions">
+                      {t.questions.map((item, qi) => (
+                        <li key={qi}>
+                          <p className="mb-1">❓ {item.q}</p>
+                          {item.options.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.options.map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => void send(opt)}
+                                  disabled={busy}
+                                  data-testid={`planner-option-${qi}-${opt.slice(0, 6)}`}
+                                  className="rounded-full border border-[hsl(var(--border-soft))] px-2.5 py-1 transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </li>
                       ))}
                     </ul>
                   )}
