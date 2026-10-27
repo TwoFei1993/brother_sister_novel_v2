@@ -72,9 +72,13 @@ export function TextPane({
   const [pendingList, setPendingList] = useState<DetectedAsset[]>([]);
 
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
+  const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
   async function rerollCurrent(): Promise<void> {
     if (!current || gen.streaming) return;
-    onDone(await gen.swipeRegenerate(work, useWorkStore.getState().messages, current));
+    setRerollTarget(current);
+    const msg = await gen.swipeRegenerate(work, useWorkStore.getState().messages, current);
+    setRerollTarget(null);
+    onDone(msg);
   }
   /** 章切换时同步检出清单（取当前章的 extra.newAssets） */
   useEffect(() => {
@@ -190,7 +194,9 @@ export function TextPane({
           <div className="rounded-xl border border-[hsl(var(--accent))]/40 bg-[hsl(var(--surface))] p-4">
             <p className="mb-1 text-xs text-[hsl(var(--accent))]">
               <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
-              AI 续写中（第{chapters.length + 1}章）…
+              {rerollTarget
+                ? `AI 重写第${rerollTarget.chapter.index}章（生成新版本，旧版本保留）…`
+                : `AI 续写中（第${chapters.length + 1}章）…`}
             </p>
             <p className="m-reader-body whitespace-pre-wrap text-[15px] leading-8">{gen.buffer || '（思考中，正文即将开始…）'}</p>
           </div>

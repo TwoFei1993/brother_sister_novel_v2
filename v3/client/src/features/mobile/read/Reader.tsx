@@ -77,6 +77,8 @@ export default function Reader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [resumeTip, setResumeTip] = useState<string | null>(null);
+  /** 首次进入（无续读记录）显示操作引导 4 秒 */
+  const [hintOpen, setHintOpen] = useState(false);
   const [scrollPct, setScrollPct] = useState(0);
   const articleRef = useRef<HTMLElement | null>(null);
   const resumeDoneRef = useRef(false);
@@ -113,8 +115,12 @@ export default function Reader() {
   useEffect(() => {
     if (resumeDoneRef.current || chapters.length === 0 || !id) return;
     resumeDoneRef.current = true;
-    const saved = loadPos(id);
+    const saved = id ? loadPos(id) : null;
     const idx = saved ? chapters.findIndex((c) => c.msg.id === saved.chapterMsgId) : -1;
+    if (idx < 0) {
+      setHintOpen(true);
+      setTimeout(() => setHintOpen(false), 4000);
+    }
     if (idx >= 0) {
       setChapterIdx(idx);
       setResumeTip(`已续读至 第${chapters[idx]!.msg.chapter.index}章`);
@@ -313,6 +319,16 @@ export default function Reader() {
           </article>
         )}
       </div>
+
+      {/* 操作引导（首次无记录时） */}
+      {hintOpen && !resumeTip && (
+        <div
+          className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-center text-xs leading-5 text-white"
+          data-testid="reader-hint"
+        >
+          点击屏幕中间呼出菜单 · 左右两侧翻章 · 选中文字可划线评论
+        </div>
+      )}
 
       {/* 续读提示 */}
       {resumeTip && (

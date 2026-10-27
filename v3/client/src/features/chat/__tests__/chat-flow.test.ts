@@ -44,9 +44,9 @@ describe('回复长度（四问③）', () => {
     expect(buildFallbackPreset('userMessage', 'long').prompts[0]!.content).toContain('800-1500');
     const novel = buildFallbackPreset('directive', 'long').prompts[0]!;
     expect(novel.content).not.toContain('800-1500');
-    expect(novel.content).toContain('不少于 3000 字'); // novel 缺省每章字数（不再硬编码 1500）
+    expect(novel.content).toContain('3000-4500 字'); // novel 缺省每章字数（不再硬编码 1500）
     // 用户设置的每章字数透传兜底主提示词
-    expect(buildFallbackPreset('directive', 'long', 5000).prompts[0]!.content).toContain('不少于 5000 字');
+    expect(buildFallbackPreset('directive', 'long', 5000).prompts[0]!.content).toContain('5000-6500 字');
   });
 });
 

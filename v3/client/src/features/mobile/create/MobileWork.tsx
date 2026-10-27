@@ -13,6 +13,7 @@ import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
 
 import SelectionTools from '../../workbench/SelectionTools';
+import BindingsPane from './BindingsPane';
 import PublishPanel from './PublishPanel';
 import { OutlinePane, TextPane, AssetsPane } from './WorkPanes';
 import VersionsPane from './WorkVersions';
@@ -29,7 +30,7 @@ const PANES: ReadonlyArray<{ id: PaneId; label: string }> = [
 export default function MobileWork() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { work, messages, loading, loadError, loadWork, upsertLocal } = useWorkStore();
+  const { work, messages, loading, loadError, loadWork, upsertLocal, setWork } = useWorkStore();
   const gen = useGenerate();
   const [pane, setPane] = useState<PaneId>('text');
   /** 当前编辑的章节消息（正文/版本分区共享；null=自动取最后一章） */
@@ -129,7 +130,12 @@ export default function MobileWork() {
                 onDone={done}
               />
             )}
-            {pane === 'assets' && <AssetsPane work={work} nextIndex={chapters.length + 1} />}
+            {pane === 'assets' && (
+              <>
+                <AssetsPane work={work} nextIndex={chapters.length + 1} />
+                <BindingsPane work={work} onUpdated={setWork} />
+              </>
+            )}
           </div>
           {/* 选段 AI 工具（润色/扩写/重写）：与桌面同源组件，应用后 PATCH 幂等覆盖（失败回滚） */}
           <SelectionTools

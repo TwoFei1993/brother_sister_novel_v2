@@ -51,7 +51,7 @@ describe('兜底预设 buildFallbackPreset', () => {
   it('novel 兜底主提示词字数透传设置值（不再硬编码 1500）', () => {
     const p = buildFallbackPreset('directive', 'medium', 5000);
     const main = p.prompts.find((x) => x.identifier === 'main');
-    expect(main?.content).toContain('每章正文不少于 5000 字');
+    expect(main?.content).toContain('每章正文 5000-6500 字');
     expect(main?.content).not.toContain('1500');
   });
 });
@@ -61,7 +61,7 @@ describe('novel 写作要求注入（requirements）', () => {
     const { buildChapterRequirement } = await import('../prompt/novel/requirements');
     const text = buildChapterRequirement(3000);
     expect(text).toContain('【本章写作要求】');
-    expect(text).toContain('不少于 3000 字');
+    expect(text).toContain('3000-4500 字');
     expect(text).toContain('System');
     expect(text).toContain('禁止');
   });
