@@ -281,3 +281,11 @@ export function splitOutline(content: string): SplitOutline {
   }
   return { body: content };
 }
+
+/** 系统指令块剥离：续写/重试指令被模型复述进正文时整块剥除（未闭合容错：剥到文尾）。
+ *  标签由 generation-flow 的 buildContinueDirective/重试后缀写入（「（系统续写指令：…）」等）。 */
+export function stripSystemDirectiveBlocks(content: string): string {
+  let out = content.replace(/（系统(?:续写|重试)指令：[\s\S]*?（系统(?:续写|重试)指令结束）\s*/g, '');
+  out = out.replace(/（系统(?:续写|重试)指令：[\s\S]*$/g, '');
+  return out;
+}

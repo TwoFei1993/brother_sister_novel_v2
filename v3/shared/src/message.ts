@@ -102,14 +102,31 @@ export type Message = z.infer<typeof MessageSchema>;
 const AI_NAME_RE = /^v(\d+)$/;
 const MANUAL_SUFFIX_RE = /手改(\d+)$/;
 
+/**
+ * 兼容的 UUID v4（非安全上下文兜底）：http://IP:端口 部署下浏览器不提供
+ * crypto.randomUUID（调用即抛——第四章生成崩溃的根因），getRandomValues 仍可用，
+ * 据 RFC 4122 v4 自行拼装，与原生输出格式一致。
+ */
+export function randomUUIDSafe(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (c && typeof c.getRandomValues === 'function') c.getRandomValues(bytes);
+  else for (let i = 0; i < 16; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
+  return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
+}
+
 /** 构造一个 AI 来源版本（命名延后由 nextAiVersionName 处理） */
 export function aiVersion(content: string, name: string, now = Date.now()): MessageVersion {
-  return { id: crypto.randomUUID(), name, content, origin: 'ai', createdAt: now };
+  return { id: randomUUIDSafe(), name, content, origin: 'ai', createdAt: now };
 }
 
 /** 构造一个手改版本（origin='手改'） */
 export function manualVersion(content: string, name: string, now = Date.now()): MessageVersion {
-  return { id: crypto.randomUUID(), name, content, origin: '手改', createdAt: now };
+  return { id: randomUUIDSafe(), name, content, origin: '手改', createdAt: now };
 }
 
 /**

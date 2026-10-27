@@ -7,10 +7,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { patchMessage } from '../../../api/works';
 import { useGenerate } from '../../../hooks/useGenerate';
 import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
 
+import SelectionTools from '../../workbench/SelectionTools';
 import PublishPanel from './PublishPanel';
 import { OutlinePane, TextPane, AssetsPane } from './WorkPanes';
 import VersionsPane from './WorkVersions';
@@ -129,6 +131,27 @@ export default function MobileWork() {
             )}
             {pane === 'assets' && <AssetsPane work={work} nextIndex={chapters.length + 1} />}
           </div>
+          {/* 选段 AI 工具（润色/扩写/重写）：与桌面同源组件，应用后 PATCH 幂等覆盖（失败回滚） */}
+          <SelectionTools
+            getTarget={(sel) => {
+              for (const m of useWorkStore.getState().messages) {
+                if (m.content.includes(sel)) return { messageId: m.id, content: m.content };
+              }
+              return null;
+            }}
+            onApplied={(messageId, nextContent) => {
+              const store = useWorkStore.getState();
+              const m = store.messages.find((x) => x.id === messageId);
+              if (!m) return;
+              const updated: Message = {
+                ...m,
+                content: nextContent,
+                swipes: m.swipes.map((v, i) => (i === m.swipeId ? { ...v, content: nextContent } : v)),
+              };
+              store.upsertLocal(updated);
+              void patchMessage(work.id, updated).catch(() => store.upsertLocal(m));
+            }}
+          />
 
           {publishOpen && <PublishPanel chapters={chapters} onClose={() => setPublishOpen(false)} />}
 

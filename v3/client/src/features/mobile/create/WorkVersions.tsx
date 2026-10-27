@@ -8,7 +8,7 @@
  * - 上架状态标记（publishedVersionId 对应版本显示「已上架」，上架管理 Phase1 后续任务接入）
  */
 import { forkManualVersion } from '../../../hooks/generation-flow';
-import { patchMessage } from '../../../api/works';
+import { deleteMessage, patchMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
@@ -39,6 +39,19 @@ export default function VersionsPane({
     onDone(await gen.swipeRegenerate(work, useWorkStore.getState().messages, current));
   }
 
+  /** 🗑 删除本章（D3 同桌面语义）：确认后 DELETE，本地移除 */
+  async function removeChapter(): Promise<void> {
+    if (!current) return;
+    if (!window.confirm(`确定删除 第${current.chapter.index}章 ${current.chapter.title}？不可恢复。`)) return;
+    try {
+      await deleteMessage(work.id, current.id);
+      onPick('');
+      useWorkStore.setState((st) => ({ messages: st.messages.filter((m) => m.id !== current.id) }));
+    } catch {
+      alert('删除失败，请重试');
+    }
+  }
+
   /** 复制当前版本为手改新版本并切为激活（正文分区可继续编辑保存） */
   async function forkManual(): Promise<void> {
     if (!current) return;
@@ -59,6 +72,15 @@ export default function VersionsPane({
       {current && (
         <>
           <div className="mx-4 mb-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void removeChapter()}
+              data-testid="mobile-delete-ch-btn"
+              className="h-9 w-12 shrink-0 rounded-xl border border-red-400/40 text-xs text-red-400"
+              title="删除本章"
+            >
+              🗑
+            </button>
             <button
               type="button"
               onClick={() => void reroll()}

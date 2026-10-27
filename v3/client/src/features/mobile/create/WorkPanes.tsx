@@ -18,7 +18,7 @@ import { confirmPendingAsset } from './pending-assets';
 import OutlineIterChat from './OutlineIterChat';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
-type Gen = Pick<UseGenerateResult, 'streaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate' | 'thinkingBuffer'>;
+type Gen = Pick<UseGenerateResult, 'streaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate' | 'thinkingBuffer' | 'runBatch' | 'runByOutline' | 'batch'>;
 
 /** 章节选择条：横向滚动 chips，选中高亮 */
 export function ChapterChips({
@@ -241,6 +241,28 @@ export function TextPane({
           </ul>
         </div>
       )}
+
+      {/* 批量生成：⚡连写（写到目标章数）/ 📖按大纲（有大纲时） */}
+      <div className="mx-4 mb-2 flex gap-2">
+        <button
+          type="button"
+          onClick={() => void gen.runBatch(work, directive.trim() || '自由发挥第一章').then(() => setDirective(''))}
+          disabled={gen.streaming || Boolean(gen.batch)}
+          data-testid="mobile-batch-btn"
+          className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+        >
+          ⚡ 一键连写
+        </button>
+        <button
+          type="button"
+          onClick={() => void gen.runByOutline(work, useWorkStore.getState().messages)}
+          disabled={gen.streaming || Boolean(gen.batch)}
+          data-testid="mobile-outline-run-btn"
+          className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+        >
+          📖 按大纲写
+        </button>
+      </div>
 
       {/* 写下一章 */}
       <div className="mx-4 mt-3 flex gap-2">

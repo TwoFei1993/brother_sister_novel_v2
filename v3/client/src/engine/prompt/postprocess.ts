@@ -16,7 +16,7 @@ import type { TavernRegexScript } from '@shared/tavern';
 import type { MacroEnv } from '../types';
 import { stripChatPreamble } from './novel/chat-preamble';
 import { getRegexedString } from './regex';
-import { extractThinking, sanitizeOutput } from './sanitize';
+import { extractThinking, sanitizeOutput, stripSystemDirectiveBlocks } from './sanitize';
 
 // ---- 净化器公开面（迁移兼容 re-export：全部调用方仍从本模块导入）----
 export {
@@ -27,6 +27,7 @@ export {
   extractThinking,
   stripLooseThinking,
   stripTailMeta,
+  stripSystemDirectiveBlocks,
   META_ONLY_PLACEHOLDER,
 } from './sanitize';
 export { stripChatPreamble, isChatterLine } from './novel/chat-preamble';
@@ -149,7 +150,7 @@ export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): Pos
   // 先行提取思考块内容（sanitizeOutput 只负责剥离，内容由此透传入库 extra.rawThinking）
   const { thinking } = extractThinking(raw);
   // 内置卫生层：与用户正则无关，所有生成共用（质量测试 T3/T4 发现的思考块与名字前缀残留）
-  const sanitized = sanitizeOutput(raw, opts.speakerName);
+  const sanitized = stripSystemDirectiveBlocks(sanitizeOutput(raw, opts.speakerName));
   // novel 入库轨闲聊前导剥离（对 System 寒暄/思考结束标记/指令回显等，见 chat-preamble.ts）
   const hygiened = opts.stripChatter ? stripChatPreamble(sanitized, opts.directive) : sanitized;
   // 显示轨清理：ai_output + 双 false 轨道（promptOnly/markdownOnly 脚本均不参与）
