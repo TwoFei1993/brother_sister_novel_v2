@@ -14,6 +14,7 @@
 import type { TavernRegexScript } from '@shared/tavern';
 
 import type { MacroEnv } from '../types';
+import { isCollapsedText } from './novel/collapse-detect';
 import { stripChatPreamble } from './novel/chat-preamble';
 import { getRegexedString } from './regex';
 import { extractThinking, sanitizeOutput, stripEnglishSentences, stripSystemDirectiveBlocks } from './sanitize';
@@ -170,9 +171,11 @@ export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): Pos
     opts.directive,
     opts.chapterIndex ?? 0,
   );
-  // 句号收尾规范化（联测反馈）：正文非空且结尾不是收尾标点（句号/问叹号/引号/括号/省略号）时补句号
+  // 句号收尾规范化（联测反馈）：正文非空且结尾不是收尾标点（句号/问叹号/引号/括号/省略号）时补句号。
+  // 豁免：重复循环崩溃文本不补——裸尾（无标点结尾）是「截断续写接管」链式补救的判定信号，补了会吞掉该链路
   const trimmed = chapterContent.trimEnd();
-  const finalContent =
-    trimmed.length > 0 && !/[。！？…”』」)]$/.test(trimmed) ? `${trimmed}。` : trimmed;
+  const needsPeriod =
+    trimmed.length > 0 && !/[。！？…”』」)]$/.test(trimmed) && !isCollapsedText(trimmed);
+  const finalContent = needsPeriod ? `${trimmed}。` : trimmed;
   return { content: finalContent, title, statusSnapshot, ...(thinking ? { thinking } : {}) };
 }

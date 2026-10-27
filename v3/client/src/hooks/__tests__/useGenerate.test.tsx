@@ -148,7 +148,7 @@ describe('useGenerate（review #1 断流事务）', () => {
       result = await latest!.generateChapter(baseWork(), [], '写第一章');
     });
     expect(result).not.toBeNull();
-    expect(result!.content).toBe('第一段');
+    expect(result!.content).toBe('第一段。');
     expect(result!.role).toBe('assistant');
     expect(result!.chapter?.index).toBe(1);
     expect(calls.filter((c) => c.path.endsWith('/messages'))).toHaveLength(1);
@@ -215,7 +215,7 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
     const allText = JSON.stringify(captured!.messages);
     expect(allText).not.toContain('旧候选正文XYZ'); // 被重 roll 的旧候选不进上下文（review #10）
     expect(allText).toContain('前面的剧情'); // 之前的历史保留
-    expect(result!.swipes.map((v) => v.content)).toEqual(['旧候选正文XYZ', '新候选']); // 候选追加同 id upsert
+    expect(result!.swipes.map((v) => v.content)).toEqual(['旧候选正文XYZ', '新候选。']); // 候选追加同 id upsert
   });
 });
 
@@ -242,15 +242,15 @@ describe('useGenerate.swipeRegenerate（连续两次重roll 回归——用户�
     await act(async () => {
       r = await latest!.swipeRegenerate(baseWork(), all, target);
     });
-    expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1']);
+    expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1。']);
     all = [prev, r!];
     await act(async () => {
       r = await latest!.swipeRegenerate(baseWork(), all, r!);
     });
     // 第二次重roll：候选累加不覆盖（自动命名 v2/v3），swipeId 指向最新候选
-    expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1', '重roll候选2']);
+    expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1。', '重roll候选2。']);
     expect(r!.swipeId).toBe(2);
-    expect(r!.content).toBe('重roll候选2');
+    expect(r!.content).toBe('重roll候选2。');
   });
 });
 
