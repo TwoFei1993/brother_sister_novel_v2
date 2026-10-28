@@ -78,9 +78,10 @@ export default function ReadShelf() {
     const tag = prompt(`《${w.title}》的分类标签：`, w.shelfTag ?? '');
     if (tag === null) return;
     const trimmed = tag.trim();
-    // 浅列表无 revision：先拉全量取 revision 再 PATCH（乐观锁）
+    // 浅列表无 revision：先拉全量取 revision 再 PATCH（乐观锁）；空串=未分类
+    // （PATCH 是浅合并，undefined 会被 JSON 略过导致旧标签删不掉，必须显式传空串覆盖）
     const full = await getWork(w.id);
-    await updateWork(w.id, { revision: full.revision, shelfTag: trimmed || undefined });
+    await updateWork(w.id, { revision: full.revision, shelfTag: trimmed });
     setWorks((ws) => (ws ?? []).map((x) => (x.id === w.id ? { ...x, shelfTag: trimmed || undefined } : x)));
   }
 

@@ -17,6 +17,7 @@ import { importAllAssets, type ImportedAssets } from '../misc/wizard/importAll';
 import { parsePlannerReply, plannerMessages, proposalToChapterSettings, type PlannerProposal } from './planner-llm';
 import { createSession, loadStore, persist, titleOf, type PlannerSession, type PlannerTurn } from './sessions';
 
+import PlannerQuestions from './PlannerQuestions';
 import PlannerSidebar from './PlannerSidebar';
 
 const SIDEBAR_KEY = 'v3-planner-sidebar-open';
@@ -28,9 +29,10 @@ export default function PlannerPage() {
   const [activeId, setActiveId] = useState(store0.activeId);
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
-      return localStorage.getItem(SIDEBAR_KEY) !== '0';
+      // 窄屏（APK/手机）默认收起会话栏，聊天流全宽
+      return localStorage.getItem(SIDEBAR_KEY) !== '0' && window.innerWidth >= 768;
     } catch {
-      return true;
+      return window.innerWidth >= 768;
     }
   });
   const [input, setInput] = useState('');
@@ -208,9 +210,9 @@ export default function PlannerPage() {
   const p = proposal;
 
   return (
-    <div className="flex h-screen flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]">
-      {/* 顶栏 */}
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-[hsl(var(--border-soft))] px-4">
+    <div className="flex h-[100dvh] flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]">
+      {/* 顶栏（safe-top 适配 APK 状态栏） */}
+      <header className="safe-top flex h-12 shrink-0 items-center gap-1 border-b border-[hsl(var(--border-soft))] px-3">
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -225,10 +227,18 @@ export default function PlannerPage() {
           <h1 className="text-base font-semibold">AI 创作向导</h1>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          {/* 窄屏只留一个返回；桌面保留双入口 */}
           <button
             type="button"
             onClick={() => navigate('/m/create')}
-            className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+            className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] md:hidden"
+          >
+            ← 返回
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/m/create')}
+            className="hidden rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] md:block"
           >
             <Smartphone className="h-4 w-4" aria-hidden />
             移动端
@@ -236,7 +246,7 @@ export default function PlannerPage() {
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
+            className="hidden rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] md:block"
           >
             返回书架
           </button>
@@ -245,6 +255,14 @@ export default function PlannerPage() {
 
       {/* 中段：侧栏 + 聊天列 */}
       <div className="relative flex min-h-0 flex-1">
+        {/* 窄屏侧栏遮罩（点空白关闭） */}
+        {sidebarOpen && (
+          <div
+            className="absolute inset-0 z-30 bg-black/40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            data-testid="planner-sidebar-mask"
+          />
+        )}
         {/* 侧栏：桌面常驻可收缩；窄屏浮层 */}
         {sidebarOpen && (
           <aside
@@ -302,30 +320,31 @@ export default function PlannerPage() {
                   }`}
                 >
                   {t.text}
+                  {/* 问题交互：仅最后一条 assistant 消息可多选合并提交，历史消息只读展示 */}
                   {t.questions && t.questions.length > 0 && (
-                    <ul className="mt-2 space-y-2 border-t border-[hsl(var(--border-soft))] pt-2 text-xs" data-testid="planner-questions">
-                      {t.questions.map((item, qi) => (
-                        <li key={qi}>
-                          <p className="mb-1 flex items-center gap-1.5"><CircleHelp className="h-4 w-4 shrink-0" aria-hidden />{item.q}</p>
-                          {item.options.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.options.map((opt) => (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() => void send(opt)}
-                                  disabled={busy}
-                                  data-testid={`planner-option-${qi}-${opt.slice(0, 6)}`}
-                                  className="rounded-full border border-[hsl(var(--border-soft))] px-2.5 py-1 transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                    i === turns.length - 1 && !busy ? (
+                      <PlannerQuestions questions={t.questions} busy={busy} onSend={(text) => void send(text)} />
+                    ) : (
+                      <ul className="mt-2 space-y-2 border-t border-[hsl(var(--border-soft))] pt-2 text-xs" data-testid="planner-questions">
+                        {t.questions.map((item, qi) => (
+                          <li key={qi}>
+                            <p className="mb-1 flex items-center gap-1.5"><CircleHelp className="h-4 w-4 shrink-0" aria-hidden />{item.q}</p>
+                            {item.options.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {item.options.map((opt) => (
+                                  <span
+                                    key={opt}
+                                    className="rounded-full border border-[hsl(var(--border-soft))] px-2.5 py-1 text-[hsl(var(--fg-muted))]"
+                                  >
+                                    {opt}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )
                   )}
                 </div>
               </div>
@@ -438,21 +457,24 @@ export default function PlannerPage() {
             <div ref={bottomRef} />
           </main>
 
-          {/* 输入区 */}
-          <div className="shrink-0 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-4 py-3">
+          {/* 输入区（safe-bottom 适配 APK 导航条） */}
+          <div className="safe-bottom shrink-0 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 pb-3 pt-2 md:px-4 md:py-3">
             <div className="mx-auto flex max-w-3xl items-center gap-2">
-              <input
-                type="text"
+              <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && !busy) void send(input);
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !busy) {
+                    e.preventDefault();
+                    void send(input);
+                  }
                 }}
+                rows={1}
                 disabled={busy || importing}
                 placeholder="描述你的创作想法，或对策划案提出修改意见…"
                 aria-label="向导输入"
                 data-testid="planner-input"
-                className="h-10 min-w-0 flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+                className="max-h-32 min-h-[40px] min-w-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
               />
               <button
                 type="button"

@@ -10,8 +10,11 @@ import { BookOpen, Brain, Dices, Map, SquarePen, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { apiFetch } from '../../../api/client';
-import { patchMessage, updateWork } from '../../../api/works';
+import { generateTextOnce } from '../../../api/llm';
+import { patchMessage, updateWork, upsertMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
+import { useSettingsStore } from '../../../stores/settings';
+import { appendSwipe, buildChapterMessage } from '../../../hooks/generation-flow';
 import type { DetectedAsset, Message } from '@shared/message';
 import type { Work } from '@shared/work';
 import type { UseGenerateResult } from '../../../hooks/useGenerate';
@@ -75,6 +78,8 @@ export function TextPane({
   const [pendingList, setPendingList] = useState<DetectedAsset[]>([]);
   /** 共享入库：勾选后本次检出的素材不归属本书（跨书可见的共享卡） */
   const [sharedImport, setSharedImport] = useState(false);
+  /** ✨ AI 润色进行中（生成新版本） */
+  const [polishing, setPolishing] = useState(false);
 
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
@@ -131,6 +136,59 @@ export function TextPane({
     onDone(await gen.generateChapter(work, useWorkStore.getState().messages, d));
   }
 
+  /** ✍️ 手写第一章（自己写/粘贴正文，写完可 AI 润色）：建空章节并直接进入编辑态 */
+  async function createHandwriteChapter(): Promise<void> {
+    if (gen.streaming) return;
+    const msg = buildChapterMessage({ content: '', title: '', chapterIndex: 1, promptTokens: 0, generationMs: 0 });
+    try {
+      await upsertMessage(work.id, msg);
+      useWorkStore.getState().upsertLocal(msg);
+      onPick(msg.id);
+      setDraft('');
+      setEditing(true);
+    } catch {
+      alert('创建章节失败，请重试');
+    }
+  }
+
+  /** ✨ AI 润色当前章：保持情节/人物/事实不变提升文笔，生成新版本（旧版本保留） */
+  async function polishCurrent(): Promise<void> {
+    if (!current || polishing || gen.streaming) return;
+    if (!current.content.trim()) return;
+    if (!confirm('AI 润色：保持情节与人物不变，提升文笔与节奏，生成新版本（当前版本保留）。继续？')) return;
+    setPolishing(true);
+    try {
+      const prefs = useSettingsStore.getState().llmPrefs;
+      const text = await generateTextOnce(
+        {
+          source: prefs.source,
+          model: prefs.model,
+          temperature: 0.6,
+          thinking: prefs.thinking !== false,
+          messages: [
+            {
+              role: 'user',
+              content:
+                `你是资深小说编辑。请在完全不改变以下章节的情节走向、人物性格、对话内容与事实设定的前提下润色正文：` +
+                `修正病句与错别字、提升文字质感与画面感、优化叙事节奏。直接输出润色后的全文，不要任何解释、标题或前后缀。` +
+                `\n\n【章节】第${current.chapter.index}章 ${current.chapter.title || ''}\n\n【正文】\n${current.content}`,
+            },
+          ],
+        },
+        16384,
+      );
+      const cleaned = text.trim();
+      if (!cleaned) throw new Error('模型无输出');
+      const updated = appendSwipe(current, cleaned, {});
+      useWorkStore.getState().upsertLocal(updated);
+      await patchMessage(work.id, updated);
+    } catch (err) {
+      alert(`润色失败：${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setPolishing(false);
+    }
+  }
+
   return (
     <div className="pb-4">
       <ChapterChips chapters={chapters} currentId={current?.id} onPick={onPick} />
@@ -153,6 +211,16 @@ export function TextPane({
             </h2>
             {!editing && !gen.streaming && (
               <span className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void polishCurrent()}
+                  disabled={polishing || !current.content.trim()}
+                  title="保持情节不变提升文笔，生成新版本（旧版本保留）"
+                  data-testid="mobile-polish-btn"
+                  className="text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+                >
+                  ✨ 润色
+                </button>
                 <button
                   type="button"
                   onClick={() => void rerollCurrent()}
@@ -196,6 +264,14 @@ export function TextPane({
 
       {/* 听书条：按作品配音表分声朗读当前章（音色在「资料」分区配置） */}
       {current && !editing && !gen.streaming && <MobileTtsBar chapter={current} voiceMap={work.voiceMap} />}
+
+      {/* ✨ AI 润色进行中（单行居中状态） */}
+      {polishing && (
+        <p className="flex items-center justify-center gap-1.5 py-2 text-xs text-[hsl(var(--accent))]" data-testid="polishing-line">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+          AI 润色中（保持情节不变，完成后生成新版本）…
+        </p>
+      )}
 
       {/* 流式生成中（DeepSeek 式）：💭思考可折叠 + 正文接着文章位置内联续写；状态行固定单行居中 */}
       {gen.streaming && (
@@ -269,6 +345,18 @@ export function TextPane({
             ))}
           </ul>
         </div>
+      )}
+
+      {/* ✍️ 手写第一章（自己写/粘贴，写完可 AI 润色） */}
+      {chapters.length === 0 && !gen.streaming && (
+        <button
+          type="button"
+          onClick={() => void createHandwriteChapter()}
+          data-testid="handwrite-chapter-btn"
+          className="mx-4 mb-2 flex h-11 w-[calc(100%-2rem)] items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs"
+        >
+          ✍️ 手写第一章（自己写 / 粘贴正文，写完可 AI 润色）
+        </button>
       )}
 
       {/* 批量生成：⚡连写（写到目标章数）/ 📖按大纲（有大纲时） */}
