@@ -26,9 +26,51 @@ export default function WorkTtsBar({ work, chapters }: WorkTtsBarProps) {
   const { engine, playing, loading, chapterIndex, currentIndex, chapterCount, voice, rate, error } = useTts();
   /** 队列已启动标记：false=空闲（播放键=startChapters）；true 后播放键=pause/resume */
   const startedRef = useRef(false);
+  /** 断点（会话级持久化）：离开作品页/刷新后仍可从上次听到的地方继续（用户反馈④） */
+  const resumeRef = useRef(0);
+  const resumeKey = `tts-resume:${work.id}`;
 
   // 离开作品页停止播放并复位（store 全局共享，不随组件卸载自动清）
   useEffect(() => () => engine.stop(), [engine]);
+
+  // 挂载读断点（sessionStorage 会话级；stop/播完清除）
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(resumeKey);
+      if (raw) resumeRef.current = Math.max(0, Number(JSON.parse(raw)?.chapterIndex ?? 0)) || 0;
+    } catch {
+      /* 隐私模式等场景静默（退化为从头播） */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 播放推进时写断点（段级推进只更新章号粒度——章级续听已满足「不能只能从头开始」）
+  useEffect(() => {
+    if (playing && currentIndex >= 0) {
+      try {
+        sessionStorage.setItem(resumeKey, JSON.stringify({ chapterIndex }));
+      } catch {
+        /* 静默 */
+      }
+    }
+  }, [playing, currentIndex, chapterIndex, resumeKey]);
+
+  // 章节抽屉「朗读」：消费 pendingStartChapter（队列下标）从指定章开播
+  const pendingStart = useTtsStore((s) => s.pendingStartChapter);
+  useEffect(() => {
+    if (pendingStart === null || chapters.length === 0) return;
+    useTtsStore.getState().clearPendingStart();
+    if (pendingStart >= chapters.length) return;
+    startedRef.current = true;
+    engine.startChapters(
+      chapters.map((c) => ({
+        text: splitOutline(presentableNovel(c.text, c.directive)).body,
+        voiceMap: work.voiceMap,
+      })),
+      pendingStart,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStart]);
 
   function handlePlayPause(): void {
     if (playing) {
@@ -42,18 +84,25 @@ export default function WorkTtsBar({ work, chapters }: WorkTtsBarProps) {
     }
     startedRef.current = true;
     // 朗读跳过头部要点提纲：每章先 splitOutline 取正文（与 ReadingView 高亮段落同源切分）
+    // 空闲启动优先从会话断点章继续（跨页面/刷新的「继续朗读」语义），无断点则从第 1 章
     engine.startChapters(
       chapters.map((c) => ({
         text: splitOutline(presentableNovel(c.text, c.directive)).body,
         voiceMap: work.voiceMap,
       })),
-      currentIndex >= 0 ? chapterIndex : 0,
+      currentIndex >= 0 ? chapterIndex : resumeRef.current,
     );
+    resumeRef.current = 0; // 已消费，之后 stop 才重新计断点
   }
 
   function handleStop(): void {
     engine.stop();
     startedRef.current = false;
+    try {
+      sessionStorage.removeItem(resumeKey);
+    } catch {
+      /* 静默 */
+    }
   }
 
   return (

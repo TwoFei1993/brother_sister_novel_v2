@@ -35,6 +35,10 @@ export interface TtsView {
 interface TtsState extends TtsView {
   /** 预取缓存（原地读写） */
   prefetchCache: Map<string, string>;
+  /** 待启动的朗读起始章（队列下标；章节抽屉「朗读」写入，WorkTtsBar 消费后清 null） */
+  pendingStartChapter: number | null;
+  requestStart: (chapterIdx: number) => void;
+  clearPendingStart: () => void;
   patch: (partial: Partial<TtsView>) => void;
   setVoice: (id: string) => void;
   setRate: (rate: number) => void;
@@ -57,10 +61,13 @@ const INITIAL_VIEW: TtsView = {
 export const useTtsStore = create<TtsState>()((set) => ({
   ...INITIAL_VIEW,
   prefetchCache: new Map<string, string>(),
+  pendingStartChapter: null,
 
+  requestStart: (chapterIdx) => set({ pendingStartChapter: chapterIdx }),
+  clearPendingStart: () => set({ pendingStartChapter: null }),
   patch: (partial) => set(partial),
   setVoice: (id) => set({ voice: id }),
   setRate: (rate) => set({ rate }),
   clearCache: () => set({ prefetchCache: new Map<string, string>() }),
-  reset: () => set({ ...INITIAL_VIEW, prefetchCache: new Map<string, string>() }),
+  reset: () => set({ ...INITIAL_VIEW, prefetchCache: new Map<string, string>(), pendingStartChapter: null }),
 }));

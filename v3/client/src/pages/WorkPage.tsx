@@ -13,6 +13,7 @@ import { BookOpen, List, MessageSquare, Settings, Wrench } from 'lucide-react';
 
 import { updateWork } from '../api/works';
 import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDrawer';
+import { useTtsStore } from '../stores/tts';
 import WorkSettingsSheet from '../features/workbench/WorkSettingsSheet';
 import WorkViewRouter from '../features/workbench/WorkViewRouter';
 import { useGenerate } from '../hooks/useGenerate';
@@ -218,6 +219,7 @@ export default function WorkPage() {
           onClose={() => setDrawerOpen(false)}
           chapters={chapters.map((m) => ({ index: m.chapter.index, title: m.chapter.title }))}
           onLocate={scrollToChapter}
+          onSpeak={(queueIdx) => useTtsStore.getState().requestStart(queueIdx)}
         />
       )}
       {settingsOpen && work && (

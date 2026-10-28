@@ -1,7 +1,8 @@
 /**
  * 章节目录抽屉（B 视图，设计 §7.1）：移动端左缘滑出 / 桌面按钮唤起
  *
- * 列出全部章标题（chapter 元数据），点击滚动定位到对应章节锚点。
+ * 列出全部章标题（chapter 元数据），点击滚动定位到对应章节锚点；
+ * 每章「▶」从该章开始朗读（用户反馈④：可以选择从哪开始读）。
  */
 import { useEffect } from 'react';
 
@@ -17,9 +18,11 @@ interface ChapterDrawerProps {
   onClose: () => void;
   chapters: ChapterRef[];
   onLocate: (index: number) => void;
+  /** 从该章开始朗读（宿主接 tts store requestStart；队列下标=升序渲染下标） */
+  onSpeak?: (queueIdx: number) => void;
 }
 
-export default function ChapterDrawer({ open, onClose, chapters, onLocate }: ChapterDrawerProps) {
+export default function ChapterDrawer({ open, onClose, chapters, onLocate, onSpeak }: ChapterDrawerProps) {
   // Esc 关闭（桌面端习惯）
   useEffect(() => {
     if (!open) return;
@@ -56,19 +59,35 @@ export default function ChapterDrawer({ open, onClose, chapters, onLocate }: Cha
           {chapters.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-[hsl(var(--fg-muted))]">暂无章节</p>
           )}
-          {chapters.map((c) => (
-            <button
-              key={c.index}
-              type="button"
-              onClick={() => {
-                onLocate(c.index);
-                onClose();
-              }}
-              className="flex min-h-10 w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-[hsl(var(--bg))] hover:text-[hsl(var(--accent))]"
-            >
-              <span className="shrink-0 text-xs text-[hsl(var(--fg-muted))]">{c.index}</span>
-              <span className="truncate">{c.title}</span>
-            </button>
+          {chapters.map((c, i) => (
+            <div key={c.index} className="flex min-h-10 items-center gap-1 px-4 transition-colors hover:bg-[hsl(var(--bg))]">
+              <button
+                type="button"
+                onClick={() => {
+                  onLocate(c.index);
+                  onClose();
+                }}
+                className="flex min-h-10 flex-1 items-center gap-2 py-2 text-left text-sm hover:text-[hsl(var(--accent))]"
+              >
+                <span className="shrink-0 text-xs text-[hsl(var(--fg-muted))]">{c.index}</span>
+                <span className="truncate">{c.title}</span>
+              </button>
+              {onSpeak && (
+                <button
+                  type="button"
+                  title={`从本章开始朗读：${c.title}`}
+                  aria-label={`从第${c.index}章开始朗读`}
+                  data-testid={`drawer-speak-${i}`}
+                  onClick={() => {
+                    onSpeak(i);
+                    onClose();
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--muted))]/40 hover:text-[hsl(var(--accent))]"
+                >
+                  ▶
+                </button>
+              )}
+            </div>
           ))}
         </nav>
       </aside>
