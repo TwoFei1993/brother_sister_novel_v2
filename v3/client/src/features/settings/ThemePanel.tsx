@@ -15,12 +15,20 @@ const followBtnCls = (active: boolean): string =>
       : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]'
   }`;
 
-/** 色板预览：底色大圆 + 强调色小圆叠放（静态任意值类，主题无关） */
+/** 色板预览：底色大圆 + 强调色小圆叠放。
+ * 颜色必须走内联 style——模板字符串拼 Tailwind 任意值类（bg-[hsl(${bg})]）
+ * 不会被 JIT 扫描生成，运行时全是无背景的空圈（2026-10-27 走查实锤）。 */
 function Swatch({ bg, accent }: { bg: string; accent: string }) {
   return (
     <span aria-hidden="true" className="relative inline-block h-6 w-6 shrink-0 align-middle">
-      <span className={`absolute inset-0 rounded-full border border-black/20 bg-[hsl(${bg})]`} />
-      <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-black/10 bg-[hsl(${accent})]`} />
+      <span
+        className="absolute inset-0 rounded-full border border-black/20"
+        style={{ backgroundColor: `hsl(${bg})` }}
+      />
+      <span
+        className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-black/10"
+        style={{ backgroundColor: `hsl(${accent})` }}
+      />
     </span>
   );
 }

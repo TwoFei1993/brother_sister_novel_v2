@@ -14,6 +14,8 @@ import {
 } from '../../api/library';
 import { listWorks } from '../../api/works';
 
+import AssetRow from './AssetRow';
+
 interface AssetPanelProps {
   type: AssetType;
   label: string;
@@ -28,6 +30,7 @@ interface AssetPanelProps {
 export default function AssetPanel({ type, label, accept, notify, onEdit, refreshKey }: AssetPanelProps) {
   const [items, setItems] = useState<LibraryAssetRef[] | null>(null);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [avatars, setAvatars] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -45,13 +48,16 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
     void reload();
   }, [reload, refreshKey]);
 
-  // 描述摘要：列表常量为个位数，逐项拉详情可接受；失败静默（摘要非关键信息）
+  // 描述摘要 + 角色头像：列表常量为个位数，逐项拉详情可接受；失败静默（摘要非关键信息）
   useEffect(() => {
     let alive = true;
     for (const it of items ?? []) {
       getAsset(type, it.id)
         .then((a) => {
-          if (alive) setSummaries((prev) => ({ ...prev, [it.id]: describeAsset(a) }));
+          if (!alive) return;
+          const avatar = type === 'characters' && 'avatar' in a ? (a as { avatar?: string }).avatar : undefined;
+          setSummaries((prev) => ({ ...prev, [it.id]: describeAsset(a) }));
+          if (avatar) setAvatars((prev) => ({ ...prev, [it.id]: avatar }));
         })
         .catch(() => undefined);
     }
@@ -216,85 +222,19 @@ export default function AssetPanel({ type, label, accept, notify, onEdit, refres
 
       <ul className="flex flex-col gap-2">
         {sorted.map((it) => (
-          <li
+          <AssetRow
             key={it.id}
-            className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[hsl(var(--fg))]">{it.name}</p>
-                <p className="truncate text-xs text-[hsl(var(--fg-muted))]">
-                  {summaries[it.id] ?? ''}
-                  {typeof it.createdAt === 'number' && it.createdAt > 0 && (
-                    <span className="ml-2 whitespace-nowrap">
-                      · 添加于 {new Date(it.createdAt).toLocaleDateString('zh-CN')}
-                    </span>
-                  )}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onEdit(it.id)}
-                className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-              >
-                编辑
-              </button>
-              {(type === 'characters' || type === 'worldbooks') && (
-                <button
-                  type="button"
-                  onClick={() => void onCopyToBook(it.id, it.name)}
-                  data-testid="asset-copy-to-book"
-                  title="深拷贝到另一本书（副本挂目标书，原素材不动）"
-                  className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-                >
-                  复制到书
-                </button>
-              )}
-              {type === 'presets' && (
-                <button
-                  type="button"
-                  onClick={() => void onDuplicate(it.id, it.name)}
-                  data-testid="asset-copy"
-                  title="完整复制一份（含全部提示词与启用排序）"
-                  className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-                >
-                  复制
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void onRename(it.id, it.name)}
-                data-testid="asset-rename"
-                title="重命名资产（列表与绑定显示名同步更新）"
-                className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-              >
-                重命名
-              </button>
-              {type === 'characters' && (
-                <button
-                  type="button"
-                  onClick={() => void onExport(it.id, it.name, 'png')}
-                  className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-                >
-                  导出 PNG
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void onExport(it.id, it.name, 'json')}
-                className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
-              >
-                导出 JSON
-              </button>
-              <button
-                type="button"
-                onClick={() => void onDelete(it.id, it.name)}
-                className="min-h-[36px] rounded-lg border border-red-400/40 px-3 text-sm text-red-400 hover:bg-red-400/10"
-              >
-                删除
-              </button>
-            </div>
-          </li>
+            type={type}
+            it={it}
+            summary={summaries[it.id] ?? ''}
+            avatar={avatars[it.id]}
+            onEdit={onEdit}
+            onCopyToBook={(id, name) => void onCopyToBook(id, name)}
+            onDuplicate={(id, name) => void onDuplicate(id, name)}
+            onRename={(id, name) => void onRename(id, name)}
+            onExport={(id, name, format) => void onExport(id, name, format)}
+            onDelete={(id, name) => void onDelete(id, name)}
+          />
         ))}
       </ul>
     </section>

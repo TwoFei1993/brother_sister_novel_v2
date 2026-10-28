@@ -8,6 +8,7 @@
  * - A 视图动作：swipe 切换 / 重roll / 正文编辑 / 指令重放（PATCH + 乐观回滚）
  */
 import { useEffect, useMemo, useState } from 'react';
+import { TriangleAlert, X } from 'lucide-react';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 import type { Work, ViewPreference } from '@shared/work';
@@ -48,8 +49,6 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
   const wb = useWorkbenchData(work);
   /** C 侧栏指令复填：非 null 时 CommandBar 注入输入框（消费后复位） */
   const [directiveSeed, setDirectiveSeed] = useState<string | null>(null);
-  /** 长上下文质量警示关闭标记（每次进作品页重新出现） */
-  const [driftWarnDismissed, setDriftWarnDismissed] = useState(false);
   /** 显示轨正则脚本（markdownOnly，§5.1②）：work 绑定资产，A/B 视图渲染前应用 */
   const [regexScripts, setRegexScripts] = useState<TavernRegexScript[]>([]);
 
@@ -69,6 +68,25 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     (m): m is Message & { chapter: NonNullable<Message['chapter']> } => m.chapter !== undefined,
   );
   const lastChapter = chapters.length > 0 ? chapters[chapters.length - 1] : null;
+  /** 长上下文质量警示：按「作品+章节数」记 sessionStorage——同数量不再打扰，章节数变化才重新提醒 */
+  const driftSeenKey = `drift-warn-seen:${work.id}:${chapters.length}`;
+  const [driftWarnDismissed, setDriftWarnDismissed] = useState(
+    () => sessionStorage.getItem(driftSeenKey) !== null,
+  );
+
+  function dismissDriftWarn(): void {
+    setDriftWarnDismissed(true);
+    try {
+      sessionStorage.setItem(driftSeenKey, '1');
+    } catch {
+      /* 隐私模式等场景静默 */
+    }
+  }
+
+  /** 章节数增长（key 变化）时按新 key 重算：未关闭过的新数量提醒重新出现 */
+  useEffect(() => {
+    setDriftWarnDismissed(sessionStorage.getItem(driftSeenKey) !== null);
+  }, [driftSeenKey]);
   const showReading = chapters.length > 0 || gen.streaming;
   /** TTS 连播队列：按章号升序（与 ReadingView 渲染序同源，队列下标=渲染下标，供高亮对齐） */
   const ttsChapters = useMemo(
@@ -184,8 +202,9 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
           data-testid="context-truncated-tip"
           className="flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--danger))]/10 px-3 py-2 text-xs text-[hsl(var(--danger))]"
         >
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">
-            ⚠ 上下文预算不足，最旧章节已被截断——可在 设置→生成参数 调大「上下文预算」
+            上下文预算不足，最旧章节已被截断——可在 设置→生成参数 调大「上下文预算」
           </span>
           <button
             type="button"
@@ -194,7 +213,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
             onClick={gen.clearTruncated}
             className="flex h-7 min-w-7 shrink-0 items-center justify-center rounded hover:bg-[hsl(var(--danger))]/20"
           >
-            ✕
+            <X className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
       )}
@@ -287,17 +306,18 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
           data-testid="drift-warning"
           className="flex items-center gap-2 border-t border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400"
         >
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">
-            ⚠ 已累积 {chapters.length} 章：实测长上下文连续生成可能出现质量退化（句式重复、节奏拖沓）。建议分卷创作或对单章 🎲 换一支对比。
+            已累积 {chapters.length} 章：实测长上下文连续生成可能出现质量退化（句式重复、节奏拖沓）。建议分卷创作或对单章「换一支」对比。
           </span>
           <button
             type="button"
             aria-label="关闭警示"
             data-testid="drift-warning-close"
-            onClick={() => setDriftWarnDismissed(true)}
-            className="shrink-0 rounded px-1 hover:bg-amber-500/20"
+            onClick={dismissDriftWarn}
+            className="flex shrink-0 items-center rounded px-1 hover:bg-amber-500/20"
           >
-            ✕
+            <X className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
       )}
