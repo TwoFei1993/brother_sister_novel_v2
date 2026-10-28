@@ -5,7 +5,50 @@
  * - 段落说话人路由：routeMobileParas（跨段延续说话人；自动分声用 voice-route 的 autoCastVoices）
  * - 持久化：作品级 voiceMap（VoiceCastPane 写 PATCH；localStorage 仅旧版 cast 兼容读取）
  */
-import { MINIMAX_VOICES, NARRATOR_SPEAKER, NARRATOR_VOICE_KEY, VOICES, routeParagraphs } from './voice-route';
+import { MINIMAX_VOICES, NARRATOR_SPEAKER, NARRATOR_VOICE_KEY, SPEAKER_NAME_PREFIX, VOICES, routeParagraphs } from './voice-route';
+
+/** 正文识别出的候选角色（说话人前缀命中，按出现次数降序） */
+export interface DetectedSpeaker {
+  name: string;
+  count: number;
+}
+
+/** 叙述尾巴（「崔氏笑道」「丫鬟急道」这类 叙述+冒号 误报）：叠代裁剪后归一为角色名 */
+const NARRATION_TAIL =
+  /(?:低声|大声|连忙|急忙|轻声|又|再|在旁边|心中)?(?:说道?|笑道|笑着?|问道?|喊道?|劝道?|叹道?|答道?|吩咐|念叨|嘟囔|嘀咕|开口|急道|笑)$/;
+
+/** 场景词/代词开头的明显非角色名 */
+const NOT_A_NAME = /^[她它]|旁边|心里|顿时|随即|一眼|点头|摇头/;
+
+/** 归一化说话人：裁掉尾部叙述动词（崔氏笑道→崔氏；叠代 ≤3 次处理「低声劝道」叠加） */
+function normalizeSpeaker(raw: string): string {
+  let name = raw;
+  for (let i = 0; i < 3; i += 1) {
+    const next = name.replace(NARRATION_TAIL, '');
+    if (next === name) break;
+    name = next;
+  }
+  return name;
+}
+
+/**
+ * 从章节正文扫描说话人（与 routeParagraphs 同一前缀规则 + 叙述尾巴归一/过滤）：
+ * 返回不在 known 集合里的角色名及出现次数（降序），供「识别正文角色」一键配声。
+ */
+export function scanSpeakers(paras: readonly string[], known: ReadonlySet<string>): DetectedSpeaker[] {
+  const counts = new Map<string, number>();
+  for (const para of paras) {
+    const m = SPEAKER_NAME_PREFIX.exec(para.trim());
+    if (!m) continue;
+    const name = normalizeSpeaker(m[1]!);
+    if (!name || name.length > 8 || NOT_A_NAME.test(name)) continue;
+    if (known.has(name)) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
 
 /** 音色展示分组（选择器分节渲染） */
 export type CastGroup = 'edge' | 'cast' | 'narrator' | 'cantonese';

@@ -2,19 +2,29 @@
  * 角色配音面板（移动创作「资料」分区）：作品级 TTS 分声（work.voiceMap，桌面配音编辑器同源）
  *
  * - 首次进入（voiceMap 缺角色项）自动分配初始音色：MiniMax 池按名字性别轮替，旁白固定主持人女
- * - 每行点开 VoicePicker 全量换声（Edge 免费 + MiniMax）；「重新自动分配」一键重置
+ * - 🔍 识别正文角色：扫描章节「名字：」对白前缀，检出未配声角色一键配声（反馈③智能识别）
+ * - 🤖 AI 智能分配：按角色卡人设让 LLM 从音色目录选声（反馈④），性别不符/幻觉 id 用启发式兜底
+ * - 每行点开 VoicePicker 全量换声（Edge 免费 + MiniMax 全量）；「重新自动分配」一键重置
  * - 保存：GET 最新 work 取 revision → PATCH voiceMap（乐观锁，失败提示重试）
  */
 import { useEffect, useState } from 'react';
 
 import { apiFetch } from '../../../api/client';
-import { listCharacters } from '../../../api/library';
-import { updateWork } from '../../../api/works';
-import { ALL_VOICES, NARRATOR_CAST_ID, normalizeVoiceMap } from '../../../lib/tts/mobile-cast';
+import { getAsset, listCharacters } from '../../../api/library';
+import { listMessages, updateWork } from '../../../api/works';
+import {
+  ALL_VOICES,
+  NARRATOR_CAST_ID,
+  normalizeVoiceMap,
+  scanSpeakers,
+  type DetectedSpeaker,
+} from '../../../lib/tts/mobile-cast';
 import { NARRATOR_VOICE_KEY, autoCastVoices } from '../../../lib/tts/voice-route';
+import type { CharacterAsset } from '@shared/card';
 import type { Work } from '@shared/work';
 
 import VoicePicker from '../VoicePicker';
+import { aiAssignVoices } from './voice-cast-ai';
 
 interface Props {
   work: Work;
@@ -31,8 +41,16 @@ function voiceName(id: string | undefined): string {
 export default function VoiceCastPane({ work, onUpdated }: Props) {
   const [cast, setCast] = useState<Record<string, string>>({});
   const [names, setNames] = useState<string[]>([]);
+  /** 绑定角色 id↔名字（AI 分配拉人设用） */
+  const [chars, setChars] = useState<Array<{ id: string; name: string }>>([]);
   const [picking, setPicking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // —— 🔍 正文识别 ——
+  const [detected, setDetected] = useState<DetectedSpeaker[] | null>(null);
+  const [detectedPick, setDetectedPick] = useState<Record<string, boolean>>({});
+  const [scanning, setScanning] = useState(false);
+  // —— 🤖 AI 分配 ——
+  const [aiBusy, setAiBusy] = useState(false);
 
   /** PATCH voiceMap（乐观锁：取最新 work；失败仅提示，本地已更新） */
   async function persist(next: Record<string, string>): Promise<void> {
@@ -64,15 +82,17 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
     listCharacters()
       .then((characters) => {
         if (!alive) return;
-        const bound = characters.filter((c) => work.characterIds.includes(c.id)).map((c) => c.name);
+        const bound = characters.filter((c) => work.characterIds.includes(c.id));
+        const boundNames = bound.map((c) => c.name);
         // voiceMap 里已分配但未绑定的名字保留（历史角色不丢）
         const history = Object.keys(work.voiceMap).filter(
-          (n) => n !== NARRATOR_VOICE_KEY && !bound.includes(n),
+          (n) => n !== NARRATOR_VOICE_KEY && !boundNames.includes(n),
         );
-        const all = [...bound, ...history];
+        const all = [...boundNames, ...history];
         const prev = normalizeVoiceMap(work.voiceMap); // 旧连字符 id 自愈
-        const next = withAutoAssign({ ...prev }, bound);
+        const next = withAutoAssign({ ...prev }, boundNames);
         const added = Object.keys(next).filter((k) => prev[k] !== next[k]);
+        setChars(bound.map((c) => ({ id: c.id, name: c.name })));
         setNames(all);
         setCast(next);
         if (added.length > 0) void persist(next); // 自动分配/修复了音色才写回
@@ -100,6 +120,84 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
     void persist(next);
   }
 
+  /** 🔍 扫描全部章节正文，检出未配声的说话人 */
+  async function scanCharacters(): Promise<void> {
+    if (scanning) return;
+    setScanning(true);
+    setError(null);
+    try {
+      const page = await listMessages(work.id, { tail: 100 });
+      const paras: string[] = [];
+      for (const m of page.messages) {
+        for (const line of m.content.split('\n')) {
+          const t = line.trim();
+          if (t) paras.push(t);
+        }
+      }
+      const known = new Set([...names, NARRATOR_VOICE_KEY]);
+      const found = scanSpeakers(paras, known);
+      setDetected(found);
+      setDetectedPick(Object.fromEntries(found.map((d) => [d.name, true])));
+      if (found.length === 0) setError('正文中没有发现未配声的新角色（对白需用「名字：」开头才会被识别）');
+    } catch {
+      setError('正文扫描失败，请重试');
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  /** 为勾选的识别结果配声（性别启发式池轮替）并入 cast */
+  function assignDetected(): void {
+    const pickedNames = (detected ?? []).filter((d) => detectedPick[d.name]).map((d) => d.name);
+    if (pickedNames.length === 0) return;
+    const auto = autoCastVoices(pickedNames);
+    const next = { ...cast };
+    for (const { name, voice } of auto) next[name] = voice;
+    if (!next[NARRATOR_VOICE_KEY]) next[NARRATOR_VOICE_KEY] = NARRATOR_CAST_ID;
+    setCast(next);
+    setNames((ns) => [...ns, ...pickedNames.filter((n) => !ns.includes(n))]);
+    setDetected(null);
+    void persist(next);
+  }
+
+  /** 🤖 AI 智能分配：绑定角色（带人设）∪ 已配声名字 → LLM 从目录选声 → 幻觉/缺选用启发式兜底 */
+  async function aiAssign(): Promise<void> {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setError(null);
+    try {
+      const briefs: Array<{ name: string; desc: string }> = [];
+      const seen = new Set<string>();
+      // 并行拉全量卡（串行 19 次 GET 太慢）；单卡失败降级为空人设
+      const assets = await Promise.all(chars.map((c) => getAsset('characters', c.id).catch(() => null)));
+      for (let i = 0; i < chars.length; i += 1) {
+        const c = chars[i]!;
+        seen.add(c.name);
+        const asset = assets[i] as CharacterAsset | null;
+        const d = asset?.card?.data ?? {};
+        const desc = [d.description, d.personality].filter((x): x is string => typeof x === 'string' && x.trim() !== '').join('；');
+        briefs.push({ name: c.name, desc });
+      }
+      // 未绑定但已在配音表的名字（识别/手动加入的）：按名字参与，无人设
+      for (const n of names) {
+        if (!seen.has(n)) briefs.push({ name: n, desc: '' });
+      }
+      const ai = await aiAssignVoices(briefs, ALL_VOICES);
+      const next = { ...cast };
+      const fallback = autoCastVoices(briefs.map((b) => b.name));
+      for (const b of briefs) {
+        next[b.name] = ai[b.name] || fallback.find((f) => f.name === b.name)?.voice || next[b.name] || NARRATOR_CAST_ID;
+      }
+      if (!next[NARRATOR_VOICE_KEY]) next[NARRATOR_VOICE_KEY] = NARRATOR_CAST_ID;
+      setCast(next);
+      void persist(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 分配失败，请重试');
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   const rows = [NARRATOR_VOICE_KEY, ...names];
 
   return (
@@ -118,7 +216,63 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
       <p className="mb-2 text-xs leading-5 text-[hsl(var(--fg-muted))]">
         点角色换声；对白按说话人自动选声。首次进入已自动分配初始音色，可随时修改。
       </p>
+      <div className="mb-2 flex gap-2">
+        <button
+          type="button"
+          onClick={() => void scanCharacters()}
+          disabled={scanning}
+          data-testid="cast-scan-btn"
+          className="h-8 flex-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+        >
+          {scanning ? '扫描中…' : '🔍 识别正文角色'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void aiAssign()}
+          disabled={aiBusy || (chars.length === 0 && names.length === 0)}
+          data-testid="cast-ai-btn"
+          className="h-8 flex-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+        >
+          {aiBusy ? 'AI 分配中…' : '🤖 AI 智能分配'}
+        </button>
+      </div>
       {error && <p className="mb-2 rounded-lg bg-[hsl(var(--danger))]/10 p-2 text-xs text-[hsl(var(--danger))]">{error}</p>}
+
+      {/* 🔍 识别结果：勾选未配声角色 → 一键配声 */}
+      {detected !== null && detected.length > 0 && (
+        <div className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5" data-testid="cast-detected">
+          <p className="mb-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+            正文检出 {detected.length} 个未配声角色（按出现次数）
+          </p>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {detected.map((d) => (
+              <label key={d.name} className="flex items-center gap-1 rounded-full border border-amber-500/40 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+                <input
+                  type="checkbox"
+                  checked={detectedPick[d.name] ?? false}
+                  onChange={(e) => setDetectedPick((p) => ({ ...p, [d.name]: e.target.checked }))}
+                  data-testid={`detect-pick-${d.name}`}
+                />
+                {d.name} ×{d.count}
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={assignDetected}
+              data-testid="detect-assign-btn"
+              className="h-8 flex-1 rounded-lg bg-amber-500 text-xs font-medium text-white"
+            >
+              为所选分配声音
+            </button>
+            <button type="button" onClick={() => setDetected(null)} className="h-8 flex-1 rounded-lg border border-amber-500/40 text-xs text-amber-700 dark:text-amber-400">
+              忽略
+            </button>
+          </div>
+        </div>
+      )}
+
       <ul className="flex flex-col gap-1">
         {rows.map((name) => {
           const isNarrator = name === NARRATOR_VOICE_KEY;
@@ -140,7 +294,7 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
         })}
       </ul>
 
-      {/* 换声弹层（全量音色：Edge 免费 + MiniMax 高清） */}
+      {/* 换声弹层（全量音色：Edge 免费 + MiniMax 全量） */}
       {picking && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setPicking(null)}>
           <div

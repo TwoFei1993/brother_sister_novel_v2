@@ -8,9 +8,10 @@ import {
   NARRATOR_CAST_ID,
   engineOf,
   routeMobileParas,
+  scanSpeakers,
   synthVoiceOf,
 } from '../mobile-cast';
-import { NARRATOR_VOICE_KEY, VOICES, autoCastVoices } from '../voice-route';
+import { NARRATOR_VOICE_KEY, VOICES, autoCastVoices, routeParagraphs } from '../voice-route';
 
 describe('ALL_VOICES 目录', () => {
   it('Edge 免费声 + MiniMax 全量声可选，id 引擎可判定', () => {
@@ -64,5 +65,24 @@ describe('routeMobileParas 段落说话人路由', () => {
   it('旧连字符主持人 id 自愈为真实 id（路由层）', () => {
     const out = routeMobileParas(['夜色渐深。'], { [NARRATOR_VOICE_KEY]: 'mm:presenter-female' });
     expect(out[0]?.voice).toBe(NARRATOR_CAST_ID);
+  });
+
+  it('scanSpeakers：叙述尾巴归一 + 代词/场景词过滤', () => {
+    const found = scanSpeakers(
+      ['崔氏笑道：好。', '崔氏笑道：再来。', '孙妈妈：姑娘该歇了。', '她把仓房里的东西在心里过了一遍：没剩多少。', '贴身长随陆安低声劝道：走吧。'],
+      new Set(),
+    );
+    const names = found.map((d) => d.name);
+    expect(names).toContain('崔氏');
+    expect(names).toContain('孙妈妈');
+    expect(names).not.toContain('崔氏笑道');
+    expect(names).not.toContain('她把仓房里的东西在心里过了一遍');
+    expect(found.find((d) => d.name === '崔氏')?.count).toBe(2);
+  });
+
+  it('routeParagraphs：带叙述尾巴的名字裁尾命中 voiceMap（崔氏笑道→崔氏）', () => {
+    const out = routeParagraphs('崔氏笑道：好孩子。\n崔氏：来。', { 崔氏: 'mm:female-yujie' }, [], 'narrator');
+    expect(out[0]).toMatchObject({ speaker: '崔氏笑道', voice: 'mm:female-yujie' });
+    expect(out[1]).toMatchObject({ speaker: '崔氏', voice: 'mm:female-yujie' });
   });
 });

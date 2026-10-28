@@ -198,6 +198,9 @@ export function voiceIdToName(id: string): string {
 /** `名字：` / `名字:` 前缀（名字限 1-16 位常见字符，避免把「他说：」这类整句误判） */
 const NAME_PREFIX = /^([A-Za-z0-9一-龥·]{1,16})[：:]\s*/;
 
+/** 说话人前缀正则（导出供正文角色识别复用，保证路由与识别同规则） */
+export const SPEAKER_NAME_PREFIX = NAME_PREFIX;
+
 /** 引号开字符与闭字符配对（合并判定按对计数） */
 const QUOTE_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ['「', '」'],
@@ -245,7 +248,18 @@ export function splitParagraphs(text: string): string[] {
 /**
  * 段落说话人路由主入口。
  * speakers 先建表、voiceMap 同名覆盖（作品级显式配置优先于运行时补充）。
+ * 名字带叙述尾巴（「崔氏笑道：」）且表内无此名时，裁尾再查（崔氏→命中）。
  */
+const SPEECH_TAIL =
+  /(?:低声|大声|连忙|急忙|轻声|又|再)?(?:说道?|笑道|笑着?|问道?|喊道?|劝道?|叹道?|答道?|吩咐|念叨|嘟囔|嘀咕|开口|笑)$/;
+
+function resolveVoice(name: string, voiceBy: Record<string, string>): string | undefined {
+  const direct = voiceBy[name];
+  if (direct !== undefined) return direct;
+  const stem = name.replace(SPEECH_TAIL, '');
+  return stem !== name && stem.length >= 2 ? voiceBy[stem] : undefined;
+}
+
 export function routeParagraphs(
   text: string,
   voiceMap: Record<string, string>,
@@ -264,10 +278,14 @@ export function routeParagraphs(
     if (matched) {
       const name = matched[1];
       lastSpeaker = name;
-      out.push({ text: para, voice: voiceBy[name] ?? defaultVoice, speaker: name });
+      out.push({ text: para, voice: resolveVoice(name, voiceBy) ?? defaultVoice, speaker: name });
     } else if (lastSpeaker !== null && QUOTE_OPENERS.some((q) => para.startsWith(q))) {
       // 无前缀引号对白：归属前文最近说话人
-      out.push({ text: para, voice: voiceBy[lastSpeaker] ?? defaultVoice, speaker: lastSpeaker });
+      out.push({
+        text: para,
+        voice: (lastSpeaker && resolveVoice(lastSpeaker, voiceBy)) ?? defaultVoice,
+        speaker: lastSpeaker,
+      });
     } else {
       out.push({ text: para, voice: defaultVoice, speaker: NARRATOR_SPEAKER });
     }
