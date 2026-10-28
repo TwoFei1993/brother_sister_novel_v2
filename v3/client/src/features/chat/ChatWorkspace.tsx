@@ -33,7 +33,7 @@ import { useChatGenerate } from './useChatGenerate';
 function EmptyMembers(): React.ReactElement {
   return (
     <div className="flex flex-1 items-center justify-center px-6 text-center" data-testid="chat-no-members">
-      <p className="text-sm text-[hsl(var(--fg-muted))]">还没有可对话的角色——请打开右上角 ⚙ 作品设置，绑定至少一张角色卡</p>
+      <p className="text-sm text-[hsl(var(--fg-muted))]">还没有可对话的角色——请打开右上角「作品设置」，绑定至少一张角色卡</p>
     </div>
   );
 }

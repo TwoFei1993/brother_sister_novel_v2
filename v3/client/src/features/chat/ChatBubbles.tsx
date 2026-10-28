@@ -7,6 +7,7 @@
  *   管道——presentable → applyDisplayRegex → DOMPurify → rehype-sanitize；气泡是
  *   小容器，排版用简化 prose（紧凑段距 + 列表缩进），不套 ReadingView 的长文样式）
  */
+import { Volume2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { TavernRegexScript } from '@shared/tavern';
@@ -152,7 +153,7 @@ export function MessageBubble({
                 onClick={() => onSpeak(content)}
                 className="flex h-9 min-w-9 items-center justify-center hover:text-[hsl(var(--fg))]"
               >
-                🔊
+                <Volume2 className="h-4 w-4" aria-hidden />
               </button>
             )}
           </div>

@@ -7,6 +7,7 @@
  * - 📝 生成新版本并手改（forkManualVersion：复制当前版本为「<基底>手改M」，随后正文分区编辑保存）
  * - 上架状态标记（publishedVersionId 对应版本显示「已上架」，上架管理 Phase1 后续任务接入）
  */
+import { Dices, FileText, Trash2 } from 'lucide-react';
 import { forkManualVersion } from '../../../hooks/generation-flow';
 import { deleteMessage, patchMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
@@ -79,7 +80,7 @@ export default function VersionsPane({
               className="h-9 w-12 shrink-0 rounded-xl border border-red-400/40 text-xs text-red-400"
               title="删除本章"
             >
-              🗑
+              <Trash2 className="h-4 w-4" aria-hidden />
             </button>
             <button
               type="button"
@@ -88,7 +89,8 @@ export default function VersionsPane({
               data-testid="mobile-reroll-btn"
               className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
             >
-              🎲 重roll新版本
+              <Dices className="h-4 w-4" aria-hidden />
+              重roll新版本
             </button>
             <button
               type="button"
@@ -97,7 +99,8 @@ export default function VersionsPane({
               data-testid="mobile-fork-btn"
               className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
             >
-              📝 生成新版本并手改
+              <FileText className="h-4 w-4" aria-hidden />
+              生成新版本并手改
             </button>
           </div>
 

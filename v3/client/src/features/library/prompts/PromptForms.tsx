@@ -6,6 +6,7 @@
  * 服务端 normalize（prompt_order 取 character_id=100001）后入库为新预设。
  */
 import { useState } from 'react';
+import { ClipboardPaste } from 'lucide-react';
 
 import type { TavernPrompt } from '@shared/tavern';
 
@@ -144,7 +145,7 @@ export function PasteImportForm({ onImported, onError }: PasteImportFormProps) {
         onClick={() => setOpen(true)}
         className="min-h-[36px] rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]"
       >
-        📋 从 JSON 粘贴导入
+        从 JSON 粘贴导入
       </button>
     );
   }

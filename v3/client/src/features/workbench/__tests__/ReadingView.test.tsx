@@ -179,7 +179,7 @@ describe('流式思考滚动（💭 移至阅读区正文上方——用户反�
     const c = await renderView({ streaming: true, buffer: '正文开头。', thinking: '思路'.repeat(200) });
     const ind = c.querySelector('[data-testid="thinking-indicator"]');
     expect(ind).not.toBeNull();
-    expect(ind?.textContent).toContain('💭');
+    expect(ind?.querySelector('svg')).not.toBeNull(); // 💭 已换 lucide Brain 图标（2026-10-27 图标系统统一）
     expect(ind?.textContent).toContain('思路'); // 尾部 160 字含最后一段思路
   });
 

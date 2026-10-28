@@ -6,6 +6,7 @@
  * 服务端逐作品落盘为 Work + messages.jsonl，成功后书架立即可见。
  */
 import { useRef, useState } from 'react';
+import { Check } from 'lucide-react';
 
 import { ApiError, apiFetch } from '../../api/client';
 
@@ -172,7 +173,7 @@ export default function MigratePanel() {
           <ul className="max-h-56 overflow-y-auto rounded-lg bg-[hsl(var(--bg))] p-2 text-sm">
             {previews.map((p) => (
               <li key={p.title} className="flex justify-between gap-3 px-1 py-1">
-                <span className="truncate text-emerald-400">✓ {p.title}</span>
+                <span className="flex min-w-0 items-center gap-1 text-emerald-400"><Check className="h-3.5 w-3.5 shrink-0" aria-hidden /><span className="truncate">{p.title}</span></span>
                 <span className="shrink-0 text-[hsl(var(--fg-muted))]">{p.chapterCount} 章</span>
               </li>
             ))}

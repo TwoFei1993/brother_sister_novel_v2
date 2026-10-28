@@ -6,6 +6,7 @@
  * 宿主：ReadingView（B 视图）与 MessageBubble（A 视图）在章头渲染正文前调用。
  */
 import { useState } from 'react';
+import { ClipboardList } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { TavernRegexScript } from '@shared/tavern';
@@ -33,7 +34,7 @@ export default function OutlineBlock({ outline, regexScripts }: OutlineBlockProp
         onClick={() => setOpen((v) => !v)}
         className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-[hsl(var(--fg-muted))] transition-colors hover:text-[hsl(var(--fg))]"
       >
-        <span aria-hidden="true">📋</span>
+        <ClipboardList className="h-3.5 w-3.5" aria-hidden />
         本章要点提纲（点击{open ? '收起' : '展开'}）
       </button>
       {open && (

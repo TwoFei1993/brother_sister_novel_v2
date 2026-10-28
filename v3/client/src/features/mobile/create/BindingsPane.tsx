@@ -8,6 +8,7 @@
  *   章节级 fromChapter 绑定走待绑定确认流，见 pending-assets.ts）
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Check, X } from 'lucide-react';
 
 import { apiFetch } from '../../../api/client';
 import { listWorks } from '../../../api/works';
@@ -138,7 +139,7 @@ export default function BindingsPane({
                   title="点击取消绑定"
                   className="rounded-full bg-[hsl(var(--accent))]/10 px-2.5 py-1 text-xs text-[hsl(var(--accent))]"
                 >
-                  {nameOf(kind, id)} ✕
+                  {nameOf(kind, id)} <X className="inline h-3.5 w-3.5 align-[-1px]" aria-hidden />
                 </button>
               </li>
             ))}
@@ -173,7 +174,7 @@ export default function BindingsPane({
                             bound ? 'bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]' : ''
                           }`}
                         >
-                          {r.name} {bound && '✓'}
+                          {r.name} {bound && <Check className="inline h-3.5 w-3.5 align-[-1px]" aria-hidden />}
                         </button>
                       </li>
                     );

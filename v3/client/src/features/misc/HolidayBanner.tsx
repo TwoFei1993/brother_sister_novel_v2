@@ -5,6 +5,7 @@
  * 挂载点由协调者统一接入（如 RootPage 顶部）。
  */
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 
 interface HolidayInfo {
   name: string;
@@ -114,7 +115,7 @@ export default function HolidayBanner() {
         aria-label="关闭节日横幅"
         className="ml-2 flex h-9 w-9 items-center justify-center rounded text-[hsl(var(--fg-muted))] transition-colors hover:bg-black/10 hover:text-[hsl(var(--fg))]"
       >
-        ✕
+        <X className="h-4 w-4" aria-hidden />
       </button>
     </div>
   );

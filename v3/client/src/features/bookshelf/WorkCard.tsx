@@ -9,12 +9,13 @@
  */
 import { useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PenLine, SquarePen, Trash2 } from 'lucide-react';
 
 import { getWork, updateWorkTitle, deleteWork } from '../../api/works';
 import type { WorkSummary } from '../../api/works';
 import { ApiError } from '../../api/client';
 import type { Work } from '@shared/work';
-import { genreLabel, genreOption, MODE_LABELS } from './genres';
+import { bookSkin, genreLabel, MODE_LABELS } from './genres';
 
 interface WorkCardProps {
   work: WorkSummary;
@@ -65,7 +66,7 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const gradient = genreOption(work.genre).gradient;
+  const skin = bookSkin(work.genre, work.id);
 
   function openWork(): void {
     navigate(`/work/${work.id}`);
@@ -141,9 +142,17 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
         type="button"
         onClick={openWork}
         aria-label={`打开作品 ${work.title}`}
-        className={`relative flex aspect-[2/3] w-full flex-col items-center justify-between overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br ${gradient} p-3 text-left shadow-lg transition-transform duration-200 group-hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]`}
+        style={{ backgroundImage: `linear-gradient(160deg, ${skin.from}, ${skin.to})` }}
+        className={`relative flex aspect-[2/3] w-full flex-col items-center justify-between overflow-hidden rounded-xl border border-white/10 p-3 text-left shadow-lg transition-transform duration-200 group-hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]`}
       >
         <span className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-r from-black/30 to-transparent" />
+        {/* 首字水印：每本书的「藏书章」，配合派生色相让同题材卡片可辨（走查条目⑩） */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center font-heading text-7xl font-bold text-white/10 select-none"
+        >
+          {work.title.trim().charAt(0)}
+        </span>
         <span className="w-full text-center text-sm leading-tight font-semibold line-clamp-3 text-white/90 drop-shadow">
           {work.title}
         </span>
@@ -161,7 +170,8 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
           data-testid="card-continue"
           className="flex h-11 items-center gap-1 rounded-lg bg-black/60 px-3 text-xs text-white/90 backdrop-blur transition-colors hover:bg-black/80"
         >
-          ✍ 续写
+          <PenLine className="h-3.5 w-3.5" aria-hidden />
+          续写
         </button>
         <button
           type="button"
@@ -171,7 +181,8 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
           data-testid="card-rename"
           className="flex h-11 items-center gap-1 rounded-lg bg-black/60 px-3 text-xs text-white/90 backdrop-blur transition-colors hover:bg-black/80"
         >
-          ✎ 改名
+          <SquarePen className="h-3.5 w-3.5" aria-hidden />
+          改名
         </button>
         <button
           type="button"
@@ -181,7 +192,8 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
           data-testid="card-delete"
           className="flex h-11 items-center gap-1 rounded-lg border border-[hsl(var(--danger))]/70 bg-black/60 px-3 text-xs text-[hsl(var(--danger))] backdrop-blur transition-colors hover:bg-black/80"
         >
-          ✕ 删除
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          删除
         </button>
       </div>
 

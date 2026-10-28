@@ -2,6 +2,7 @@
  * 向导左侧会话栏（豆包式）：历史会话列表 + 新建 + 删除，可展开/收缩。
  * 桌面常驻（收缩为 0 宽），窄屏唤出时以浮层覆盖（不挤压聊天区）。
  */
+import { X } from 'lucide-react';
 import type { PlannerSession } from './sessions';
 
 function relTime(ts: number): string {
@@ -73,7 +74,7 @@ export default function PlannerSidebar({
               aria-label={`删除 ${s.title}`}
               className="absolute right-1.5 top-2 hidden h-6 w-6 items-center justify-center rounded text-xs text-[hsl(var(--fg-muted))] hover:bg-[hsl(var(--danger))]/10 group-hover:flex"
             >
-              ✕
+              <X className="h-5 w-5" aria-hidden />
             </button>
           </li>
         ))}

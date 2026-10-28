@@ -7,6 +7,7 @@
  * 作者注释保存走 PATCH（revision 乐观锁），409 提示刷新；成功回传新 Work 给父级同步 store。
  */
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 
 import { updateWork } from '../../api/works';
 import { listCharacters, listPresets, listWorldbooks, type LibraryAssetRef } from '../../api/library';
@@ -102,7 +103,7 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
             onClick={onClose}
             className="flex h-9 min-w-9 items-center justify-center rounded text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
           >
-            ✕
+            <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
 
@@ -148,7 +149,7 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
           <section className="border-t border-[hsl(var(--border-soft))] pt-4">
             <p className="mb-1 text-sm font-medium">生成目标</p>
             <p className="mb-3 text-xs text-[hsl(var(--fg-muted))]">
-              字数注入每章提示词；⚡连写每次写 3 章（写到目标章数即停；改动下一章起生效）
+              字数注入每章提示词；连写每次写 3 章（写到目标章数即停；改动下一章起生效）
             </p>
             <div className="flex items-center gap-3">
               <label htmlFor="chapter-words" className="w-24 shrink-0 text-sm">
@@ -179,7 +180,7 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
                 data-testid="chapter-count"
                 className="h-9 w-24 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
               />
-              <span className="text-xs text-[hsl(var(--fg-muted))]">章（连写上界；⚡每次写 3 章）</span>
+              <span className="text-xs text-[hsl(var(--fg-muted))]">章（连写上界；连写每次写 3 章）</span>
             </div>
           </section>
 

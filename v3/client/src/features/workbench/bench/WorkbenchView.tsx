@@ -7,6 +7,7 @@
  * - 快照/激活审计提取：取最新与上一条 assistant 消息的 extra（本组件做，子面板纯渲染）
  */
 import { useEffect, useMemo, useState } from 'react';
+import { LayoutGrid } from 'lucide-react';
 
 import type { Message } from '@shared/message';
 
@@ -134,7 +135,8 @@ export default function WorkbenchView({
         data-testid="workbench-toggle"
         className="fixed right-3 bottom-20 z-30 flex h-11 items-center gap-1 rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-4 text-xs shadow-lg lg:hidden"
       >
-        📊 工作台
+        <LayoutGrid className="mr-1 inline h-4 w-4 align-[-2px]" aria-hidden />
+        工作台
       </button>
       <div
         onClick={() => setDrawerOpen(false)}

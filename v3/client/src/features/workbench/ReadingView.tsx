@@ -11,6 +11,7 @@
  * - 工具条：阅读模式 4 档 / 字号 4 档 / 行高 3 档（localStorage 持久化，见 readingPrefs）+ 导出文本
  */
 import { useEffect, useMemo, useRef } from 'react';
+import { Brain } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import type { Message } from '@shared/message';
@@ -246,8 +247,8 @@ export default function ReadingView({
                   data-testid="thinking-indicator"
                   className="mb-3 flex items-start gap-1.5 rounded-md bg-[hsl(var(--muted))]/60 px-2 py-1.5 text-xs leading-relaxed text-[hsl(var(--fg-muted))]"
                 >
-                  <span className="mt-1 inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
-                  <span className="line-clamp-3 break-all">💭 {thinking.replace(/\s+/g, ' ').slice(-160)}</span>
+                  <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse" aria-hidden />
+                  <span className="line-clamp-3 break-all">{thinking.replace(/\s+/g, ' ').slice(-160)}</span>
                 </p>
               )}
               <div className={MARKDOWN_CLASS}>

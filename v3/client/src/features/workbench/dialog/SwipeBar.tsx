@@ -7,6 +7,8 @@
  * - 📋 复制：当前候选文本入剪贴板
  * 显隐：触屏端无 hover，操作条常显；桌面端默认淡显，hover/focus 完全不透明。
  */
+import { ChevronLeft, ChevronRight, ClipboardCopy, RotateCw, SquarePen } from 'lucide-react';
+
 interface SwipeBarProps {
   /** 当前候选下标（0-based） */
   index: number;
@@ -48,7 +50,7 @@ export default function SwipeBar({
             onClick={() => onSwipe(-1)}
             className={`${barBtn}`}
           >
-            ◀
+            <ChevronLeft className="h-4 w-4" aria-hidden />
           </button>
           <span data-testid="swipe-count" className="min-w-8 text-center text-xs text-[hsl(var(--fg-muted))]">
             {index + 1}/{total}
@@ -62,7 +64,7 @@ export default function SwipeBar({
             onClick={() => onSwipe(1)}
             className={`${barBtn}`}
           >
-            ▶
+            <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
         </div>
       )}
@@ -75,7 +77,7 @@ export default function SwipeBar({
         onClick={onReroll}
         className={barBtn}
       >
-        ↻
+        <RotateCw className="h-4 w-4" aria-hidden />
       </button>
       <button
         type="button"
@@ -86,7 +88,7 @@ export default function SwipeBar({
         onClick={onEdit}
         className={barBtn}
       >
-        ✏️
+        <SquarePen className="h-4 w-4" aria-hidden />
       </button>
       <button
         type="button"
@@ -97,7 +99,7 @@ export default function SwipeBar({
         onClick={onCopy}
         className={barBtn}
       >
-        📋
+        <ClipboardCopy className="h-4 w-4" aria-hidden />
       </button>
     </div>
   );

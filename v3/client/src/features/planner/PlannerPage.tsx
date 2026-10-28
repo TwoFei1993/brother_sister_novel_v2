@@ -6,6 +6,7 @@
  * 思考流打字机（💭+思考尾部滚动）；LLM 协议见 planner-llm.ts；导入复用 misc/wizard/importAllAssets。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CircleHelp, ClipboardList, Dices, Menu, Smartphone, WandSparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { buildGenerateBody, generateStream } from '../../api/llm';
@@ -217,10 +218,10 @@ export default function PlannerPage() {
           aria-label={sidebarOpen ? '收起会话栏' : '展开会话栏'}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-sm text-[hsl(var(--fg-muted))] hover:bg-[hsl(var(--surface))]"
         >
-          ☰
+          <Menu className="h-5 w-5" aria-hidden />
         </button>
         <div className="flex items-center gap-2">
-          <span>🪄</span>
+          <WandSparkles className="h-5 w-5" aria-hidden />
           <h1 className="text-base font-semibold">AI 创作向导</h1>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -229,7 +230,8 @@ export default function PlannerPage() {
             onClick={() => navigate('/m/create')}
             className="rounded px-2 py-1 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
           >
-            📱 移动端
+            <Smartphone className="h-4 w-4" aria-hidden />
+            移动端
           </button>
           <button
             type="button"
@@ -266,6 +268,29 @@ export default function PlannerPage() {
         {/* 右列：聊天流 + 输入区 */}
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 overflow-y-auto px-4 py-6">
+            {/* 空态引导（走查条目⑧）：新会话只有一条欢迎气泡时，给可点的示例想法，降低空白首屏的启动门槛 */}
+            {turns.length <= 1 && !busy && (
+              <div className="flex flex-col items-center gap-3 pt-8 text-center" data-testid="planner-empty-guide">
+                <p className="text-sm text-[hsl(var(--fg-muted))]">试一个开头（点击直接发送）：</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {[
+                    '写一本末世题材的兄妹互动小说，妹妹有净化异能',
+                    '星际题材，哥哥是飞船工程师，妹妹是AI人格',
+                    '都市日常向，兄妹合开一家深夜便利店',
+                  ].map((idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => void send(idea)}
+                      data-testid="planner-idea-chip"
+                      className="rounded-full border border-[hsl(var(--border-soft))] px-3.5 py-2 text-xs text-[hsl(var(--fg))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))]"
+                    >
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {turns.map((t, i) => (
               <div key={i} className={t.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                 <div
@@ -281,7 +306,7 @@ export default function PlannerPage() {
                     <ul className="mt-2 space-y-2 border-t border-[hsl(var(--border-soft))] pt-2 text-xs" data-testid="planner-questions">
                       {t.questions.map((item, qi) => (
                         <li key={qi}>
-                          <p className="mb-1">❓ {item.q}</p>
+                          <p className="mb-1 flex items-center gap-1.5"><CircleHelp className="h-4 w-4 shrink-0" aria-hidden />{item.q}</p>
                           {item.options.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                               {item.options.map((opt) => (
@@ -339,7 +364,7 @@ export default function PlannerPage() {
             {p && (
               <div className="rounded-2xl border-2 border-[hsl(var(--accent))]/50 bg-[hsl(var(--surface))] p-4" data-testid="proposal-card">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-base font-semibold">📋 策划案：{p.title}</p>
+                  <p className="flex items-center gap-1.5 text-base font-semibold"><ClipboardList className="h-4 w-4 shrink-0" aria-hidden />策划案：{p.title}</p>
                   <button
                     type="button"
                     disabled={busy}
@@ -351,7 +376,8 @@ export default function PlannerPage() {
                     title="同要求换一版策划案"
                     className="rounded-lg border border-[hsl(var(--border-soft))] px-2.5 py-1 text-xs hover:border-[hsl(var(--accent))] disabled:opacity-40"
                   >
-                    🎲 换一版
+                    <Dices className="h-4 w-4" aria-hidden />
+                    换一版
                   </button>
                 </div>
                 <dl className="space-y-2 text-sm">
@@ -405,7 +431,7 @@ export default function PlannerPage() {
                   data-testid="proposal-import"
                   className="mt-4 min-h-[40px] w-full rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
                 >
-                  {importing ? '导入中…（建卡/世界书/作品）' : '✅ 没问题，一键开书（导入人物/世界观/大纲）'}
+                  {importing ? '导入中…（建卡/世界书/作品）' : '没问题，一键开书（导入人物/世界观/大纲）'}
                 </button>
               </div>
             )}

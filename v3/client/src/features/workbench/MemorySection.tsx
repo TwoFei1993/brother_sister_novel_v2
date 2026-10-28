@@ -5,6 +5,7 @@
  * 独立 PATCH（与主保存按钮解耦），乐观锁失败提示刷新。
  */
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 
 import { updateWork } from '../../api/works';
 import type { Work } from '@shared/work';
@@ -121,7 +122,16 @@ export default function MemorySection({ work, onSaved }: MemorySectionProps) {
         data-testid="memory-save"
         className="min-h-[36px] w-full rounded-lg border border-[hsl(var(--border-soft))] text-sm transition-colors hover:border-[hsl(var(--accent))] disabled:opacity-40"
       >
-        {saving ? '保存中…' : savedFlash ? '✓ 已保存' : '保存记忆'}
+        {saving ? (
+          '保存中…'
+        ) : savedFlash ? (
+          <span className="inline-flex items-center gap-1">
+            <Check className="h-4 w-4" aria-hidden />
+            已保存
+          </span>
+        ) : (
+          '保存记忆'
+        )}
       </button>
     </section>
   );

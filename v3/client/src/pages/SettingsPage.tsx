@@ -7,6 +7,7 @@
  * - 界面偏好：全局皮肤选择（ThemePanel，跟随作品题材或 6 个固定主题）
  */
 import { useState } from 'react';
+import { Smartphone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import LlmPanel from '../features/settings/LlmPanel';
@@ -43,7 +44,8 @@ export default function SettingsPage() {
           aria-label="返回移动端"
           className="ml-auto flex h-9 items-center rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))]"
         >
-          📱 移动端
+          <Smartphone className="h-4 w-4" aria-hidden />
+          移动端
         </Link>
       </header>
 

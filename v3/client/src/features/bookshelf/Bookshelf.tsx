@@ -8,6 +8,7 @@
  */
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { LibraryBig, Search, WandSparkles } from 'lucide-react';
 
 import { listWorks } from '../../api/works';
 import type { WorkSummary } from '../../api/works';
@@ -125,9 +126,10 @@ export default function Bookshelf() {
           <Link
             to="/planner"
             data-testid="wizard-entry"
-            className="flex h-10 items-center rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium transition-colors hover:border-[hsl(var(--accent))]"
+            className="flex h-10 items-center gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-4 text-sm font-medium transition-colors hover:border-[hsl(var(--accent))]"
           >
-            🪄 AI 向导
+            <WandSparkles className="h-4 w-4" aria-hidden />
+            AI 向导
           </Link>
         </div>
       </div>
@@ -151,8 +153,8 @@ export default function Bookshelf() {
 
       {!loading && !loadError && visible.length === 0 && (
         <div className="py-24 text-center">
-          <div className="mb-4 text-5xl" aria-hidden="true">
-            {query.trim() ? '🔍' : '📚'}
+          <div className="mb-4 flex justify-center text-[hsl(var(--fg-muted))]" aria-hidden="true">
+            {query.trim() ? <Search className="h-12 w-12" strokeWidth={1.5} /> : <LibraryBig className="h-12 w-12" strokeWidth={1.5} />}
           </div>
           {query.trim() ? (
             <>

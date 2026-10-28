@@ -6,6 +6,7 @@
  * - AssetsPane：作品设定摘要 + 章节大纲（高亮下一章节点）
  */
 import { useEffect, useState } from 'react';
+import { BookOpen, Brain, Dices, Map, SquarePen, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { patchMessage } from '../../../api/works';
@@ -155,10 +156,12 @@ export function TextPane({
                   data-testid="mobile-reroll-btn"
                   className="text-xs text-[hsl(var(--accent))]"
                 >
-                  🎲 重roll
+                  <Dices className="h-4 w-4" aria-hidden />
+                  重roll
                 </button>
                 <button type="button" onClick={startEdit} className="text-xs text-[hsl(var(--accent))]" data-testid="mobile-edit-btn">
-                  ✏️ 编辑
+                  <SquarePen className="h-4 w-4" aria-hidden />
+                  编辑
                 </button>
               </span>
             )}
@@ -216,7 +219,7 @@ export function TextPane({
       {pendingList.length > 0 && (
         <div className="mx-4 mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3" data-testid="pending-assets">
           <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-            🧩 本章检出 {pendingList.length} 个新素材，确认后入库并绑定到本书
+            本章检出 {pendingList.length} 个新素材，确认后入库并绑定到本书
           </p>
           <ul className="flex flex-col gap-1.5">
             {pendingList.map((d) => (
@@ -257,7 +260,8 @@ export function TextPane({
           data-testid="mobile-batch-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
-          ⚡ 一键连写
+          <Zap className="h-4 w-4" aria-hidden />
+          一键连写
         </button>
         <button
           type="button"
@@ -266,7 +270,8 @@ export function TextPane({
           data-testid="mobile-outline-run-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
-          📖 按大纲写
+          <BookOpen className="h-4 w-4" aria-hidden />
+          按大纲写
         </button>
       </div>
 
@@ -288,7 +293,7 @@ export function TextPane({
           data-testid="mobile-generate-btn"
           className="h-11 shrink-0 rounded-xl bg-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
         >
-          {directive.trim() ? '✨ 生成' : '⏩ 续写'}
+          {directive.trim() ? '生成' : '续写'}
         </button>
       </div>
     </div>
@@ -308,7 +313,7 @@ export function OutlinePane({
   if (chapters.length === 0) {
     return (
       <div className="px-4 py-10 text-center">
-        <p className="text-3xl">🗺️</p>
+        <Map className="mx-auto h-10 w-10 text-[hsl(var(--fg-muted))]" strokeWidth={1.5} aria-hidden />
         <p className="mt-3 text-sm font-medium">对话大纲</p>
         <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-[hsl(var(--fg-muted))]">
           先在「正文」分区写第一章，之后就能在这里和助手聊任何一章的修改。
@@ -389,7 +394,7 @@ function ThinkingInline({ text, done }: { text: string; done: boolean }) {
         data-testid="mobile-thinking-toggle"
         className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-[hsl(var(--fg-muted))]"
       >
-        <span aria-hidden>💭</span>
+        <Brain className="h-3.5 w-3.5" aria-hidden />
         {done ? '已深度思考（点击展开）' : '深度思考中…'}
         <span className="ml-auto">{open ? '▾' : '▸'}</span>
       </button>

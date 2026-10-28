@@ -7,6 +7,7 @@
  * - 整本上架 = 未上架章一律以其当前激活版本上架（可跳章：只列已有章节）；全部下架一键反向
  */
 import { useMemo, useState } from 'react';
+import { Check, X } from 'lucide-react';
 
 import { patchMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
@@ -83,7 +84,7 @@ export default function PublishPanel({
           className="flex h-9 min-w-9 items-center justify-center rounded-lg text-sm"
           aria-label="退出上架管理"
         >
-          ✕
+          <X className="h-5 w-5" aria-hidden />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">上架管理</h1>
         {changeCount > 0 && (
@@ -174,7 +175,7 @@ export default function PublishPanel({
                           <span className="font-medium">{v.name}</span>
                           <span className="rounded-full bg-[hsl(var(--fg-muted))]/10 px-1.5 text-[10px]">{v.origin}</span>
                           <span className="ml-auto text-[hsl(var(--fg-muted))]">{v.content.length} 字</span>
-                          {selected === v.id && <span>✓</span>}
+                          {selected === v.id && <Check className="h-4 w-4" aria-hidden />}
                         </button>
                       </li>
                     ))}

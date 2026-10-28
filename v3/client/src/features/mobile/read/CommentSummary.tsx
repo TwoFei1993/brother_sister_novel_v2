@@ -2,6 +2,7 @@
  * 评论总结视图（共识 D7）：全书评论按类型分组，标注章节 + 版本 + 原句
  * 找不到归属章节的评论（章节被删等）标「原文已变」仍展示，不丢数据。
  */
+import { X } from 'lucide-react';
 import type { Comment, CommentType } from '@shared/comment';
 
 type ChapterRef = { msg: { id: string; chapter: { index: number; title: string } }; version: { id: string; name: string } };
@@ -29,7 +30,7 @@ export default function CommentSummary({
     <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]" data-testid="comment-summary">
       <header className="safe-top flex shrink-0 items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2">
         <button type="button" onClick={onClose} className="flex h-9 min-w-9 items-center justify-center rounded-lg" aria-label="关闭总结">
-          ✕
+          <X className="h-5 w-5" aria-hidden />
         </button>
         <h1 className="flex-1 text-sm font-semibold">评论总结（{comments.length}）</h1>
       </header>

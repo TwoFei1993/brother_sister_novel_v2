@@ -9,6 +9,7 @@
  * - 生成中：▶ 变 ⏹ 停止（连写/大纲时附进度 3/50 或 按大纲 x/y）；输入与换一支禁用
  */
 import { useEffect, useState, type KeyboardEvent } from 'react';
+import { BookOpen, ChevronLeft, ChevronRight, Dices, Play, Square, Zap } from 'lucide-react';
 
 import FieldHint from '../../components/FieldHint';
 
@@ -112,7 +113,8 @@ export default function CommandBar({
             data-testid="stop-btn"
             className={`${btnBase} flex-1 bg-[hsl(var(--danger))] text-white sm:flex-none sm:px-6`}
           >
-            ⏹ 停止{batchProgress ? ` ${batchProgress}` : ''}
+            <Square className="h-4 w-4" aria-hidden />
+            停止{batchProgress ? ` ${batchProgress}` : ''}
           </button>
         ) : (
           <>
@@ -135,7 +137,8 @@ export default function CommandBar({
               title="按当前指令续写一章；指令可留空由 AI 自由发挥"
               className={`${btnBase} bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]`}
             >
-              ▶ 续写
+              <Play className="h-4 w-4" aria-hidden />
+              续写
             </button>
             <button
               type="button"
@@ -145,7 +148,8 @@ export default function CommandBar({
               title="一键连写：每次续写 3 章（写到目标章数即停），第一章用当前指令、后续 AI 自由发挥；随时可停止"
               className={`${btnBase} border border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10`}
             >
-              ⚡ 连写
+              <Zap className="h-4 w-4" aria-hidden />
+              连写
             </button>
             {canOutline && (
               <button
@@ -156,7 +160,8 @@ export default function CommandBar({
                 title="按大纲生成：可指定本次生成几章（默认 3），每章自动跟随本章要点，随时可停止"
                 className={`${btnBase} border border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10`}
               >
-                📖 按大纲生成
+                <BookOpen className="h-4 w-4" aria-hidden />
+                按大纲生成
               </button>
             )}
             {canOutline && outlinePanelOpen && !streaming && (
@@ -197,9 +202,9 @@ export default function CommandBar({
                   title="上一支"
                   disabled={disabled}
                   onClick={() => onToggleSwipe(-1)}
-                  className="h-full rounded-l-lg px-2.5 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] disabled:opacity-40"
+                  className="flex h-full items-center rounded-l-lg px-2.5 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] disabled:opacity-40"
                 >
-                  ◀
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
                 </button>
                 <span data-testid="swipe-position" className="min-w-10 text-center text-xs text-[hsl(var(--fg-muted))]">
                   {swipePosition ?? ''}
@@ -209,9 +214,9 @@ export default function CommandBar({
                   title="下一支"
                   disabled={disabled}
                   onClick={() => onToggleSwipe(1)}
-                  className="h-full rounded-r-lg px-2.5 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] disabled:opacity-40"
+                  className="flex h-full items-center rounded-r-lg px-2.5 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))] disabled:opacity-40"
                 >
-                  ▶
+                  <ChevronRight className="h-4 w-4" aria-hidden />
                 </button>
               </div>
             ) : (
@@ -224,7 +229,8 @@ export default function CommandBar({
                   data-testid="swipe-btn"
                   className={`${btnBase} border border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]`}
                 >
-                  🎲 换一支
+                  <Dices className="h-4 w-4" aria-hidden />
+                  换一支
                 </button>
                 <FieldHint
                   tapToExpand

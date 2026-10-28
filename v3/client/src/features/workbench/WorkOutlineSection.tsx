@@ -8,6 +8,7 @@
  * - 导入：粘贴/Word 导入 → 解析 ≥3 章 → 整体覆盖保存（与手动编辑互补，原路径保留）
  */
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 
 import { updateWork } from '../../api/works';
 import { parseChapterOutlines, toChapterOutlineItems } from '../../lib/outline/chapters';
@@ -143,7 +144,7 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
                   title="删除本章大纲"
                   className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg border border-red-400/40 px-1 text-sm text-red-400 hover:bg-red-400/10"
                 >
-                  🗑
+                  <Trash2 className="h-4 w-4" aria-hidden />
                 </button>
               </div>
               <textarea

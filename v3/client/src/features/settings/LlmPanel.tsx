@@ -3,6 +3,7 @@
  * 存 settingsStore.llmPrefs（zustand persist 到 localStorage，非敏感项）；
  * 更改即时生效，生成时由 useGenerate 读入 assemble 上下文（Task 19）。
  */
+import { Brain } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 
 import FieldHint from '../../components/FieldHint';
@@ -99,9 +100,12 @@ export default function LlmPanel() {
             className="h-4 w-4 accent-[hsl(var(--accent))]"
           />
           <span className="flex flex-col">
-            <span className="text-sm font-medium">💭 思考模式（Claude 通道）</span>
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <Brain className="h-4 w-4" aria-hidden />
+              思考模式（Claude 通道）
+            </span>
             <span className="text-xs text-[hsl(var(--fg-muted))]">
-              开启后 MiniMax-M3 等思考模型先思考再写作，章节头的💭折叠可见思考过程；会多消耗部分 tokens。
+              开启后 MiniMax-M3 等思考模型先思考再写作，章节头的「思考」折叠块可见思考过程；会多消耗部分 tokens。
             </span>
           </span>
         </label>

@@ -7,6 +7,7 @@
  * - LLM：走当前通道非流式；llmPrefs 提供模型/温度
  */
 import { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 
 import { apiFetch } from '../../api/client';
 import { generateTextOnce } from '../../api/llm';
@@ -140,7 +141,7 @@ export default function SelectionTools({ getTarget, onApplied }: SelectionToolsP
                 aria-label="关闭"
                 className="rounded px-2 text-sm text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]"
               >
-                ✕
+                <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
             <textarea

@@ -6,6 +6,7 @@
  * - 会话态内存级（MVP 不持久化聊天历史；生成的新版本落库为章节版本资产）
  */
 import { useMemo, useRef, useState } from 'react';
+import { Check, Target } from 'lucide-react';
 
 import { apiFetch } from '../../../api/client';
 import type { GenerateMessage } from '../../../api/llm';
@@ -164,7 +165,7 @@ export default function OutlineIterChat({
       <div className="shrink-0 px-4 pt-3">
         {locked ? (
           <p className="rounded-lg bg-[hsl(var(--accent))]/10 px-3 py-1.5 text-xs text-[hsl(var(--accent))]" data-testid="iter-locked">
-            🎯 目标章：第{locked.msg.chapter!.index}章 {locked.msg.chapter!.title || '未命名'}（点此更换）
+            <Target className="inline h-3.5 w-3.5 align-[-2px]" aria-hidden /> 目标章：第{locked.msg.chapter!.index}章 {locked.msg.chapter!.title || '未命名'}（点此更换）
             <button type="button" onClick={() => setLockedIndex(null)} className="ml-2 underline">
               取消
             </button>
@@ -220,7 +221,7 @@ export default function OutlineIterChat({
           data-testid="iter-confirm-btn"
           className="mx-4 mb-2 h-10 shrink-0 rounded-xl bg-amber-500/90 text-sm font-medium text-white"
         >
-          ✅ 确认生成新版本（= 发送「{ITER_KEYWORD.slice(0, 12)}…」）
+          确认生成新版本（= 发送「{ITER_KEYWORD.slice(0, 12)}…」）
         </button>
       )}
       <div className="safe-bottom flex shrink-0 gap-2 border-t border-[hsl(var(--border-soft))] px-4 py-2">

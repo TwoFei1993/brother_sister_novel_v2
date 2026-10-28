@@ -5,16 +5,17 @@
  * - 节日彩蛋横幅（Task 32）挂在最顶部，关闭后当日不再出现
  */
 import { NavLink } from 'react-router-dom';
+import { Library, LogOut, ScrollText, Settings } from 'lucide-react';
 
 import Bookshelf from '../features/bookshelf/Bookshelf';
 import HolidayBanner from '../features/misc/HolidayBanner';
 import { useLogout } from '../hooks/useLogout';
 
-/** 顶栏导航项（当前页高亮；触控目标 h-10） */
-const NAV_ITEMS: ReadonlyArray<{ to: string; label: string }> = [
-  { to: '/library', label: '🗂 资产库' },
-  { to: '/wizard', label: '📝 大纲向导' },
-  { to: '/settings', label: '⚙ 设置' },
+/** 顶栏导航项（当前页高亮；触控目标 h-10）；图标走 lucide 线性 SVG，跨平台渲染一致 */
+const NAV_ITEMS: ReadonlyArray<{ to: string; label: string; icon: typeof Library }> = [
+  { to: '/library', label: '资产库', icon: Library },
+  { to: '/wizard', label: '大纲向导', icon: ScrollText },
+  { to: '/settings', label: '设置', icon: Settings },
 ];
 
 export default function RootPage() {
@@ -34,8 +35,9 @@ export default function RootPage() {
             <NavLink
               key={item.to}
               to={item.to}
-              className="flex h-10 items-center rounded-lg px-2.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] sm:text-sm"
+              className="flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] sm:text-sm"
             >
+              <item.icon className="h-4 w-4" aria-hidden />
               {item.label}
             </NavLink>
           ))}
@@ -46,9 +48,10 @@ export default function RootPage() {
             onClick={() => void logout()}
             title="退出登录"
             aria-label="退出登录"
-            className="flex h-10 items-center rounded-lg px-2.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] sm:text-sm"
+            className="flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--fg))] sm:text-sm"
           >
-            ⏻ 退出
+            <LogOut className="h-4 w-4" aria-hidden />
+            退出
           </button>
         </div>
       </nav>

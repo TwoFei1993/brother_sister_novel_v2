@@ -5,6 +5,7 @@
  * 移动端逐步补齐入口）。
  */
 import { Link } from 'react-router-dom';
+import { Brain } from 'lucide-react';
 
 import { useLogout } from '../../../hooks/useLogout';
 import { displayNameOf, useAuthStore } from '../../../stores/auth';
@@ -45,7 +46,10 @@ export default function MePage() {
       <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4" data-testid="thinking-toggle-card">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold">💭 深度思考模式</h2>
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Brain className="h-4 w-4" aria-hidden />
+              深度思考模式
+            </h2>
             <p className="mt-0.5 text-xs leading-5 text-[hsl(var(--fg-muted))]">
               开：模型先推理再写作，质量高但每章约 2-4 分钟且多耗 token
               <br />

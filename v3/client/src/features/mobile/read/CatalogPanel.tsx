@@ -2,6 +2,8 @@
  * 阅读目录面板（番茄式）：全部上架章节列表，点击直接跳章读取。
  * 从 Reader 传入已上架章节（含上架版本），当前章高亮。
  */
+import { X } from 'lucide-react';
+
 export interface CatalogChapter {
   msgId: string;
   index: number;
@@ -23,7 +25,7 @@ export default function CatalogPanel({
     <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]" data-testid="catalog-panel">
       <header className="safe-top flex shrink-0 items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2">
         <button type="button" onClick={onClose} aria-label="关闭目录" className="flex h-9 min-w-9 items-center justify-center rounded-lg">
-          ✕
+          <X className="h-5 w-5" aria-hidden />
         </button>
         <h1 className="m-serif flex-1 text-sm font-semibold">目录 · {chapters.length} 章</h1>
       </header>

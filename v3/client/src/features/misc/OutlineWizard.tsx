@@ -7,6 +7,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { WandSparkles } from 'lucide-react';
 
 import {
   buildCharacterSheetPrompt,
@@ -174,6 +175,24 @@ export default function OutlineWizard() {
         <span className="text-xs text-[hsl(var(--fg-muted))]">粘贴大纲，一键生成角色卡与世界书草稿</span>
       </header>
 
+      {/* 三步流程条（走查条目⑧：表单页空旷且缺使用引导） */}
+      <ol className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2 text-xs text-[hsl(var(--fg-muted))]">
+        <li className="flex items-center gap-1.5">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[hsl(var(--accent))]/15 text-[11px] font-medium text-[hsl(var(--accent))]">1</span>
+          粘贴已有大纲
+        </li>
+        <li aria-hidden>→</li>
+        <li className="flex items-center gap-1.5">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[hsl(var(--accent))]/15 text-[11px] font-medium text-[hsl(var(--accent))]">2</span>
+          智能抽取人物与设定
+        </li>
+        <li aria-hidden>→</li>
+        <li className="flex items-center gap-1.5">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[hsl(var(--accent))]/15 text-[11px] font-medium text-[hsl(var(--accent))]">3</span>
+          导入资产，一键开书
+        </li>
+      </ol>
+
       {toast && (
         <div
           role="status"
@@ -219,6 +238,21 @@ export default function OutlineWizard() {
         worldbookIds={assets.worldbookIds}
         onCreated={writeCreatedWorkId}
       />
+
+      {/* 无内容时的路径引导：还没有大纲 → 去 AI 创作向导（对话式从零生成） */}
+      {!outline.trim() && !sheet && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-[hsl(var(--border-soft))] px-3 py-3 text-sm text-[hsl(var(--fg-muted))]">
+          <span>还没有现成的大纲？试试对话式的 AI 创作向导，从一句想法开始生成完整策划案。</span>
+          <Link
+            to="/planner"
+            data-testid="wizard-to-planner"
+            className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-3 text-sm text-[hsl(var(--fg))] transition-colors hover:border-[hsl(var(--accent))]"
+          >
+            <WandSparkles className="h-4 w-4" aria-hidden />
+            去向导对话生成
+          </Link>
+        </div>
+      )}
 
       {!sheet && ruleResult !== null && (
         <div className="mb-3 flex flex-col gap-2">

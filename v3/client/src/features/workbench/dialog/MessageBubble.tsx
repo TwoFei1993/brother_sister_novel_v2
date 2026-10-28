@@ -11,6 +11,7 @@
  * markdown 正文渲染（BubbleMarkdown）拆至同目录独立文件（review 规范修复）。
  */
 import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { Message } from '@shared/message';
 import type { TavernRegexScript } from '@shared/tavern';
 
@@ -176,7 +177,7 @@ function ChapterBubble({
             onClick={() => setConfirmingDelete(true)}
             className="flex h-9 min-w-9 items-center justify-center rounded px-1.5 text-xs text-[hsl(var(--fg-muted))] transition-colors hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--danger))] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            🗑
+            <Trash2 className="h-4 w-4" aria-hidden />
           </button>
         )}
         {confirmingDelete && (

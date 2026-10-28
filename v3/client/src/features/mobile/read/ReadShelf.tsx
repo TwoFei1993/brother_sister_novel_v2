@@ -6,6 +6,7 @@
  * - 「整理」模式：条目上移/下移 + 打标签（PATCH work.shelfTag）
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
@@ -140,7 +141,7 @@ export default function ReadShelf() {
                     </button>
                     {isAuthor && (
                       <button type="button" onClick={() => void setTag(w)} aria-label="改标签" className="h-7 w-7 rounded border border-[hsl(var(--border-soft))] text-xs">
-                        🏷
+                        <Tag className="h-3.5 w-3.5" aria-hidden />
                       </button>
                     )}
                   </span>

@@ -9,6 +9,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { BookOpen, List, MessageSquare, Settings, Wrench } from 'lucide-react';
 
 import { updateWork } from '../api/works';
 import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDrawer';
@@ -21,11 +22,11 @@ import { useWorkStore } from '../stores/work';
 import type { Message } from '@shared/message';
 import type { ViewPreference } from '@shared/work';
 
-/** 切换器 tab 定义（设计 §7.1：对话流 / 沉浸阅读 / 工作台；chat 模式不渲染） */
-const VIEW_TABS: ReadonlyArray<{ id: ViewPreference; label: string; title: string }> = [
-  { id: 'a', label: '💬', title: '对话流' },
-  { id: 'b', label: '📖', title: '沉浸阅读' },
-  { id: 'c', label: '🛠️', title: '工作台' },
+/** 切换器 tab 定义（设计 §7.1：对话流 / 沉浸阅读 / 工作台；chat 模式不渲染）；图标 lucide 线性 SVG */
+const VIEW_TABS: ReadonlyArray<{ id: ViewPreference; icon: typeof MessageSquare; title: string }> = [
+  { id: 'a', icon: MessageSquare, title: '对话流' },
+  { id: 'b', icon: BookOpen, title: '沉浸阅读' },
+  { id: 'c', icon: Wrench, title: '工作台' },
 ];
 
 /** 视图切换器（A/B/C 三 tab，顶栏；当前值持久化在 work.viewPreference） */
@@ -51,6 +52,7 @@ function ViewSwitcher({
           type="button"
           role="tab"
           aria-selected={value === t.id}
+          aria-label={t.title}
           title={t.title}
           disabled={disabled}
           data-testid={`view-tab-${t.id}`}
@@ -61,7 +63,7 @@ function ViewSwitcher({
               : 'text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]'
           }`}
         >
-          {t.label}
+          <t.icon className="h-4 w-4" aria-hidden />
         </button>
       ))}
     </div>
@@ -146,8 +148,8 @@ export default function WorkPage() {
             title="章节目录"
             aria-label="章节目录"
           >
-            {/* 审计 M2：与视图 tab 📖 同屏重复致语义混淆，目录改列表符 */}
-            ☰
+            {/* 审计 M2：与视图 tab（沉浸阅读）同屏重复致语义混淆，目录用列表符 */}
+            <List className="h-4 w-4" aria-hidden />
           </button>
         )}
         <button
@@ -157,7 +159,7 @@ export default function WorkPage() {
           title="作品设置"
           aria-label="作品设置"
         >
-          ⚙
+          <Settings className="h-4 w-4" aria-hidden />
         </button>
         {/* 退出（D5）：POST logout 清服务端 cookie + 本地会话态，跳 /login */}
         <button

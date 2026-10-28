@@ -8,15 +8,17 @@
  */
 import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { BookMarked, Feather, MessageCircle, UserRound } from 'lucide-react';
 
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 
+/** 图标走 lucide 线性 SVG：随主题变色（emoji 无法跟随墨玉/宣纸换肤），跨平台渲染一致 */
 const ALL_TABS = [
-  { to: '/m/create', label: '创作', icon: '✍️', authorOnly: true },
-  { to: '/m/read', label: '阅读', icon: '📚', authorOnly: false },
-  { to: '/m/community', label: '沟通', icon: '💬', authorOnly: false },
-  { to: '/m/me', label: '我的', icon: '👤', authorOnly: false },
+  { to: '/m/create', label: '创作', icon: Feather, authorOnly: true },
+  { to: '/m/read', label: '阅读', icon: BookMarked, authorOnly: false },
+  { to: '/m/community', label: '沟通', icon: MessageCircle, authorOnly: false },
+  { to: '/m/me', label: '我的', icon: UserRound, authorOnly: false },
 ] as const;
 
 /** 全屏子页（无底部 tab）：创作中与阅读页 */
@@ -65,9 +67,7 @@ export default function MobileShell() {
                 }`
               }
             >
-              <span className="text-base leading-none" aria-hidden>
-                {t.icon}
-              </span>
+              <t.icon className="h-5 w-5 leading-none" aria-hidden />
               {t.label}
             </NavLink>
           ))}
