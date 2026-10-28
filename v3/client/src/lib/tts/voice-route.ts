@@ -30,6 +30,80 @@ export const VOICES: readonly VoiceOption[] = [
 /** 旁白默认声 id */
 export const DEFAULT_VOICE_ID = 'xiaoxiao';
 
+// ---------- MiniMax 音色目录 + 自动分声（安卓 app，speech-2.8-hd） ----------
+
+/** TTS 引擎标记：easyvoice（Edge 音色）/ minimax（speech-2.8，走 /api/tts/minimax 服务端转发） */
+export type VoiceEngine = 'easyvoice' | 'minimax';
+
+const MM_PREFIX = 'mm:';
+
+export interface MiniMaxVoiceOption {
+  /** 存 voiceMap/speakers 用的 id（带 mm: 前缀） */
+  id: string;
+  name: string;
+  /** MiniMax voice_setting.voice_id */
+  voice: string;
+  gender: 'female' | 'male';
+  /** 适配方向：哥哥/妹妹/旁白候选 */
+  fit: string;
+}
+
+/** MiniMax 候选音色（试听样本通过的 8 个；霸道青年 ID 无效已剔除） */
+export const MINIMAX_VOICES: readonly MiniMaxVoiceOption[] = [
+  { id: 'mm:male-qn-qingse', name: '青涩青年', voice: 'male-qn-qingse', gender: 'male', fit: '哥哥' },
+  { id: 'mm:male-qn-jingying', name: '精英青年', voice: 'male-qn-jingying', gender: 'male', fit: '哥哥' },
+  { id: 'mm:male-qn-daxuesheng', name: '大学生', voice: 'male-qn-daxuesheng', gender: 'male', fit: '哥哥' },
+  { id: 'mm:female-shaonv', name: '少女婉婉', voice: 'female-shaonv', gender: 'female', fit: '妹妹' },
+  { id: 'mm:female-yujie', name: '御姐', voice: 'female-yujie', gender: 'female', fit: '女性角色' },
+  { id: 'mm:female-chengshu', name: '成熟', voice: 'female-chengshu', gender: 'female', fit: '女性角色' },
+  { id: 'mm:presenter-female', name: '主持人女', voice: 'presenter_female', gender: 'female', fit: '旁白' },
+  { id: 'mm:presenter-male', name: '主持人男', voice: 'presenter_male', gender: 'male', fit: '旁白' },
+];
+
+/** 声音 id 是否为 MiniMax 音色 */
+export function isMinimaxVoice(id: string): boolean {
+  return id.startsWith(MM_PREFIX);
+}
+
+/** 声音 id → MiniMax voice_id（非 MiniMax 音色返回 null） */
+export function minimaxVoiceOf(id: string): string | null {
+  if (!isMinimaxVoice(id)) return null;
+  return id.slice(MM_PREFIX.length);
+}
+
+const FEMALE_HINTS = ['妹', '姐', '娘', '女', '婉', '月', '雪', '莹', '霞', '妃', '后', '嫔', '嬷', '嫂', '姨', '姬', '妲', '鸾'];
+const MALE_HINTS = ['哥', '兄', '爷', '王', '帝', '君', '叔', '爸', '爹', '公', '侯', '帅', '郎', '殿下'];
+
+/** 按名字性别线索猜池（先男表后女表；都未命中默认女池——人名用字女性偏多） */
+function guessPool(name: string): 'male' | 'female' {
+  for (const h of MALE_HINTS) if (name.includes(h)) return 'male';
+  for (const h of FEMALE_HINTS) if (name.includes(h)) return 'female';
+  return 'female';
+}
+
+/**
+ * 自动分声（联测需求）：按出场角色名自动分配 MiniMax 音色——
+ * 名字性别线索决定池（男池/女池），池内按出现顺序轮替（同池不重声）；
+ * 旁白固定主持人声。返回可直接存 voiceMap 的绑定表。
+ */
+export function autoCastVoices(names: readonly string[]): Array<{ name: string; voice: string }> {
+  const male = MINIMAX_VOICES.filter((v) => v.gender === 'male');
+  const female = MINIMAX_VOICES.filter((v) => v.gender === 'female');
+  const maleCount = { n: 0 };
+  const femaleCount = { n: 0 };
+  return names.map((name) => {
+    const isMale = guessPool(name) === 'male';
+    const pool = isMale ? male : female;
+    const voice = pool[Math.min(isMale ? maleCount.n : femaleCount.n, pool.length - 1)] ?? pool[0];
+    if (isMale) maleCount.n += 1;
+    else femaleCount.n += 1;
+    return { name, voice: MM_PREFIX + voice.voice };
+  });
+}
+
+/** 旁白声（自动分声场景固定主持人女） */
+export const AUTOCAST_NARRATOR_VOICE = 'mm:presenter-female';
+
 /** 运行时说话人绑定（如 chat 模式激活成员）；voice 为 VOICES 的 id */
 export interface SpeakerBinding {
   name: string;

@@ -20,6 +20,7 @@ import { httpLogger, logger } from './middleware/logger';
 import { requireAuthor } from './middleware/auth';
 import { HttpError, formatZodError } from './middleware/validate';
 import { communityRouter } from './routes/community';
+import { ttsRouter } from './routes/tts';
 import { coreRouter } from './routes/core';
 import { dataDir } from './routes/core/paths';
 import { extractRouter } from './routes/extract';
@@ -127,6 +128,7 @@ export function createApp(): Express {
   app.use('/api', llmRouter);     // llm/ 生成代理（SSE）+ 探活 + tokenize（Task 17，作者专属）
   app.use('/api/extract', extractRouter); // extract/ Word 文档文本提取（向导导入，作者专属）
   app.use('/api/community', communityRouter); // P3.2 留言板（登录即可读写，回复作者专属）
+  app.use('/api/tts', ttsRouter); // 听书合成（登录即可用；读者听书不拦）
   // ---- 后续任务预留挂载位 ----
 
   // SPA 历史回退：非 API/静态资源且无扩展名的 GET → index.html（react-router 深链接/刷新；

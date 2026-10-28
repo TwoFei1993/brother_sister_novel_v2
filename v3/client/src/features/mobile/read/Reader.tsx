@@ -46,6 +46,10 @@ export default function Reader() {
   const [loadError, setLoadError] = useState(false);
   const [pending, setPending] = useState<{ paraIndex: number; quote: string; raw: string } | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  // —— 听书（TTS）：当前播放段下标；-1=未在播放 ——
+  const [ttsIdx, setTtsIdx] = useState(-1);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsStopRef = useRef(false);
   // —— 番茄式交互状态 ——
   const [menuOpen, setMenuOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -155,6 +159,49 @@ export default function Reader() {
     }
   }
 
+  /** 🔊 听本章：逐段调 /api/tts/minimax 合成并顺序播放；停止即中止队列 */
+  async function playChapterFrom(paraIdx: number): Promise<void> {
+    if (!chapter || !id) return;
+    ttsStopRef.current = false;
+    for (let i = paraIdx; i < chapter.paras.length; i += 1) {
+      if (ttsStopRef.current) return;
+      setTtsIdx(i);
+      try {
+        const res = await fetch('/api/tts/minimax', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: chapter.paras[i], voiceId: 'female-shaonv' }),
+        });
+        if (!res.ok) throw new Error(`TTS ${res.status}`);
+        const blob = await res.blob();
+        if (ttsStopRef.current) return;
+        await new Promise<void>((resolve, reject) => {
+          const audio = new Audio(URL.createObjectURL(blob));
+          ttsAudioRef.current = audio;
+          audio.onended = () => resolve();
+          audio.onerror = () => reject(new Error('播放失败'));
+          void audio.play();
+        });
+      } catch (err) {
+        if (ttsStopRef.current) return;
+        setTtsIdx(-1);
+        alert(`听书失败：${err instanceof Error ? err.message : '未知错误'}`);
+        return;
+      }
+    }
+    setTtsIdx(-1);
+  }
+
+  function toggleTts(): void {
+    if (ttsIdx >= 0) {
+      ttsStopRef.current = true;
+      ttsAudioRef.current?.pause();
+      setTtsIdx(-1);
+      return;
+    }
+    void playChapterFrom(0);
+  }
+
   if (loadError) return <p className="py-24 text-center text-sm text-[hsl(var(--fg-muted))]">作品加载失败</p>;
   if (!work) return <p className="py-24 text-center text-sm text-[hsl(var(--fg-muted))]">加载中…</p>;
   if (chapters.length === 0)
@@ -170,7 +217,7 @@ export default function Reader() {
       {/* 顶栏（菜单开启时显示；沉浸阅读时隐藏） */}
       <header
         className={`safe-top sticky top-0 z-10 flex items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2 transition-opacity ${
-          menuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          menuOpen || ttsIdx >= 0 ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         data-testid="reader-topbar"
       >
@@ -195,6 +242,14 @@ export default function Reader() {
         >
           <FileText className="h-4 w-4" aria-hidden />
           总结{comments.length > 0 && ` (${comments.length})`}
+        </button>
+        <button
+          type="button"
+          onClick={() => void toggleTts()}
+          data-testid="tts-toggle-btn"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-2.5 text-xs"
+        >
+          {ttsIdx >= 0 ? '⏹ 停止' : '🔊 听本章'}
         </button>
       </header>
 
@@ -247,6 +302,13 @@ export default function Reader() {
           data-testid="reader-hint"
         >
           点击屏幕中间呼出菜单 · 左右两侧翻章 · 选中文字可划线评论
+        </div>
+      )}
+
+      {/* 听书进行中提示 */}
+      {ttsIdx >= 0 && (
+        <div className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs text-white" data-testid="tts-playing-tip">
+          🔊 正在朗读第 {ttsIdx + 1}/{chapter?.paras.length ?? 0} 段
         </div>
       )}
 
