@@ -29,7 +29,8 @@ jobs:
           cp -r node_modules deploy/
           cp package.json deploy/
           cp -r src deploy/
-          cp -r ../packages/shared deploy/
+          # cwd 已是 packages/backend，shared 的正确相对路径是 ../shared
+          cp -r ../shared deploy/
           ls -la deploy/
 
       - name: Upload package
