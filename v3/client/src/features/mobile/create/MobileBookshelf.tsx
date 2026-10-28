@@ -131,6 +131,11 @@ export default function MobileBookshelf() {
                 {w.stats?.chapterCount ?? 0} 章 · {w.stats?.charCount ?? 0} 字
                 {w.mode === 'chat' && ' · 对话'}
               </p>
+              {(w.stats?.publishedChapterCount ?? 0) > 0 && (
+                <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                  已上架 {w.stats?.publishedChapterCount} 章 · 点开可继续写/重roll
+                </p>
+              )}
             </div>
             <span className="m-serif text-xs text-[hsl(var(--fg-muted))]">›</span>
           </Link>

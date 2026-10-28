@@ -70,6 +70,13 @@ export default function VersionsPane({
     <div className="pb-4">
       <ChapterChips chapters={messages.filter((m): m is ChapterMsg => m.chapter !== undefined)} currentId={current?.id} onPick={onPick} />
 
+      {gen.streaming && (
+        <p className="flex items-center justify-center gap-1.5 py-3 text-xs text-[hsl(var(--accent))]" data-testid="versions-rerolling">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+          重roll生成中（完成后自动追加并切到新版本）…
+        </p>
+      )}
+
       {current && (
         <>
           <div className="mx-4 mb-2 flex gap-2">

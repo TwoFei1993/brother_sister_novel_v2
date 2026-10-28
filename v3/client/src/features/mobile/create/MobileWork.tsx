@@ -133,7 +133,7 @@ export default function MobileWork() {
             )}
             {pane === 'assets' && (
               <>
-                <AssetsPane work={work} nextIndex={chapters.length + 1} />
+                <AssetsPane work={work} nextIndex={chapters.length + 1} onUpdated={setWork} />
                 <BindingsPane work={work} onUpdated={setWork} />
                 <div className="px-4">
                   <VoiceCastPane work={work} onUpdated={setWork} />

@@ -1,7 +1,8 @@
 /**
  * 移动端音色选择器（创作+阅读共用）：
- * 按引擎分组展示全部候选音色（Edge 免费 18 声 + MiniMax 高清 8 声），点选即切换。
+ * 按分组展示全部候选音色——免费 Edge 18 声 + MiniMax 全量 60 声（角色/旁白播音/粤语），点选即切换。
  */
+import type { CastGroup } from '../../lib/tts/mobile-cast';
 import { ALL_VOICES } from '../../lib/tts/mobile-cast';
 
 interface Props {
@@ -10,21 +11,23 @@ interface Props {
   label?: string;
 }
 
-/** 引擎分组（顺序即展示顺序） */
-const GROUPS: ReadonlyArray<{ engine: 'easyvoice' | 'minimax'; label: string }> = [
-  { engine: 'easyvoice', label: '免费 · Edge' },
-  { engine: 'minimax', label: '高清 · MiniMax' },
+/** 分组（顺序即展示顺序） */
+const GROUPS: ReadonlyArray<{ group: CastGroup; label: string }> = [
+  { group: 'edge', label: '免费 · Edge' },
+  { group: 'cast', label: 'MiniMax · 角色' },
+  { group: 'narrator', label: 'MiniMax · 旁白播音' },
+  { group: 'cantonese', label: 'MiniMax · 粤语' },
 ];
 
 export default function VoicePicker({ current, onChange, label = '朗读音色' }: Props) {
   return (
     <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-3" data-testid="voice-picker">
       <p className="mb-2 text-xs font-medium text-[hsl(var(--fg-muted))]">{label}</p>
-      {GROUPS.map(({ engine, label: groupLabel }) => (
-        <div key={engine} className="mb-2 last:mb-0">
+      {GROUPS.map(({ group, label: groupLabel }) => (
+        <div key={group} className="mb-2 last:mb-0">
           <p className="mb-1.5 text-[10px] text-[hsl(var(--fg-muted))]">{groupLabel}</p>
           <div className="flex flex-wrap gap-1.5">
-            {ALL_VOICES.filter((v) => v.engine === engine).map((v) => (
+            {ALL_VOICES.filter((v) => v.group === group).map((v) => (
               <button
                 key={v.id}
                 type="button"

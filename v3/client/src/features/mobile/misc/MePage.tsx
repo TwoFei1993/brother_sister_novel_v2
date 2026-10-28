@@ -100,11 +100,21 @@ export default function MePage() {
 
       {!isReader && (
         <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-          <h2 className="mb-2 text-sm font-semibold">更多设置</h2>
-          <Link to="/settings" className="flex items-center justify-between text-sm">
-            完整设置（模型参数 / TTS / 预设）
-            <span className="text-xs text-[hsl(var(--fg-muted))]">›</span>
-          </Link>
+          <h2 className="mb-2 text-sm font-semibold">创作工具</h2>
+          <div className="flex flex-col divide-y divide-[hsl(var(--border-soft))]">
+            <Link to="/library" data-testid="me-library-link" className="flex items-center justify-between py-2.5 text-sm">
+              资料库（角色卡 / 世界书 / 预设 / 正则）
+              <span className="text-xs text-[hsl(var(--fg-muted))]">›</span>
+            </Link>
+            <Link to="/planner" data-testid="me-planner-link" className="flex items-center justify-between py-2.5 text-sm">
+              AI 创作助手（对话大纲策划向导）
+              <span className="text-xs text-[hsl(var(--fg-muted))]">›</span>
+            </Link>
+            <Link to="/settings" className="flex items-center justify-between py-2.5 text-sm">
+              完整设置（模型参数 / TTS / 预设）
+              <span className="text-xs text-[hsl(var(--fg-muted))]">›</span>
+            </Link>
+          </div>
         </section>
       )}
 

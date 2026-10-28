@@ -78,6 +78,22 @@ function playUrl(audioRef: { current: HTMLAudioElement | null }, url: string): P
   });
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
+
+/** 单段合成重试（0/1s/3s 退避）；全部失败返回 null 由调用方跳段 */
+async function synthWithRetry(text: string, castId: string, alive: () => boolean): Promise<string | null> {
+  for (const delay of [0, 1000, 3000]) {
+    if (delay) await sleep(delay);
+    if (!alive()) return null;
+    try {
+      return await synthParaUrl(text, castId);
+    } catch {
+      /* 退避后重试 */
+    }
+  }
+  return null;
+}
+
 export function useMobileTts(
   paras: readonly string[],
   voiceMap?: Record<string, string>,
@@ -115,24 +131,36 @@ export function useMobileTts(
 
   const playFrom = useCallback(async (start: number): Promise<void> => {
     const token = (tokenRef.current += 1);
+    const alive = (): boolean => tokenRef.current === token;
     audioRef.current?.pause();
     const routed: readonly MobileRoutedPara[] = routeMobileParas(parasRef.current, castRef.current ?? {});
+    let consecutiveFailures = 0;
     for (let i = Math.max(0, start); i < routed.length; i += 1) {
-      if (tokenRef.current !== token) return;
+      if (!alive()) return;
       setTts({ playingIdx: i, playing: true });
+      const url = await synthWithRetry(routed[i]!.text, routed[i]!.voice, alive);
+      if (!alive()) return;
+      if (!url) {
+        // 上游偶发失败：跳过该段继续听；连续 3 段失败才停（多半是断网/配额问题）
+        consecutiveFailures += 1;
+        onErrorRef.current?.(`第 ${i + 1} 段合成失败，已跳过`);
+        if (consecutiveFailures >= 3) {
+          setTts({ playingIdx: -1, playing: false });
+          onErrorRef.current?.('连续多段合成失败，已停止听书（请稍后重试）');
+          return;
+        }
+        continue;
+      }
+      consecutiveFailures = 0;
       try {
-        const url = await synthParaUrl(routed[i]!.text, routed[i]!.voice);
-        if (tokenRef.current !== token) return;
         await playUrl(audioRef, url);
-        if (tokenRef.current !== token) return;
-      } catch (err) {
-        if (tokenRef.current !== token) return;
-        setTts({ playingIdx: -1, playing: false });
-        onErrorRef.current?.(err instanceof Error ? err.message : '未知错误');
-        return;
+        if (!alive()) return;
+      } catch {
+        if (!alive()) return;
+        onErrorRef.current?.(`第 ${i + 1} 段播放失败，已跳过`);
       }
     }
-    if (tokenRef.current === token) setTts({ playingIdx: -1, playing: false });
+    if (alive()) setTts({ playingIdx: -1, playing: false });
   }, []);
 
   return { ...tts, stop, playFrom };

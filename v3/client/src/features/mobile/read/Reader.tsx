@@ -1,12 +1,11 @@
 /**
  * 移动阅读器（/m/read/:id）——番茄式阅读交互（上线前阅读体验重做）
  *
- * - 点击段落：从该段开始听书（播放中点其他段=跳段）；点标题/页边=原分区交互
- *   （左 1/3=上一章，中=呼出/隐藏菜单，右 1/3=下一章；有选区时优先划线，不触发）
- * - 菜单：底部面板 = 上一章 | 章节粒度进度滑块 | 下一章 + 目录入口；顶栏随菜单/听书显隐
+ * - 点正文任意位置（含段落间空白）：从最近段落开始听书（播放中点别处=跳段）；选区优先划线
+ * - 菜单：右下角 ☰ 浮动按钮呼出——上一/下一章 | 进度滑块（听书=段落进度可拖跳段）| 字号行距 | 目录
  * - 进度：章内百分比随滚动实时更新；位置（章节+滚动比例）写 localStorage，进入自动续读并提示
+ * - 听书：按作品配音表分声 + 失败自动重试/跳段（toast 提示，不中断）；顶栏随菜单/听书显隐
  * - 保留：划线评论（文本快照锚）、批注列表、按类型总结、跳章上架语义（只渲染上架版本）
- * - 子模块：位置存取 reading-pos / 展示件 ReaderParts / 菜单 ReaderMenu / 批注视图 CommentViews
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -24,7 +23,7 @@ import { useMobileTts } from '../useMobileTts';
 import CatalogPanel from './CatalogPanel';
 import CommentSummary from './CommentSummary';
 import { CommentsSection, CommentSheet } from './CommentViews';
-import ReaderMenu from './ReaderMenu';
+import ReaderMenu, { loadFont, saveFont, type ReaderFont } from './ReaderMenu';
 import { HighlightedPara } from './ReaderParts';
 import { snapshotQuote } from './reading-pos';
 import { useReaderProgress } from './useReaderProgress';
@@ -55,7 +54,26 @@ export default function Reader() {
   // —— 番茄式交互状态 ——
   const [menuOpen, setMenuOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [font, setFont] = useState<ReaderFont>(() => loadFont());
+  // —— 听书 toast（非阻塞提示；失败自动跳段逻辑在 useMobileTts 内）——
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
   const articleRef = useRef<HTMLElement | null>(null);
+
+  function notifyTts(message: string): void {
+    setToast(message);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3000);
+  }
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+
+  function patchFont(patch: Partial<ReaderFont>): void {
+    setFont((f) => {
+      const next = { ...f, ...patch };
+      saveFont(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -79,8 +97,8 @@ export default function Reader() {
 
   const { chapterIdx, jumpTo, scrollPct, resumeTip, hintOpen } = useReaderProgress(id, chapters, articleRef);
   const chapter = chapters[chapterIdx] ?? null;
-  // 听书引擎：音色取作品配音表（旁白/角色分声），段落引用稳定、切章自动停止
-  const tts = useMobileTts(chapter?.paras ?? EMPTY_PARAS, work?.voiceMap, (msg) => alert(`听书失败：${msg}`));
+  // 听书引擎：音色取作品配音表（旁白/角色分声），段落引用稳定、切章自动停止；失败跳段 toast 提示
+  const tts = useMobileTts(chapter?.paras ?? EMPTY_PARAS, work?.voiceMap, notifyTts);
   const ttsIdx = tts.playingIdx;
   /** 当前章评论（版本不匹配的折叠为历史批注） */
   const chapterComments = useMemo(
@@ -89,16 +107,34 @@ export default function Reader() {
   );
   const activeComments = chapterComments.filter((c) => c.versionId === chapter?.version.id);
 
-  /** 番茄式点击分区：左 1/3 上一章 / 中 呼出菜单 / 右 1/3 下一章；有选区时让位给划线 */
+  /** 点击行为：正文区域内（含段落间空白）= 从最近段落开始听书；区域外保留左右 1/3 翻章；选区优先划线 */
   function handleReaderTap(e: React.MouseEvent<HTMLDivElement>): void {
     if (pending) return;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return; // 划线选区优先
+    const article = articleRef.current;
+    if (article && article.contains(e.target as Node)) {
+      const paras = Array.from(article.querySelectorAll<HTMLElement>('[data-para-index]'));
+      let best = -1;
+      let bestDist = Infinity;
+      for (const el of paras) {
+        const r = el.getBoundingClientRect();
+        const d = Math.abs(e.clientY - (r.top + r.height / 2));
+        if (d < bestDist) {
+          bestDist = d;
+          best = Number(el.dataset.paraIndex);
+        }
+      }
+      if (best >= 0) {
+        void tts.playFrom(best);
+        return;
+      }
+    }
+    // 非正文区域：左右 1/3 翻章（菜单由右下角浮动按钮承载）
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     if (x < rect.width / 3) jumpTo(chapterIdx - 1);
     else if (x > (rect.width * 2) / 3) jumpTo(chapterIdx + 1);
-    else setMenuOpen((v) => !v);
   }
 
   /** 划线提交：在选区所在段落上取快照锚 */
@@ -162,14 +198,6 @@ export default function Reader() {
     } catch {
       setComments(prev);
     }
-  }
-
-  /** 点击段落：从该段开始听书（播放中=跳到该段）；划线选区优先 */
-  function handleParaTap(paraIdx: number): void {
-    if (pending) return;
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed) return;
-    void tts.playFrom(paraIdx);
   }
 
   function toggleTts(): void {
@@ -251,7 +279,11 @@ export default function Reader() {
         </div>
 
         {chapter && (
-          <article className="bg-[hsl(var(--bg))] px-5 pb-6" ref={articleRef}>
+          <article
+            className="bg-[hsl(var(--bg))] px-5 pb-6"
+            ref={articleRef}
+            style={{ fontSize: font.size, lineHeight: font.lineHeight }}
+          >
             <div className="m-reader-ornament pt-6">
               <span className="m-serif">第 {chapter.msg.chapter.index} 章</span>
             </div>
@@ -262,12 +294,7 @@ export default function Reader() {
               <span>❦</span>
             </div>
             {chapter.paras.map((para, i) => (
-              <p
-                key={i}
-                data-para-index={i}
-                onClick={() => handleParaTap(i)}
-                className="py-2 text-[16px] leading-[2]"
-              >
+              <p key={i} data-para-index={i} className="py-2">
                 <HighlightedPara para={para} comments={activeComments.filter((c) => c.paraIndex === i)} />
               </p>
             ))}
@@ -281,7 +308,25 @@ export default function Reader() {
           className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-center text-xs leading-5 text-white"
           data-testid="reader-hint"
         >
-          点击任意段落可从该段听书 · 点标题或页边呼出菜单/翻章 · 选中文字可划线评论
+          点正文任意位置即从该处开始听书 · 右下角 ☰ 呼出菜单 · 选中文字可划线评论
+        </div>
+      )}
+
+      {/* 右下角浮动菜单按钮（沉浸阅读时菜单/设置的唯一入口） */}
+      <button
+        type="button"
+        onClick={() => setMenuOpen((v) => !v)}
+        data-testid="reader-menu-fab"
+        aria-label={menuOpen ? '关闭菜单' : '打开菜单'}
+        className="fixed bottom-6 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-lg text-white shadow-lg backdrop-blur-sm active:scale-95"
+      >
+        {menuOpen ? '✕' : '☰'}
+      </button>
+
+      {/* 听书提示 toast（合成失败跳段/停止等非阻塞消息） */}
+      {toast && !resumeTip && (
+        <div className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs text-white" data-testid="reader-tts-toast">
+          {toast}
         </div>
       )}
 
@@ -312,7 +357,7 @@ export default function Reader() {
         />
       )}
 
-      {/* 底部阅读菜单（点中央呼出） */}
+      {/* 底部阅读菜单（右下角 ☰ 呼出）：滑块随听书状态切换段落/章节模式 + 字体设置 */}
       {menuOpen && chapter && (
         <ReaderMenu
           chapterNo={chapter.msg.chapter.index}
@@ -323,6 +368,9 @@ export default function Reader() {
           onJump={jumpTo}
           onCatalog={() => setCatalogOpen(true)}
           onSummary={() => setSummaryOpen(true)}
+          tts={ttsIdx >= 0 ? { paraIdx: ttsIdx, paraTotal: chapter.paras.length, onSeek: (i) => void tts.playFrom(i) } : undefined}
+          font={font}
+          onFontChange={patchFont}
         />
       )}
 

@@ -13,13 +13,19 @@ import {
 import { NARRATOR_VOICE_KEY, VOICES, autoCastVoices } from '../voice-route';
 
 describe('ALL_VOICES 目录', () => {
-  it('Edge 免费声 + MiniMax 高清声全量可选，id 引擎可判定', () => {
+  it('Edge 免费声 + MiniMax 全量声可选，id 引擎可判定', () => {
     expect(ALL_VOICES.filter((v) => v.engine === 'easyvoice').map((v) => v.id)).toEqual(VOICES.map((v) => v.voice));
-    expect(ALL_VOICES.filter((v) => v.engine === 'minimax')).toHaveLength(8);
+    expect(ALL_VOICES.filter((v) => v.engine === 'minimax')).toHaveLength(60);
     expect(engineOf('xiaoxiao')).toBe('easyvoice');
     expect(engineOf('mm:female-shaonv')).toBe('minimax');
     expect(synthVoiceOf('mm:female-shaonv')).toBe('female-shaonv');
     expect(synthVoiceOf('xiaoxiao')).toBe('xiaoxiao');
+  });
+
+  it('分组元数据：粤语/旁白/角色各有归属，主持人女在旁白组', () => {
+    expect(ALL_VOICES.filter((v) => v.group === 'cantonese')).toHaveLength(6);
+    expect(ALL_VOICES.find((v) => v.id === 'mm:presenter_female')?.group).toBe('narrator');
+    expect(ALL_VOICES.find((v) => v.id === 'mm:male-qn-badao')?.group).toBe('cast');
   });
 
   it('旁白默认音色必须是目录内真实存在的 id（防连字符/下划线漂移）', () => {

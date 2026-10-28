@@ -7,6 +7,9 @@
  */
 import { MINIMAX_VOICES, NARRATOR_SPEAKER, NARRATOR_VOICE_KEY, VOICES, routeParagraphs } from './voice-route';
 
+/** 音色展示分组（选择器分节渲染） */
+export type CastGroup = 'edge' | 'cast' | 'narrator' | 'cantonese';
+
 export interface CastVoiceOption {
   /** 唯一 id：Edge 直接用 easyvoice 音色名；MiniMax 加 mm: 前缀 */
   id: string;
@@ -14,11 +17,21 @@ export interface CastVoiceOption {
   gender: 'female' | 'male';
   /** 引擎标记（决定 /api/tts/minimax 还是 easyvoice 路由） */
   engine: 'easyvoice' | 'minimax';
+  /** 展示分组 */
+  group: CastGroup;
 }
 
+const fitGroup = (fit: string): CastGroup => (fit === '粤语' ? 'cantonese' : fit === '旁白' ? 'narrator' : 'cast');
+
 export const ALL_VOICES: readonly CastVoiceOption[] = [
-  ...VOICES.map((v) => ({ id: v.voice, name: v.name, gender: v.gender, engine: 'easyvoice' as const })),
-  ...MINIMAX_VOICES.map((v) => ({ id: `mm:${v.voice}`, name: v.name, gender: v.gender, engine: 'minimax' as const })),
+  ...VOICES.map((v) => ({ id: v.voice, name: v.name, gender: v.gender, engine: 'easyvoice' as const, group: 'edge' as const })),
+  ...MINIMAX_VOICES.map((v) => ({
+    id: `mm:${v.voice}`,
+    name: v.name,
+    gender: v.gender,
+    engine: 'minimax' as const,
+    group: fitGroup(v.fit),
+  })),
 ];
 
 /** 音色 id → 引擎 */
