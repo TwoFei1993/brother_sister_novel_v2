@@ -15,6 +15,7 @@ import { patchMessage, updateWork, upsertMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
 import { useSettingsStore } from '../../../stores/settings';
 import { appendSwipe, buildChapterMessage } from '../../../hooks/generation-flow';
+import { chapterChip, chapterTitle } from '../../../lib/chapter-title';
 import type { DetectedAsset, Message } from '@shared/message';
 import type { Work } from '@shared/work';
 import type { UseGenerateResult } from '../../../hooks/useGenerate';
@@ -49,7 +50,7 @@ export function ChapterChips({
               : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
           }`}
         >
-          {c.chapter.index} · {c.chapter.title || '未命名'}
+          {chapterChip(c.chapter.index, c.chapter.title)}
         </button>
       ))}
     </div>
@@ -202,63 +203,77 @@ export function TextPane({
         </div>
       )}
 
-      {/* 激活版本正文 */}
+      {/* 激活版本正文（标题独占一行；操作按钮等宽一行不折行——窄屏竖排折行反馈修复） */}
       {current && (
         <div className="mx-4 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">
-              第{current.chapter.index}章 {current.chapter.title || '未命名'}
-            </h2>
-            {!editing && !gen.streaming && (
-              <span className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void polishCurrent()}
-                  disabled={polishing || !current.content.trim()}
-                  title="保持情节不变提升文笔，生成新版本（旧版本保留）"
-                  data-testid="mobile-polish-btn"
-                  className="text-xs text-[hsl(var(--accent))] disabled:opacity-40"
-                >
-                  ✨ 润色
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void rerollCurrent()}
-                  title="同指令重写本章，追加为新版本（旧版本保留）"
-                  data-testid="mobile-reroll-btn"
-                  className="text-xs text-[hsl(var(--accent))]"
-                >
-                  <Dices className="h-4 w-4" aria-hidden />
-                  重roll
-                </button>
-                <button type="button" onClick={startEdit} className="text-xs text-[hsl(var(--accent))]" data-testid="mobile-edit-btn">
-                  <SquarePen className="h-4 w-4" aria-hidden />
-                  编辑
-                </button>
-              </span>
-            )}
-            {editing && (
-              <span className="flex gap-2">
-                <button type="button" onClick={() => void saveEdit()} className="text-xs text-[hsl(var(--accent))]" data-testid="mobile-save-btn">
-                  保存
-                </button>
-                <button type="button" onClick={() => setEditing(false)} className="text-xs text-[hsl(var(--fg-muted))]">
-                  取消
-                </button>
-              </span>
+          <h2 className="truncate text-sm font-semibold">
+            {chapterTitle(current.chapter.index, current.chapter.title)}
+          </h2>
+          {!editing && !gen.streaming && (
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void polishCurrent()}
+                disabled={polishing || !current.content.trim()}
+                title="保持情节不变提升文笔，生成新版本（旧版本保留）"
+                data-testid="mobile-polish-btn"
+                className="flex h-8 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+              >
+                ✨ 润色
+              </button>
+              <button
+                type="button"
+                onClick={() => void rerollCurrent()}
+                title="同指令重写本章，追加为新版本（旧版本保留）"
+                data-testid="mobile-reroll-btn"
+                className="flex h-8 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))]"
+              >
+                <Dices className="h-4 w-4" aria-hidden />
+                重roll
+              </button>
+              <button
+                type="button"
+                onClick={startEdit}
+                data-testid="mobile-edit-btn"
+                className="flex h-8 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))]"
+              >
+                <SquarePen className="h-4 w-4" aria-hidden />
+                编辑
+              </button>
+            </div>
+          )}
+          {editing && (
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void saveEdit()}
+                data-testid="mobile-save-btn"
+                className="h-8 flex-1 whitespace-nowrap rounded-lg bg-[hsl(var(--accent))] text-xs font-medium text-[hsl(var(--accent-fg))]"
+              >
+                保存
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="h-8 flex-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))]"
+              >
+                取消
+              </button>
+            </div>
+          )}
+          <div className="mt-2">
+            {editing ? (
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={16}
+                data-testid="mobile-edit-area"
+                className="w-full resize-y rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-3 text-sm leading-7 outline-none focus:border-[hsl(var(--accent))]"
+              />
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-7">{current.content}</p>
             )}
           </div>
-          {editing ? (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={16}
-              data-testid="mobile-edit-area"
-              className="w-full resize-y rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-3 text-sm leading-7 outline-none focus:border-[hsl(var(--accent))]"
-            />
-          ) : (
-            <p className="whitespace-pre-wrap text-sm leading-7">{current.content}</p>
-          )}
         </div>
       )}
 
@@ -548,7 +563,7 @@ export function AssetsPane({ work, nextIndex, onUpdated }: { work: Work; nextInd
                   }`}
                 >
                   <span className={active ? 'font-medium text-[hsl(var(--accent))]' : 'font-medium'}>
-                    第{o.index}章 {o.title}
+                    {chapterTitle(o.index, o.title)}
                   </span>
                   {active && <span className="ml-1.5 text-[10px] text-[hsl(var(--accent))]">← 下一章</span>}
                   <p className="mt-0.5 text-[hsl(var(--fg-muted))]">{o.plot}</p>

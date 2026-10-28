@@ -11,6 +11,7 @@ import { Check, X } from 'lucide-react';
 
 import { patchMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
+import { chapterTitle } from '../../../lib/chapter-title';
 import type { Message } from '@shared/message';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
@@ -149,7 +150,7 @@ export default function PublishPanel({
                     onClick={() => setExpanded(expanded === c.id ? null : c.id)}
                   >
                     <p className={`truncate text-sm ${changed ? 'font-medium text-[hsl(var(--accent))]' : ''}`}>
-                      第{c.chapter.index}章 {c.chapter.title || '未命名'}
+                      {chapterTitle(c.chapter.index, c.chapter.title)}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-[hsl(var(--fg-muted))]">
                       {selected === null

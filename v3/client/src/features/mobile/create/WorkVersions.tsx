@@ -11,6 +11,7 @@ import { Dices, FileText, Trash2 } from 'lucide-react';
 import { forkManualVersion } from '../../../hooks/generation-flow';
 import { deleteMessage, patchMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
+import { chapterTitle } from '../../../lib/chapter-title';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 import type { UseGenerateResult } from '../../../hooks/useGenerate';
@@ -43,7 +44,7 @@ export default function VersionsPane({
   /** 🗑 删除本章（D3 同桌面语义）：确认后 DELETE，本地移除 */
   async function removeChapter(): Promise<void> {
     if (!current) return;
-    if (!window.confirm(`确定删除 第${current.chapter.index}章 ${current.chapter.title}？不可恢复。`)) return;
+    if (!window.confirm(`确定删除 ${chapterTitle(current.chapter.index, current.chapter.title)}？不可恢复。`)) return;
     try {
       await deleteMessage(work.id, current.id);
       onPick('');
