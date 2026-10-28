@@ -16,6 +16,7 @@ import type { Work } from '@shared/work';
 import type { UseGenerateResult } from '../../../hooks/useGenerate';
 
 import { confirmPendingAsset } from './pending-assets';
+import MobileTtsBar from './MobileTtsBar';
 import OutlineIterChat from './OutlineIterChat';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
@@ -71,6 +72,8 @@ export function TextPane({
   const [directive, setDirective] = useState('');
   /** 待绑定确认队列：本章生成检出的新素材（D8 side-channel） */
   const [pendingList, setPendingList] = useState<DetectedAsset[]>([]);
+  /** 共享入库：勾选后本次检出的素材不归属本书（跨书可见的共享卡） */
+  const [sharedImport, setSharedImport] = useState(false);
 
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
@@ -88,7 +91,7 @@ export function TextPane({
 
   async function confirmAsset(d: DetectedAsset): Promise<void> {
     try {
-      await confirmPendingAsset(work, d, current?.chapter.index ?? 1);
+      await confirmPendingAsset(work, d, current?.chapter.index ?? 1, sharedImport);
       setPendingList((l) => l.filter((x) => x !== d));
     } catch {
       alert('素材入库失败，请重试');
@@ -190,6 +193,9 @@ export function TextPane({
         </div>
       )}
 
+      {/* 听书条：按作品配音表分声朗读当前章（音色在「资料」分区配置） */}
+      {current && !editing && !gen.streaming && <MobileTtsBar chapter={current} voiceMap={work.voiceMap} />}
+
       {/* 流式生成中（DeepSeek 式）：💭思考可折叠 + 正文接着文章位置内联续写 */}
       {gen.streaming && (
         <div className="mx-4 mt-3" data-testid="mobile-streaming">
@@ -218,9 +224,20 @@ export function TextPane({
       {/* 待绑定确认（D8）：本章检出的新角色/势力/世界观 */}
       {pendingList.length > 0 && (
         <div className="mx-4 mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3" data-testid="pending-assets">
-          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-            本章检出 {pendingList.length} 个新素材，确认后入库并绑定到本书
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              本章检出 {pendingList.length} 个新素材，确认后入库并绑定到本书
+            </p>
+            <label className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+              <input
+                type="checkbox"
+                checked={sharedImport}
+                onChange={(e) => setSharedImport(e.target.checked)}
+                data-testid="shared-import-check"
+              />
+              共享入库
+            </label>
+          </div>
           <ul className="flex flex-col gap-1.5">
             {pendingList.map((d) => (
               <li key={d.name} className="flex items-center gap-2 text-xs">

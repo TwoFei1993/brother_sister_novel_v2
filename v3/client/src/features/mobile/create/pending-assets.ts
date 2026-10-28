@@ -16,21 +16,21 @@ function endpointOf(kind: DetectedAsset['kind']): string {
   return kind === 'character' ? '/api/characters' : kind === 'faction' ? '/api/factions' : '/api/worldbooks';
 }
 
-/** 按检出条目构造初始实体体（kind 各异；worldview 塞世界书单条目） */
-function assetBody(workId: string, d: DetectedAsset): Record<string, unknown> {
+/** 按检出条目构造初始实体体（kind 各异；worldview 塞世界书单条目；shared=共享素材不归属本书） */
+function assetBody(workId: string, d: DetectedAsset, shared: boolean): Record<string, unknown> {
   if (d.kind === 'character') {
     return {
       name: d.name,
-      origin: bookOrigin(workId),
+      ...(shared ? {} : { origin: bookOrigin(workId) }),
       card: { spec: 'chara_card_v2', spec_version: '2.0', data: { name: d.name, description: d.summary } },
     };
   }
   if (d.kind === 'faction') {
-    return { name: d.name, description: d.summary, origin: bookOrigin(workId) } satisfies Partial<FactionAsset>;
+    return { name: d.name, description: d.summary, ...(shared ? {} : { origin: bookOrigin(workId) }) } satisfies Partial<FactionAsset>;
   }
   return {
     name: d.name,
-    origin: bookOrigin(workId),
+    ...(shared ? {} : { origin: bookOrigin(workId) }),
     raw: {
       entries: {
         '0': {
@@ -46,15 +46,16 @@ function assetBody(workId: string, d: DetectedAsset): Record<string, unknown> {
   };
 }
 
-/** 建实体 + 写绑定；返回新素材 id（实体创建失败抛错由调用方提示） */
+/** 建实体 + 写绑定；返回新素材 id（实体创建失败抛错由调用方提示；shared=共享入库，不归属本书） */
 export async function confirmPendingAsset(
   work: Work,
   d: DetectedAsset,
   fromChapter: number,
+  shared = false,
 ): Promise<string> {
   const created = await apiFetch<{ id: string }>(endpointOf(d.kind), {
     method: 'POST',
-    body: JSON.stringify(assetBody(work.id, d)),
+    body: JSON.stringify(assetBody(work.id, d, shared)),
   });
   // 绑定写回：取最新 work（乐观锁），追加 active 绑定
   const latest = await apiFetch<Work>(`/api/works/${work.id}`);

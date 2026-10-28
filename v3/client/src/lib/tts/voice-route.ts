@@ -9,7 +9,7 @@
  *   缺失一律回退 defaultVoice（旁白声）
  */
 
-/** 可用声音（对齐旧站 useEasyTTS 的 6 声：3 女 3 男） */
+/** 可用声音（Edge 免费声全量目录：普通话 12 + 粤语 3 + 台湾国语 3） */
 export interface VoiceOption {
   id: string;
   name: string;
@@ -19,12 +19,27 @@ export interface VoiceOption {
 }
 
 export const VOICES: readonly VoiceOption[] = [
+  // 普通话
   { id: 'xiaoxiao', name: '晓晓', voice: 'zh-CN-XiaoxiaoNeural', gender: 'female' },
   { id: 'xiaoyi', name: '小艺', voice: 'zh-CN-XiaoyiNeural', gender: 'female' },
+  { id: 'yunxia', name: '云夏', voice: 'zh-CN-YunxiaNeural', gender: 'female' },
   { id: 'xiaobei', name: '小贝', voice: 'zh-CN-liaoning-XiaobeiNeural', gender: 'female' },
+  { id: 'xiaoni', name: '小妮', voice: 'zh-CN-shaanxi-XiaoniNeural', gender: 'female' },
   { id: 'yunxi', name: '云希', voice: 'zh-CN-YunxiNeural', gender: 'male' },
   { id: 'yunjian', name: '云健', voice: 'zh-CN-YunjianNeural', gender: 'male' },
   { id: 'yunyang', name: '云扬', voice: 'zh-CN-YunyangNeural', gender: 'male' },
+  { id: 'yunze', name: '云泽', voice: 'zh-CN-YunzeNeural', gender: 'male' },
+  { id: 'yunfeng', name: '云枫', voice: 'zh-CN-YunfengNeural', gender: 'male' },
+  { id: 'yunhao', name: '云皓', voice: 'zh-CN-YunhaoNeural', gender: 'male' },
+  { id: 'yunye', name: '云野', voice: 'zh-CN-YunyeNeural', gender: 'male' },
+  // 粤语
+  { id: 'hiumaan', name: '曉曼', voice: 'zh-HK-HiuMaanNeural', gender: 'female' },
+  { id: 'hiugaai', name: '曉佳', voice: 'zh-HK-HiuGaaiNeural', gender: 'female' },
+  { id: 'wanlung', name: '雲龍', voice: 'zh-HK-WanLungNeural', gender: 'male' },
+  // 台湾国语
+  { id: 'hsiaochen', name: '晓臻', voice: 'zh-TW-HsiaoChenNeural', gender: 'female' },
+  { id: 'hsiaoyu', name: '晓雨', voice: 'zh-TW-HsiaoYuNeural', gender: 'female' },
+  { id: 'yunhui', name: '雲慧', voice: 'zh-TW-YunHuiNeural', gender: 'male' },
 ];
 
 /** 旁白默认声 id */
@@ -56,8 +71,8 @@ export const MINIMAX_VOICES: readonly MiniMaxVoiceOption[] = [
   { id: 'mm:female-shaonv', name: '少女婉婉', voice: 'female-shaonv', gender: 'female', fit: '妹妹' },
   { id: 'mm:female-yujie', name: '御姐', voice: 'female-yujie', gender: 'female', fit: '女性角色' },
   { id: 'mm:female-chengshu', name: '成熟', voice: 'female-chengshu', gender: 'female', fit: '女性角色' },
-  { id: 'mm:presenter-female', name: '主持人女', voice: 'presenter_female', gender: 'female', fit: '旁白' },
-  { id: 'mm:presenter-male', name: '主持人男', voice: 'presenter_male', gender: 'male', fit: '旁白' },
+  { id: 'mm:presenter_female', name: '主持人女', voice: 'presenter_female', gender: 'female', fit: '旁白' },
+  { id: 'mm:presenter_male', name: '主持人男', voice: 'presenter_male', gender: 'male', fit: '旁白' },
 ];
 
 /** 声音 id 是否为 MiniMax 音色 */
@@ -102,7 +117,7 @@ export function autoCastVoices(names: readonly string[]): Array<{ name: string; 
 }
 
 /** 旁白声（自动分声场景固定主持人女） */
-export const AUTOCAST_NARRATOR_VOICE = 'mm:presenter-female';
+export const AUTOCAST_NARRATOR_VOICE = 'mm:presenter_female';
 
 /** 运行时说话人绑定（如 chat 模式激活成员）；voice 为 VOICES 的 id */
 export interface SpeakerBinding {

@@ -15,6 +15,7 @@ import type { Message } from '@shared/message';
 import SelectionTools from '../../workbench/SelectionTools';
 import BindingsPane from './BindingsPane';
 import PublishPanel from './PublishPanel';
+import VoiceCastPane from './VoiceCastPane';
 import { OutlinePane, TextPane, AssetsPane } from './WorkPanes';
 import VersionsPane from './WorkVersions';
 
@@ -134,6 +135,9 @@ export default function MobileWork() {
               <>
                 <AssetsPane work={work} nextIndex={chapters.length + 1} />
                 <BindingsPane work={work} onUpdated={setWork} />
+                <div className="px-4">
+                  <VoiceCastPane work={work} onUpdated={setWork} />
+                </div>
               </>
             )}
           </div>

@@ -8,6 +8,7 @@
 import { apiFetch } from '../../../api/client';
 import { getWork, updateWork } from '../../../api/works';
 import { buildCardDraft, buildWorldbookDraft } from '../../../lib/outline/draft';
+import { bookOrigin } from '@shared/assets/origin';
 import type { ExtractedOutline } from '../../../lib/outline/wizard';
 import type { Work } from '@shared/work';
 
@@ -161,15 +162,47 @@ export function writeCreatedWorkId(id: string | null): void {
   }
 }
 
-/** 把资产合并绑定进已有作品（GET revision → PATCH 去重合并，保留已有绑定）；返回更新后的 Work */
+/**
+ * 补写素材归属（生成卡默认有归属）：无归属/显式 none 的素材 PATCH origin=本书；
+ * 已归属其他书的不抢走（跨书引用不迁移归属）。尽力而为：单条失败仅告警不阻塞绑定。
+ */
+export async function attributeAssets(
+  workId: string,
+  assets: { characterIds: string[]; worldbookIds: string[] },
+): Promise<void> {
+  const origin = bookOrigin(workId);
+  const targets: ReadonlyArray<readonly [string, readonly string[]]> = [
+    ['characters', assets.characterIds],
+    ['worldbooks', assets.worldbookIds],
+  ];
+  for (const [type, ids] of targets) {
+    for (const id of ids) {
+      try {
+        const asset = await apiFetch<{ origin?: { type?: string } }>(`/api/${type}/${id}`);
+        if (asset.origin?.type === 'book') continue; // 已有归属：不迁移
+        await apiFetch(`/api/${type}/${id}`, { method: 'PATCH', body: JSON.stringify({ origin }) });
+      } catch (err) {
+        console.warn('[importAll] 素材归属补写失败（不影响绑定）', type, id, err);
+      }
+    }
+  }
+}
+
+/**
+ * 把资产合并绑定进已有作品（GET revision → PATCH 去重合并，保留已有绑定）；返回更新后的 Work。
+ * 默认顺带补写归属（生成卡默认有归属）；opts.shared=true 时跳过（标明共享，不归属本书）。
+ */
 export async function bindAssetsToWork(
   workId: string,
   assets: { characterIds: string[]; worldbookIds: string[] },
+  opts: { shared?: boolean } = {},
 ): Promise<Work> {
   const work = await getWork(workId);
-  return updateWork(work.id, {
+  const updated = await updateWork(work.id, {
     revision: work.revision,
     characterIds: mergeIdLists(work.characterIds, assets.characterIds),
     worldbookIds: mergeIdLists(work.worldbookIds, assets.worldbookIds),
   });
+  if (!opts.shared) await attributeAssets(workId, assets);
+  return updated;
 }

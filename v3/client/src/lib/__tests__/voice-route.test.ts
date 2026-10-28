@@ -79,10 +79,10 @@ describe('routeParagraphs 说话人路由', () => {
 });
 
 describe('VOICES 与工具', () => {
-  it('声音常量对齐旧站 6 声（3 女 3 男），含 easyvoice 底层名', () => {
-    expect(VOICES).toHaveLength(6);
-    expect(VOICES.filter((v) => v.gender === 'female')).toHaveLength(3);
-    expect(VOICES.filter((v) => v.gender === 'male')).toHaveLength(3);
+  it('Edge 免费声全量 18 声（9 女 9 男），含 easyvoice 底层名', () => {
+    expect(VOICES).toHaveLength(18);
+    expect(VOICES.filter((v) => v.gender === 'female')).toHaveLength(9);
+    expect(VOICES.filter((v) => v.gender === 'male')).toHaveLength(9);
     expect(voiceIdToName('yunjian')).toBe('zh-CN-YunjianNeural');
     // 未知 id 回退默认声
     expect(voiceIdToName('nope')).toBe(voiceIdToName(DEFAULT_VOICE_ID));

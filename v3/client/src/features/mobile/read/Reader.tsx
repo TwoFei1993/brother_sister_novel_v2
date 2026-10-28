@@ -1,8 +1,9 @@
 /**
  * 移动阅读器（/m/read/:id）——番茄式阅读交互（上线前阅读体验重做）
  *
- * - 点击分区：左 1/3=上一章，中 1/3=呼出/隐藏菜单，右 1/3=下一章（有选区时优先划线，不触发）
- * - 菜单：底部面板 = 上一章 | 章节粒度进度滑块 | 下一章 + 目录入口；顶栏随菜单显隐（沉浸阅读）
+ * - 点击段落：从该段开始听书（播放中点其他段=跳段）；点标题/页边=原分区交互
+ *   （左 1/3=上一章，中=呼出/隐藏菜单，右 1/3=下一章；有选区时优先划线，不触发）
+ * - 菜单：底部面板 = 上一章 | 章节粒度进度滑块 | 下一章 + 目录入口；顶栏随菜单/听书显隐
  * - 进度：章内百分比随滚动实时更新；位置（章节+滚动比例）写 localStorage，进入自动续读并提示
  * - 保留：划线评论（文本快照锚）、批注列表、按类型总结、跳章上架语义（只渲染上架版本）
  * - 子模块：位置存取 reading-pos / 展示件 ReaderParts / 菜单 ReaderMenu / 批注视图 CommentViews
@@ -19,6 +20,7 @@ import type { Comment, CommentType } from '@shared/comment';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
+import { useMobileTts } from '../useMobileTts';
 import CatalogPanel from './CatalogPanel';
 import CommentSummary from './CommentSummary';
 import { CommentsSection, CommentSheet } from './CommentViews';
@@ -38,6 +40,9 @@ interface PublishedChapter {
 
 const COMMENT_TYPES: readonly CommentType[] = ['改错', '添加', '感悟'];
 
+/** 稳定的空段落数组（无章时喂给 useMobileTts，保持引用稳定避免误停） */
+const EMPTY_PARAS: readonly string[] = [];
+
 export default function Reader() {
   const { id } = useParams<{ id: string }>();
   const [work, setWork] = useState<Work | null>(null);
@@ -46,10 +51,7 @@ export default function Reader() {
   const [loadError, setLoadError] = useState(false);
   const [pending, setPending] = useState<{ paraIndex: number; quote: string; raw: string } | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  // —— 听书（TTS）：当前播放段下标；-1=未在播放 ——
-  const [ttsIdx, setTtsIdx] = useState(-1);
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ttsStopRef = useRef(false);
+  // —— 听书（TTS）：按作品配音表分声，点段落即从该段播起 ——
   // —— 番茄式交互状态 ——
   const [menuOpen, setMenuOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -77,6 +79,9 @@ export default function Reader() {
 
   const { chapterIdx, jumpTo, scrollPct, resumeTip, hintOpen } = useReaderProgress(id, chapters, articleRef);
   const chapter = chapters[chapterIdx] ?? null;
+  // 听书引擎：音色取作品配音表（旁白/角色分声），段落引用稳定、切章自动停止
+  const tts = useMobileTts(chapter?.paras ?? EMPTY_PARAS, work?.voiceMap, (msg) => alert(`听书失败：${msg}`));
+  const ttsIdx = tts.playingIdx;
   /** 当前章评论（版本不匹配的折叠为历史批注） */
   const chapterComments = useMemo(
     () => (chapter ? comments.filter((c) => c.chapterMsgId === chapter.msg.id) : []),
@@ -159,47 +164,17 @@ export default function Reader() {
     }
   }
 
-  /** 🔊 听本章：逐段调 /api/tts/minimax 合成并顺序播放；停止即中止队列 */
-  async function playChapterFrom(paraIdx: number): Promise<void> {
-    if (!chapter || !id) return;
-    ttsStopRef.current = false;
-    for (let i = paraIdx; i < chapter.paras.length; i += 1) {
-      if (ttsStopRef.current) return;
-      setTtsIdx(i);
-      try {
-        const res = await fetch('/api/tts/minimax', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: chapter.paras[i], voiceId: 'female-shaonv' }),
-        });
-        if (!res.ok) throw new Error(`TTS ${res.status}`);
-        const blob = await res.blob();
-        if (ttsStopRef.current) return;
-        await new Promise<void>((resolve, reject) => {
-          const audio = new Audio(URL.createObjectURL(blob));
-          ttsAudioRef.current = audio;
-          audio.onended = () => resolve();
-          audio.onerror = () => reject(new Error('播放失败'));
-          void audio.play();
-        });
-      } catch (err) {
-        if (ttsStopRef.current) return;
-        setTtsIdx(-1);
-        alert(`听书失败：${err instanceof Error ? err.message : '未知错误'}`);
-        return;
-      }
-    }
-    setTtsIdx(-1);
+  /** 点击段落：从该段开始听书（播放中=跳到该段）；划线选区优先 */
+  function handleParaTap(paraIdx: number): void {
+    if (pending) return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    void tts.playFrom(paraIdx);
   }
 
   function toggleTts(): void {
-    if (ttsIdx >= 0) {
-      ttsStopRef.current = true;
-      ttsAudioRef.current?.pause();
-      setTtsIdx(-1);
-      return;
-    }
-    void playChapterFrom(0);
+    if (tts.playing) tts.stop();
+    else void tts.playFrom(0);
   }
 
   if (loadError) return <p className="py-24 text-center text-sm text-[hsl(var(--fg-muted))]">作品加载失败</p>;
@@ -287,7 +262,12 @@ export default function Reader() {
               <span>❦</span>
             </div>
             {chapter.paras.map((para, i) => (
-              <p key={i} data-para-index={i} className="py-2 text-[16px] leading-[2]">
+              <p
+                key={i}
+                data-para-index={i}
+                onClick={() => handleParaTap(i)}
+                className="py-2 text-[16px] leading-[2]"
+              >
                 <HighlightedPara para={para} comments={activeComments.filter((c) => c.paraIndex === i)} />
               </p>
             ))}
@@ -301,7 +281,7 @@ export default function Reader() {
           className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-center text-xs leading-5 text-white"
           data-testid="reader-hint"
         >
-          点击屏幕中间呼出菜单 · 左右两侧翻章 · 选中文字可划线评论
+          点击任意段落可从该段听书 · 点标题或页边呼出菜单/翻章 · 选中文字可划线评论
         </div>
       )}
 

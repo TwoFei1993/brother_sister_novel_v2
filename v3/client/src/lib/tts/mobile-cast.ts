@@ -1,11 +1,11 @@
 /**
  * 移动端 TTS 音色管理（创作+阅读共用）：
  *
- * - ALL_VOICES：Edge 免费音色（6）+ MiniMax 预置音色（8）= 全部可选
- * - 自动分声：按角色名性别线索（autoAssignVoices）自动匹配男女声，旁白固定主持人
- * - 持久化：localStorage 'm-tts-cast'（角色名→音色 id 映射），「自动分配」可重置
+ * - ALL_VOICES：Edge 免费音色（18）+ MiniMax 预置音色（8）= 全部可选
+ * - 段落说话人路由：routeMobileParas（跨段延续说话人；自动分声用 voice-route 的 autoCastVoices）
+ * - 持久化：作品级 voiceMap（VoiceCastPane 写 PATCH；localStorage 仅旧版 cast 兼容读取）
  */
-import { MINIMAX_VOICES, VOICES } from './voice-route';
+import { MINIMAX_VOICES, NARRATOR_SPEAKER, NARRATOR_VOICE_KEY, VOICES, routeParagraphs } from './voice-route';
 
 export interface CastVoiceOption {
   /** 唯一 id：Edge 直接用 easyvoice 音色名；MiniMax 加 mm: 前缀 */
@@ -31,39 +31,71 @@ export function synthVoiceOf(id: string): string {
   return id.startsWith('mm:') ? id.slice(3) : id;
 }
 
-/** 角色名性别线索（与 autoCastVoices 同表） */
-const FEMALE_HINTS = ['妹', '姐', '娘', '女', '婉', '月', '雪', '莹', '霞', '妃', '后', '嫔', '嬷', '嫂', '姨', '姬', '妲', '鸾'];
-const MALE_HINTS = ['哥', '兄', '爷', '王', '帝', '君', '叔', '爸', '爹', '公', '侯', '帅', '郎', '殿下'];
+/** 旁白默认音色 id */
+export const NARRATOR_CAST_ID = 'mm:presenter_female';
 
-export function guessGender(name: string): 'male' | 'female' {
-  for (const h of MALE_HINTS) if (name.includes(h)) return 'male';
-  for (const h of FEMALE_HINTS) if (name.includes(h)) return 'female';
-  return 'female';
+/** 旧数据兼容：主持人音色曾误存连字符 id（与 MiniMax 官方 voice_id 不符，合成必败） */
+const LEGACY_ID_FIX: Record<string, string> = {
+  'mm:presenter-female': 'mm:presenter_female',
+  'mm:presenter-male': 'mm:presenter_male',
+};
+
+/** 单个音色 id 规范化（旧连字符 id → 真实 id） */
+export function normalizeCastId(id: string): string {
+  return LEGACY_ID_FIX[id] ?? id;
 }
+
+/** 整表规范化（routeMobileParas 与配音面板读入时自愈旧数据） */
+export function normalizeVoiceMap(voiceMap: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  let changed = false;
+  for (const [name, id] of Object.entries(voiceMap)) {
+    const fixed = normalizeCastId(id);
+    if (fixed !== id) changed = true;
+    out[name] = fixed;
+  }
+  return changed ? out : voiceMap;
+}
+
+/** 移动端路由后段落（text 送合成；speaker 供展示，旁白为 'narrator'） */
+export interface MobileRoutedPara {
+  text: string;
+  voice: string;
+  speaker: string;
+}
+
+/** 引号开字符（无前缀引号对白 = 延续上一说话人，与 voice-route 同表） */
+const QUOTE_OPENERS: readonly string[] = ['「', '『', '“'];
 
 /**
- * 自动分声：按角色名性别线索分配男女声，同池轮替不重声；旁白固定主持人女。
- * 返回角色名→音色 id 映射（可直接存 work.voiceMap）。
+ * 移动端段落说话人路由：入参已切好的段落逐段走 routeParagraphs，
+ * 并把「前文最近说话人」跨段传递——routeParagraphs 的引号延续只在段内生效，
+ * 无前缀引号开头的段在此显式归属上一说话人。旁白声取 voiceMap 的 narrator 键，缺省主持人女。
  */
-export function autoAssignVoices(names: readonly string[]): Record<string, string> {
-  const male = ALL_VOICES.filter((v) => v.gender === 'male');
-  const female = ALL_VOICES.filter((v) => v.gender === 'female');
-  let mi = 0;
-  let fi = 0;
-  const map: Record<string, string> = {};
-  for (const name of names) {
-    const gender = guessGender(name);
-    const pool = gender === 'male' ? male : female;
-    const idx = Math.min(gender === 'male' ? mi : fi, pool.length - 1);
-    map[name] = pool[idx]!.id;
-    if (gender === 'male') mi += 1;
-    else fi += 1;
+export function routeMobileParas(
+  paras: readonly string[],
+  voiceMap: Record<string, string>,
+): MobileRoutedPara[] {
+  const vm = normalizeVoiceMap(voiceMap);
+  const narrator = vm[NARRATOR_VOICE_KEY] || NARRATOR_CAST_ID;
+  const out: MobileRoutedPara[] = [];
+  let lastSpeaker: string | null = null;
+  for (const text of paras) {
+    const [routed] = routeParagraphs(text, vm, [], narrator);
+    if (!routed) continue;
+    const carried =
+      routed.speaker === NARRATOR_SPEAKER &&
+      lastSpeaker !== null &&
+      QUOTE_OPENERS.some((q) => text.startsWith(q));
+    if (carried && lastSpeaker !== null) {
+      out.push({ text, voice: vm[lastSpeaker] ?? narrator, speaker: lastSpeaker });
+    } else {
+      out.push(routed);
+      if (routed.speaker !== NARRATOR_SPEAKER) lastSpeaker = routed.speaker;
+    }
   }
-  return map;
+  return out;
 }
-
-/** 旁白默认音色 id */
-export const NARRATOR_CAST_ID = 'mm:presenter-female';
 
 const CAST_KEY = 'm-tts-cast-v1';
 

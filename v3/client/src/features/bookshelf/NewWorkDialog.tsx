@@ -10,6 +10,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { createWork } from '../../api/works';
+import { attributeAssets } from '../misc/wizard/importAll';
 import { listCharacters, listWorldbooks, listPresets } from '../../api/library';
 import { ApiError } from '../../api/client';
 import { OPTION_CLS } from '../../components/ui-select';
@@ -72,6 +73,8 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
         worldbookIds: bindings.worldbookIds,
         presetId: bindings.presetId,
       });
+      // 绑定的无归属素材补写归属（生成卡默认有归属；已归属其他书的不动）——后台执行不阻塞跳转
+      void attributeAssets(work.id, { characterIds: bindings.characterIds, worldbookIds: bindings.worldbookIds });
       navigate(`/work/${work.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '创建失败，请重试');

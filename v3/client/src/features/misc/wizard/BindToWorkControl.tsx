@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 
-import { bindAssetsToWork, mergeIdLists, type ImportedAssets } from './importAll';
+import { attributeAssets, bindAssetsToWork, mergeIdLists, type ImportedAssets } from './importAll';
 import { createWork, listWorks, type WorkSummary } from '../../../api/works';
 
 const MAX_WORKS = 20;
@@ -30,6 +30,8 @@ export default function BindToWorkControl({ assets, onBound }: Props) {
   const [works, setWorks] = useState<WorkSummary[] | null>(null);
   const [selected, setSelected] = useState('');
   const [newTitle, setNewTitle] = useState('');
+  /** 共享卡：勾选后绑定不写归属（素材库跨书可见的共享素材）；默认归属本书 */
+  const [shared, setShared] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -47,7 +49,7 @@ export default function BindToWorkControl({ assets, onBound }: Props) {
     }
   };
 
-  /** 绑定到现有作品：GET revision → PATCH 去重合并（保留已有绑定） */
+  /** 绑定到现有作品：GET revision → PATCH 去重合并（保留已有绑定）+ 补归属（共享卡跳过） */
   const bindExisting = async (workId: string): Promise<void> => {
     setBusy(true);
     setMsg(null);
@@ -55,8 +57,8 @@ export default function BindToWorkControl({ assets, onBound }: Props) {
       const bound = await bindAssetsToWork(workId, {
         characterIds: assets.characterIds,
         worldbookIds: assets.worldbookIds,
-      });
-      setMsg({ kind: 'ok', text: `已绑定到《${bound.title}》` });
+      }, { shared });
+      setMsg({ kind: 'ok', text: `已绑定到《${bound.title}》${shared ? '（共享卡，未归属）' : ''}` });
       onBound?.(bound.title, false);
       setSelected('');
     } catch {
@@ -66,7 +68,7 @@ export default function BindToWorkControl({ assets, onBound }: Props) {
     }
   };
 
-  /** 新建作品并携带资产（创建即绑定，无需二次 PATCH） */
+  /** 新建作品并携带资产（创建即绑定，无需二次 PATCH）+ 补归属（共享卡跳过） */
   const createAndBind = async (): Promise<void> => {
     const name = newTitle.trim();
     if (!name) {
@@ -83,7 +85,8 @@ export default function BindToWorkControl({ assets, onBound }: Props) {
         characterIds: mergeIdLists([], assets.characterIds),
         worldbookIds: mergeIdLists([], assets.worldbookIds),
       });
-      setMsg({ kind: 'ok', text: `已创建《${work.title}》并绑定资产` });
+      if (!shared) await attributeAssets(work.id, assets);
+      setMsg({ kind: 'ok', text: `已创建《${work.title}》并绑定资产${shared ? '（共享卡，未归属）' : ''}` });
       onBound?.(work.title, true);
       setNewTitle('');
       setSelected('');
@@ -129,6 +132,12 @@ export default function BindToWorkControl({ assets, onBound }: Props) {
               </option>
             ))}
           </select>
+        </label>
+      )}
+      {open && (
+        <label className="flex items-center gap-1.5 text-xs text-[hsl(var(--fg-muted))]" data-testid="bind-shared-check">
+          <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+          共享卡（不归属本书，素材库各书可见）
         </label>
       )}
       {open && selected === NEW_OPTION && (
