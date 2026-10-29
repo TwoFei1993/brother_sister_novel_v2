@@ -85,30 +85,33 @@ export default function VersionsPane({
               type="button"
               onClick={() => void removeChapter()}
               data-testid="mobile-delete-ch-btn"
-              className="h-9 w-12 shrink-0 rounded-xl border border-red-400/40 text-xs text-red-400"
               title="删除本章"
+              className="flex h-9 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-red-400/40 text-xs text-red-400"
             >
               <Trash2 className="h-4 w-4" aria-hidden />
+              删除
             </button>
             <button
               type="button"
               onClick={() => void reroll()}
               disabled={gen.streaming}
+              title="同指令重写本章，追加新版本（旧版本保留）"
               data-testid="mobile-reroll-btn"
-              className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+              className="flex h-9 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
             >
               <Dices className="h-4 w-4" aria-hidden />
-              重roll新版本
+              重roll
             </button>
             <button
               type="button"
               onClick={() => void forkManual()}
               disabled={gen.streaming}
+              title="生成新版本并手改（复制当前版本为手改副本并激活）"
               data-testid="mobile-fork-btn"
-              className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+              className="flex h-9 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
             >
               <FileText className="h-4 w-4" aria-hidden />
-              生成新版本并手改
+              手改
             </button>
           </div>
 

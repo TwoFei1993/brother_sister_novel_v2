@@ -1,38 +1,20 @@
 /**
- * 移动创作书架（/m/create）：分组书架（微信读书式）+ 新建入口
+ * 移动创作书架（/m/create）：封面网格书架（微信读书式，反馈③）+ 新建入口
  *
- * - 分组分区（按 shelfTag，未分类殿后），组头点击折叠/展开（localStorage 记忆）
- * - 「管理」模式：点选书籍（勾选角标）→ 底部「移动到分组」→ 选已有分组或新建分组，批量 PATCH shelfTag
+ * - 网格视图：有分组的显示为组合封面卡（2×2 拼图），未分类书平铺；点组合卡进入该组网格
+ * - 「管理」模式：点选书籍（勾选角标）→ 底部「移动到分组」→ 选已有分组或新建，批量 PATCH shelfTag
  * - 新建：标题+题材；勾「从手写开始」→ 创建后直达正文手写第一章（写完可 AI 润色）
- * - 🪄 AI 向导：右上直达 /planner（反馈④：向导入口应放在创作页）
+ * - 🪄 AI 向导：右上直达 /planner
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { WandSparkles } from 'lucide-react';
 
 import { createWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
 import { groupByTag } from '../read/ReadShelf';
+import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
 
-const ORDER_KEY = 'create-shelf-order-v1';
 const COLLAPSE_KEY = 'create-shelf-collapse-v1';
-
-function loadOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(ORDER_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveOrder(ids: string[]): void {
-  try {
-    localStorage.setItem(ORDER_KEY, JSON.stringify(ids));
-  } catch {
-    /* 存储不可用静默 */
-  }
-}
 
 function loadCollapsed(): string[] {
   try {
@@ -207,11 +189,12 @@ function MoveSheet({
 export default function MobileBookshelf() {
   const navigate = useNavigate();
   const [works, setWorks] = useState<WorkSummary[] | null>(null);
-  const [order, setOrder] = useState<string[]>([]);
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState<string[]>(loadCollapsed);
   const [managing, setManaging] = useState(false);
   /** 管理模式下勾选的书 */
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** 当前进入的分组（null=书架总览：组合封面 + 未分类平铺） */
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -222,14 +205,13 @@ export default function MobileBookshelf() {
       .catch(() => setWorks([]));
   }
   useEffect(() => {
-    setOrder(loadOrder());
-    setCollapsed(loadCollapsed());
     reload();
   }, []);
 
-  /** 分组：tag → 组内按手动序（微信读书式分区，未分类殿后） */
-  const groups = useMemo(() => (works ? groupByTag(works, order) : []), [works, order]);
+  /** 分组：tag → 组内按 updatedAt 新→旧（未分类殿后） */
+  const groups = useMemo(() => (works ? groupByTag(works) : []), [works]);
   const allTags = useMemo(() => groups.map(([t]) => t).filter((t) => t !== '未分类'), [groups]);
+  const uncategorized = useMemo(() => groups.find(([t]) => t === '未分类')?.[1] ?? [], [groups]);
 
   function toggleCollapse(tag: string): void {
     setCollapsed((c) => {
@@ -246,6 +228,28 @@ export default function MobileBookshelf() {
       else next.add(id);
       return next;
     });
+  }
+
+  /** 封面卡通用渲染：管理模式=多选勾选；否则导航/进入分组 */
+  function renderCover(w: WorkSummary, onOpen: () => void): ReactNode {
+    const badges = [
+      `${w.stats?.chapterCount ?? 0} 章`,
+      ...((w.stats?.publishedChapterCount ?? 0) > 0 ? [`已上架 ${w.stats?.publishedChapterCount} 章`] : []),
+      ...(w.mode === 'chat' ? ['对话'] : []),
+    ];
+    if (managing) {
+      return (
+        <ShelfBookCover
+          key={w.id}
+          book={w}
+          manage
+          checked={selected.has(w.id)}
+          badges={badges}
+          onClick={() => toggleSelect(w.id)}
+        />
+      );
+    }
+    return <ShelfBookCover key={w.id} book={w} badges={badges} onClick={onOpen} />;
   }
 
   /** 批量移动到分组：逐本取 revision → PATCH shelfTag（微信读书「移动到分组」语义） */
@@ -268,12 +272,14 @@ export default function MobileBookshelf() {
     }
   }
 
+  const grid = 'grid grid-cols-3 gap-x-3 gap-y-4 px-4';
+
   return (
     <div className="mx-auto max-w-2xl px-4 pb-4 pt-5">
       <header className="mb-4 flex items-end justify-between">
         <div>
           <p className="m-serif text-[11px] tracking-[0.5em] text-[hsl(var(--fg-muted))]">書 房</p>
-          <h1 className="m-serif mt-0.5 text-2xl font-semibold leading-tight">创作</h1>
+          <h1 className="m-serif mt-0.5 text-2xl font-semibold leading-tight">{activeTag ?? '创作'}</h1>
         </div>
         <div className="flex gap-2">
           <Link
@@ -317,74 +323,59 @@ export default function MobileBookshelf() {
         </p>
       )}
 
-      {groups.map(([tag, ws]) => {
-        const isCollapsed = collapsed.includes(tag);
-        return (
-          <section key={tag} className="mb-4">
+      {/* 分组内视图：该组封面网格 */}
+      {activeTag !== null &&
+        works !== null &&
+        (() => {
+          const list = groups.find(([t]) => t === activeTag)?.[1] ?? [];
+          return (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTag(null)}
+                data-testid="group-back-btn"
+                className="mb-3 ml-1 rounded-lg px-2 py-1 text-xs text-[hsl(var(--fg-muted))]"
+              >
+                ← 全部分组
+              </button>
+              <div className={grid}>
+                {list.map((w) => renderCover(w, () => navigate(`/m/work/${w.id}`)))}
+              </div>
+            </>
+          );
+        })()}
+
+      {/* 书架总览：分组组合封面 + 未分类平铺 */}
+      {activeTag === null && works !== null && (
+        <>
+          <div className={`${grid} mb-2`}>
+            {allTags
+              .filter((t) => !collapsed.includes(t))
+              .map((t) => {
+                const list = groups.find(([g]) => g === t)?.[1] ?? [];
+                return <ShelfGroupCard key={t} tag={t} books={list} onClick={() => setActiveTag(t)} />;
+              })}
+          </div>
+          {allTags.length > 0 && (
             <button
               type="button"
-              onClick={() => toggleCollapse(tag)}
-              data-testid={`shelf-group-${tag}`}
-              aria-expanded={!isCollapsed}
-              className="mb-1.5 flex w-full items-center gap-1.5 px-1 text-left"
+              onClick={() => setCollapsed(collapsed.length > 0 ? [] : allTags)}
+              data-testid="toggle-groups-btn"
+              className="mb-2 ml-1 text-[11px] text-[hsl(var(--fg-muted))]"
             >
-              <span className="m-serif text-xs tracking-widest text-[hsl(var(--fg-muted))]">
-                ◈ {tag} · {ws.length} 本
-              </span>
-              <span className="text-[10px] text-[hsl(var(--fg-muted))]">{isCollapsed ? '▸' : '▾'}</span>
+              {collapsed.length > 0 ? '展开全部分组' : '收起全部分组（只看未分类）'}
             </button>
-            {!isCollapsed && (
-              <div className="m-rise flex flex-col gap-2.5">
-                {ws.map((w) => {
-                  const checked = selected.has(w.id);
-                  const card = (
-                    <div className="m-book-card flex min-w-0 flex-1 items-center gap-3 px-4 py-3">
-                      <div className="min-w-0 flex-1 pl-1.5">
-                        <p className="m-serif truncate text-[15px] font-medium">{w.title}</p>
-                        <p className="mt-0.5 text-xs text-[hsl(var(--fg-muted))]">
-                          {w.stats?.chapterCount ?? 0} 章 · {w.stats?.charCount ?? 0} 字
-                          {w.mode === 'chat' && ' · 对话'}
-                        </p>
-                        {(w.stats?.publishedChapterCount ?? 0) > 0 && (
-                          <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
-                            已上架 {w.stats?.publishedChapterCount} 章 · 点开可继续写/重roll
-                          </p>
-                        )}
-                      </div>
-                      {managing ? (
-                        <span
-                          data-testid={`pick-${w.id}`}
-                          aria-checked={checked}
-                          role="checkbox"
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${
-                            checked ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))] text-white' : 'border-[hsl(var(--border-soft))]'
-                          }`}
-                        >
-                          {checked ? '✓' : ''}
-                        </span>
-                      ) : (
-                        <span className="m-serif text-xs text-[hsl(var(--fg-muted))]">›</span>
-                      )}
-                    </div>
-                  );
-                  if (managing) {
-                    return (
-                      <button key={w.id} type="button" onClick={() => toggleSelect(w.id)} className="flex w-full text-left" data-testid={`shelf-item-${w.id}`}>
-                        {card}
-                      </button>
-                    );
-                  }
-                  return (
-                    <Link key={w.id} to={`/m/work/${w.id}`} className="flex" data-testid={`shelf-item-${w.id}`}>
-                      {card}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        );
-      })}
+          )}
+          {uncategorized.length > 0 && (
+            <>
+              {allTags.length > 0 && (
+                <h2 className="m-serif mb-2 px-1 text-xs tracking-widest text-[hsl(var(--fg-muted))]">◈ 未分类 · {uncategorized.length} 本</h2>
+              )}
+              <div className={grid}>{uncategorized.map((w) => renderCover(w, () => navigate(`/m/work/${w.id}`)))}</div>
+            </>
+          )}
+        </>
+      )}
 
       {/* 管理模式底部操作条（微信读书式：多选 → 移动到分组） */}
       {managing && selected.size > 0 && (

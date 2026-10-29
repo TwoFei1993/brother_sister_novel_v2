@@ -120,7 +120,7 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
     void persist(next);
   }
 
-  /** 🔍 扫描全部章节正文，检出未配声的说话人 */
+  /** 🔍 全量扫描章节正文：已配声的角色也重新识别（AI 归并变体、修正错名），确认后整表重建 */
   async function scanCharacters(): Promise<void> {
     if (scanning) return;
     setScanning(true);
@@ -134,10 +134,10 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
           if (t) paras.push(t);
         }
       }
-      const known = new Set([...names, NARRATOR_VOICE_KEY]);
-      const found = scanSpeakers(paras, known);
+      // 全量模式：known 为空——已配声角色同样重扫，AI 归并后整表更新（修错名、清历史变体）
+      const found = scanSpeakers(paras, new Set());
       if (found.length === 0) {
-        setError('正文中没有发现未配声的新角色（对白需用「名字：」开头才会被识别）');
+        setError('正文中没有发现对白角色（对白需用「名字：」开头才会被识别）');
         return;
       }
       // AI 归并同一角色的不同写法、剔除非角色名（「镇国公坐到床边/低声道」都归镇国公）；失败降级正则结果
@@ -161,16 +161,22 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
     }
   }
 
-  /** 为勾选的识别结果配声（性别启发式池轮替）并入 cast */
+  /**
+   * 按勾选的识别结果**整表重建**配音表（反馈：识别应为全量更新）：
+   * - 精确同名的角色继承现有音色（「镇国公」保留已调好的声）
+   * - 新角色按性别启发式配声；旧表里未检出的历史条目（错名/变体）一并清除
+   */
   function assignDetected(): void {
     const pickedNames = (detected ?? []).filter((d) => detectedPick[d.name]).map((d) => d.name);
     if (pickedNames.length === 0) return;
-    const auto = autoCastVoices(pickedNames);
-    const next = { ...cast };
-    for (const { name, voice } of auto) next[name] = voice;
-    if (!next[NARRATOR_VOICE_KEY]) next[NARRATOR_VOICE_KEY] = NARRATOR_CAST_ID;
+    const needAssign = pickedNames.filter((n) => !cast[n]);
+    const auto = autoCastVoices(needAssign);
+    const next: Record<string, string> = { [NARRATOR_VOICE_KEY]: cast[NARRATOR_VOICE_KEY] || NARRATOR_CAST_ID };
+    for (const n of pickedNames) {
+      next[n] = cast[n] || auto.find((a) => a.name === n)?.voice || NARRATOR_CAST_ID;
+    }
     setCast(next);
-    setNames((ns) => [...ns, ...pickedNames.filter((n) => !ns.includes(n))]);
+    setNames(pickedNames);
     setDetected(null);
     void persist(next);
   }
@@ -239,7 +245,7 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
           data-testid="cast-scan-btn"
           className="h-8 flex-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
         >
-          {scanning ? '扫描中…' : '🔍 识别正文角色'}
+          {scanning ? '扫描中…' : '🔍 识别正文角色（全量）'}
         </button>
         <button
           type="button"
@@ -253,11 +259,11 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
       </div>
       {error && <p className="mb-2 rounded-lg bg-[hsl(var(--danger))]/10 p-2 text-xs text-[hsl(var(--danger))]">{error}</p>}
 
-      {/* 🔍 识别结果：勾选未配声角色 → 一键配声 */}
+      {/* 🔍 识别结果（全量）：确认后整表重建——同名继承现声、新角色配新声、错名/变体清除 */}
       {detected !== null && detected.length > 0 && (
         <div className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5" data-testid="cast-detected">
           <p className="mb-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-            正文检出 {detected.length} 个未配声角色（按出现次数）
+            正文识别出 {detected.length} 个角色（AI 已归并变体）；确认后配音表整体更新
           </p>
           <div className="mb-2 flex flex-wrap gap-1.5">
             {detected.map((d) => (
@@ -269,6 +275,7 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
                   data-testid={`detect-pick-${d.name}`}
                 />
                 {d.name} ×{d.count}
+                {cast[d.name] && <span className="opacity-70">现用{voiceName(cast[d.name])}</span>}
               </label>
             ))}
           </div>
@@ -279,10 +286,10 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
               data-testid="detect-assign-btn"
               className="h-8 flex-1 rounded-lg bg-amber-500 text-xs font-medium text-white"
             >
-              为所选分配声音
+              按所选更新配音表
             </button>
             <button type="button" onClick={() => setDetected(null)} className="h-8 flex-1 rounded-lg border border-amber-500/40 text-xs text-amber-700 dark:text-amber-400">
-              忽略
+              取消
             </button>
           </div>
         </div>
