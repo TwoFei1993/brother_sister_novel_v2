@@ -89,6 +89,7 @@ function workFixture(): Work {
 function genStub(): UseGenerateResult {
   return {
     streaming: false,
+  streamingWorkId: null,
     buffer: '',
     thinkingBuffer: '',
     error: null,

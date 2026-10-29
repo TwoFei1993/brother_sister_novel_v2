@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { WandSparkles } from 'lucide-react';
 
 import { createWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
+import { useGenerationStore } from '../../../stores/generation';
 import { groupByTag } from '../read/ReadShelf';
 import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
 
@@ -199,6 +200,9 @@ export default function MobileBookshelf() {
   const [busy, setBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  /** 全局单槽生成状态：书架上标出哪本书正在写（反馈：显示方式） */
+  const streamingWorkId = useGenerationStore((s) => (s.streaming ? s.workId : null));
+
   function reload(): void {
     listWorks()
       .then((list) => setWorks([...list].sort((a, b) => b.updatedAt - a.updatedAt)))
@@ -233,6 +237,8 @@ export default function MobileBookshelf() {
   /** 封面卡通用渲染：管理模式=多选勾选；否则导航/进入分组 */
   function renderCover(w: WorkSummary, onOpen: () => void): ReactNode {
     const badges = [
+      // 生成中的书在封面下方标注（书架可见哪本在写）
+      ...(streamingWorkId === w.id ? ['✍️ 生成中…'] : []),
       `${w.stats?.chapterCount ?? 0} 章`,
       ...((w.stats?.publishedChapterCount ?? 0) > 0 ? [`已上架 ${w.stats?.publishedChapterCount} 章`] : []),
       ...(w.mode === 'chat' ? ['对话'] : []),

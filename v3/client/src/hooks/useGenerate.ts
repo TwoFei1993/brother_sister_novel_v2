@@ -64,6 +64,8 @@ interface RunOptions {
 
 export interface UseGenerateResult {
   streaming: boolean;
+  /** 正在生成的作品 id（null=无生成；全局单槽，跨书访问时 UI 据此区分本书/别书） */
+  streamingWorkId: string | null;
   buffer: string;
   /** 思考流原文（推理模型💭；移动端 DeepSeek 式折叠块消费） */
   thinkingBuffer: string;
@@ -339,6 +341,8 @@ export function useGenerate(): UseGenerateResult {
 
   return {
     streaming: useGenerationStore((s) => s.streaming),
+    /** 正在生成的作品 id（全局单槽：跨书访问时 UI 据此区分「本书在写」与「别书在写」） */
+    streamingWorkId: useGenerationStore((s) => s.workId),
     buffer: useGenerationStore((s) => s.buffer),
     thinkingBuffer: useGenerationStore((s) => s.thinkingBuffer),
     error: useGenerationStore((s) => s.error),

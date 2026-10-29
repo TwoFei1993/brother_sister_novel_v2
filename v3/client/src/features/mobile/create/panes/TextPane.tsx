@@ -46,6 +46,9 @@ export function TextPane({
   const [sharedImport, setSharedImport] = useState(false);
   /** ✨ AI 润色进行中（生成新版本） */
   const [polishing, setPolishing] = useState(false);
+  /** 生成状态是全局单槽：区分「本书在写」（显示流式块）与「别书在写」（本书锁生成并提示） */
+  const myStreaming = gen.streaming && gen.streamingWorkId === work.id;
+  const otherStreaming = gen.streaming && gen.streamingWorkId !== null && gen.streamingWorkId !== work.id;
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
 
@@ -64,7 +67,7 @@ export function TextPane({
   }
 
   async function rerollCurrent(): Promise<void> {
-    if (!current || gen.streaming) return;
+    if (!current || myStreaming || otherStreaming) return;
     setRerollTarget(current);
     const msg = await gen.swipeRegenerate(work, useWorkStore.getState().messages, current);
     setRerollTarget(null);
@@ -96,7 +99,7 @@ export function TextPane({
   }
 
   async function generate(): Promise<void> {
-    if (gen.streaming) return;
+    if (myStreaming || otherStreaming) return;
     const d = directive.trim();
     setDirective('');
     // 空指令=自动续写（同 ⚡连写语义：仅写作要求；绑定了章节大纲时本章要点仍自动注入）
@@ -105,7 +108,7 @@ export function TextPane({
 
   /** ✍️ 手写第一章（自己写/粘贴正文，写完可 AI 润色）：建空章节并直接进入编辑态 */
   async function createHandwriteChapter(): Promise<void> {
-    if (gen.streaming) return;
+    if (myStreaming || otherStreaming) return;
     const msg = buildChapterMessage({ content: '', title: '', chapterIndex: 1, promptTokens: 0, generationMs: 0 });
     try {
       await upsertMessage(work.id, msg);
@@ -120,7 +123,7 @@ export function TextPane({
 
   /** ✨ AI 润色当前章：保持情节/人物/事实不变提升文笔，生成新版本（旧版本保留） */
   async function polishCurrent(): Promise<void> {
-    if (!current || polishing || gen.streaming) return;
+    if (!current || polishing || myStreaming || otherStreaming) return;
     if (!current.content.trim()) return;
     if (!confirm('AI 润色：保持情节与人物不变，提升文笔与节奏，生成新版本（当前版本保留）。继续？')) return;
     setPolishing(true);
@@ -160,12 +163,19 @@ export function TextPane({
     <div className="pb-4">
       <ChapterChips chapters={chapters} currentId={current?.id} onPick={onPick} />
 
-      {gen.error && (
+      {gen.error && !otherStreaming && (
         <div className="mx-4 mb-3 flex items-center gap-2 rounded-xl border border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger))]/10 px-3 py-2 text-xs text-[hsl(var(--danger))]">
           <span className="min-w-0 flex-1">{gen.error.message}</span>
           <button type="button" onClick={gen.clearError} className="shrink-0 underline">
             知道了
           </button>
+        </div>
+      )}
+
+      {/* 别书在写：全局单槽，本书生成入口锁定并提示 */}
+      {otherStreaming && (
+        <div className="mx-4 mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="other-streaming-tip">
+          ✍️ 另一本书正在生成中——完成后即可回来写这本（同一时刻支持一本书生成）
         </div>
       )}
 
@@ -175,7 +185,7 @@ export function TextPane({
           <h2 className="truncate text-sm font-semibold">
             {chapterTitle(current.chapter.index, current.chapter.title)}
           </h2>
-          {!editing && !gen.streaming && (
+          {!editing && !myStreaming && (
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
@@ -243,8 +253,8 @@ export function TextPane({
         </div>
       )}
 
-      {/* 听书条：按作品配音表分声朗读当前章（音色在「资料」分区配置） */}
-      {current && !editing && !gen.streaming && <MobileTtsBar chapter={current} voiceMap={work.voiceMap} />}
+      {/* 听书条：按作品配音表分声朗读当前章（音色在「资料」分区配置）；本书生成中暂停入口 */}
+      {current && !editing && !myStreaming && <MobileTtsBar chapter={current} voiceMap={work.voiceMap} />}
 
       {/* ✨ AI 润色进行中（单行居中状态） */}
       {polishing && (
@@ -254,8 +264,8 @@ export function TextPane({
         </p>
       )}
 
-      {/* 流式生成中（DeepSeek 式）：💭思考可折叠 + 正文接着文章位置内联续写；状态行固定单行居中 */}
-      {gen.streaming && (
+      {/* 流式生成中（仅本书）：💭思考可折叠 + 正文接着文章位置内联续写；状态行固定单行居中 */}
+      {myStreaming && (
         <div className="mx-4 mt-3" data-testid="mobile-streaming">
           {gen.thinkingBuffer && (
             <ThinkingInline text={gen.thinkingBuffer} done={Boolean(gen.buffer)} startCollapsed={Boolean(rerollTarget)} />
@@ -291,7 +301,7 @@ export function TextPane({
       />
 
       {/* ✍️ 手写第一章（自己写/粘贴，写完可 AI 润色） */}
-      {chapters.length === 0 && !gen.streaming && (
+      {chapters.length === 0 && !myStreaming && (
         <button
           type="button"
           onClick={() => void createHandwriteChapter()}
@@ -307,7 +317,7 @@ export function TextPane({
         <button
           type="button"
           onClick={() => void gen.runBatch(work, directive.trim() || '自由发挥第一章').then(() => setDirective(''))}
-          disabled={gen.streaming || Boolean(gen.batch)}
+          disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
           data-testid="mobile-batch-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
@@ -317,7 +327,7 @@ export function TextPane({
         <button
           type="button"
           onClick={() => void gen.runByOutline(work, useWorkStore.getState().messages)}
-          disabled={gen.streaming || Boolean(gen.batch)}
+          disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
           data-testid="mobile-outline-run-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
@@ -333,14 +343,14 @@ export function TextPane({
           onChange={(e) => setDirective(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && void generate()}
           placeholder={chapters.length === 0 ? '第一章剧情指令（留空=自由发挥）' : `第${chapters.length + 1}章指令（留空=自动续写）`}
-          disabled={gen.streaming}
+          disabled={myStreaming || otherStreaming}
           data-testid="mobile-directive-input"
           className="h-11 min-w-0 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))] disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => void generate()}
-          disabled={gen.streaming}
+          disabled={myStreaming || otherStreaming}
           data-testid="mobile-generate-btn"
           className="h-11 shrink-0 rounded-xl bg-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
         >

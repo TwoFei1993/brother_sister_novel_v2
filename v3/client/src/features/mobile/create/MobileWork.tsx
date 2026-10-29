@@ -80,7 +80,7 @@ export default function MobileWork() {
         >
           ⇪ 上架
         </button>
-        {gen.streaming && (
+        {gen.streaming && gen.streamingWorkId === id && (
           <button
             type="button"
             onClick={gen.stop}
