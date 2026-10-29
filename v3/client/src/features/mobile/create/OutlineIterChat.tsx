@@ -1,12 +1,14 @@
 /**
  * 对话大纲·迭代聊天（P2.3，移动端大纲分区）：聊某章怎么改 → 确认 → 生成新版本
  *
+ * - 预读取书籍资料（反馈②）：挂载即拉绑定角色卡人设/世界书要点/作品设定注入提示词——
+ *   每本书的大纲对话都是独立会话且「读过这本书」；顶部展示已读取摘要
  * - 关键词+按钮双通道（共识 D5）：AI 提示关键词时直接给【确认生成新版本】按钮（点击=发送关键词，同代码路径）
  * - 新版本 = 基于锁定章当前激活版本全文 + 对话累积要点重写，appendSwipe 追加（旧版本不动，自动命名 vN）
  * - 会话态内存级（MVP 不持久化聊天历史；生成的新版本落库为章节版本资产）
  */
-import { useMemo, useRef, useState } from 'react';
-import { Check, Target } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpenCheck, Check, Target } from 'lucide-react';
 
 import { apiFetch } from '../../../api/client';
 import type { GenerateMessage } from '../../../api/llm';
@@ -62,6 +64,74 @@ export default function OutlineIterChat({
   );
   const locked = chapters.find(({ msg }) => msg.chapter!.index === lockedIndex) ?? null;
 
+  // —— 预读取书籍资料（反馈②）：绑定角色卡人设 + 世界书要点 + 作品设定 → 注入提示词 ——
+  const [bookBrief, setBookBrief] = useState<string>('');
+  const [briefStat, setBriefStat] = useState<string>('读取书籍资料中…');
+  useEffect(() => {
+    let alive = true;
+    const clip = (v: unknown, n: number): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
+    (async () => {
+      const parts: string[] = [];
+      const s = work.settings;
+      const settingBits = [
+        s.subGenre || s.genre,
+        s.coreConflict ? `核心矛盾：${clip(s.coreConflict, 80)}` : '',
+        s.powerSystem ? `力量体系：${clip(s.powerSystem, 60)}` : '',
+      ].filter(Boolean);
+      if (settingBits.length > 0) parts.push(`设定：${settingBits.join('；')}`);
+      let charN = 0;
+      let wbN = 0;
+      await Promise.all([
+        (async () => {
+          for (const cid of work.characterIds.slice(0, 12)) {
+            try {
+              const a = (await apiFetch<{ card?: { data?: Record<string, unknown> } }>(`/api/characters/${cid}`)) as {
+                card?: { data?: Record<string, unknown> };
+                name?: string;
+              };
+              const d = a.card?.data ?? {};
+              const bits = [clip(d.description, 150), clip(d.personality, 80)].filter(Boolean);
+              if (bits.length > 0) {
+                charN += 1;
+                parts.push(`角色「${clip(d.name, 20) || a.name || cid.slice(0, 6)}」(${clip(d.role, 20) || '角色'})：${bits.join('；')}`);
+              }
+            } catch {
+              /* 单卡失败跳过 */
+            }
+          }
+        })(),
+        (async () => {
+          for (const wid of work.worldbookIds.slice(0, 6)) {
+            try {
+              const w = (await apiFetch<{ raw?: { entries?: Record<string, { comment?: unknown; content?: unknown }> } }>(`/api/worldbooks/${wid}`)) as {
+                name?: string;
+                raw?: { entries?: Record<string, { comment?: unknown; content?: unknown }> };
+              };
+              const entries = Object.values(w.raw?.entries ?? {});
+              const head = entries
+                .map((e) => clip(e.comment, 40) || clip(e.content, 40))
+                .filter(Boolean)
+                .slice(0, 6)
+                .join('；');
+              if (head) {
+                wbN += 1;
+                parts.push(`世界书《${clip(w.name, 24) || wid.slice(0, 6)}》：${head}`);
+              }
+            } catch {
+              /* 单本失败跳过 */
+            }
+          }
+        })(),
+      ]);
+      if (!alive) return;
+      setBookBrief(parts.join('\n'));
+      setBriefStat(charN + wbN > 0 ? `已读取资料：角色 ${charN} · 世界书 ${wbN}` : '未绑定角色卡/世界书（可先在「资料」分区选用）');
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [work]);
+
   function scrollBottom(): void {
     requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }));
   }
@@ -96,6 +166,7 @@ export default function OutlineIterChat({
           content: active?.content ?? '',
         },
         brief,
+        bookBrief,
       }),
     );
     if (!text) {
@@ -142,7 +213,7 @@ export default function OutlineIterChat({
 
     setBusy(true);
     try {
-      const raw = await callLlm(buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text }));
+      const raw = await callLlm(buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text, bookBrief }));
       const parsed = parseIterReply(raw);
       const reply = parsed?.reply ?? raw; // 解析失败：原文当回复显示
       if (parsed?.chapterIndex != null) setLockedIndex(parsed.chapterIndex);
@@ -161,8 +232,12 @@ export default function OutlineIterChat({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="outline-iter-chat">
-      {/* 锁定章提示 */}
+      {/* 锁定章提示 + 预读取摘要（反馈②：先读这本书的资料再聊） */}
       <div className="shrink-0 px-4 pt-3">
+        <p className="mb-1 flex items-center gap-1.5 px-3 text-[11px] text-[hsl(var(--fg-muted))]" data-testid="iter-brief-stat">
+          <BookOpenCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {briefStat}
+        </p>
         {locked ? (
           <p className="rounded-lg bg-[hsl(var(--accent))]/10 px-3 py-1.5 text-xs text-[hsl(var(--accent))]" data-testid="iter-locked">
             <Target className="inline h-3.5 w-3.5 align-[-2px]" aria-hidden /> 目标章：第{locked.msg.chapter!.index}章 {locked.msg.chapter!.title || '未命名'}（点此更换）

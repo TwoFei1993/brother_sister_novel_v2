@@ -93,6 +93,7 @@ export default function PlannerPage() {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
     setError(null);
+    if (!opts.isReroll) setInput(''); // 反馈⑤：发送后清空输入框（重roll 不经输入框，无影响）
 
     // 关键：本次消息必须进 LLM 历史（setSessions 是异步的，不能用旧值拼）
     const base = opts.isReroll ? turns.slice(0, -2) : turns;
@@ -166,18 +167,23 @@ export default function PlannerPage() {
         });
 
       // 推理模型可能把预算吃在思考上（JSON 半截/空文本）→ 加倍预算重试一次（ed735c0 同模式）
-      let result = await callPlanner(8000);
+      let result = await callPlanner(10000);
       let text = result.text;
       let parsed = parsePlannerReply(text);
       if (!parsed) {
         setStreamingText(null); // 清首轮打字机，重试重新流式
-        result = await callPlanner(16000);
+        result = await callPlanner(24000);
         text = result.text;
         parsed = parsePlannerReply(text);
       }
       if (!parsed) {
-        // 无 JSON：当纯讨论展示（think 已在 parse 内剥离）
-        updateActive((s) => ({ ...s, turns: [...s.turns, { role: 'assistant', text: text.trim() || '（空回复）' }] }));
+        // 解析失败分两类：纯讨论照常展示；疑似大纲半成品（流式中断/输出截断）→ 中断卡片
+        const clean = text.trim();
+        const outlineLike = /"chapters"|"index"\s*:|\\"index\\\\"|"plot"/.test(clean) || clean.length > 1200;
+        const turn = outlineLike
+          ? { role: 'assistant' as const, text: clean, interrupted: true }
+          : { role: 'assistant' as const, text: clean || '（空回复）' };
+        updateActive((s) => ({ ...s, turns: [...s.turns, turn] }));
         return;
       }
       // 思考显示兜底：流式 thinking 帧缺失的模型，从正文里提取 <think> 块为可折叠思考
@@ -339,6 +345,23 @@ export default function PlannerPage() {
             )}
             {turns.map((t, i) => (
               <div key={i} className={`m-pop ${t.role === 'user' ? 'flex justify-end' : 'flex justify-start'}`}>
+                {t.interrupted ? (
+                  <div
+                    className="w-full rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
+                    data-testid="planner-interrupted"
+                  >
+                    <p className="font-medium text-amber-700 dark:text-amber-400">📋 大纲内容生成中断（流式断开/输出过长）</p>
+                    <p className="mt-1 text-xs leading-5 text-[hsl(var(--fg-muted))]">
+                      已生成的部分保留在下方（点开查看原始内容）。点输入框发送「继续」，我会从断点接着写。
+                    </p>
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-[hsl(var(--fg-muted))]">查看已生成的原始内容</summary>
+                      <pre className="mt-1.5 max-h-48 overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-[hsl(var(--bg))] p-2 text-[11px] leading-4 text-[hsl(var(--fg-muted))]">
+                        {t.text.slice(0, 4000)}
+                      </pre>
+                    </details>
+                  </div>
+                ) : (
                 <div
                   data-testid={`planner-turn-${t.role}`}
                   className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
@@ -375,6 +398,7 @@ export default function PlannerPage() {
                     )
                   )}
                 </div>
+                )}
               </div>
             ))}
 

@@ -40,18 +40,21 @@ const ITER_SYSTEM = `你是小说《BOOK_TITLE》的创作助手（对话大纲�
 3. reply 里需要请作者确认时，必须原文写出这句话：` + ITER_KEYWORD + `。
 只输出严格 JSON（不要代码块不要解释）：{"reply":"给作者的话","chapterIndex":N或null,"rewriteBrief":"要点或null"}`;
 
-/** 迭代对话消息组装：目录（章号+标题+摘要）让模型知道书写到哪了 */
+/** 迭代对话消息组装：目录（章号+标题+摘要）+ 预读取的书籍资料（角色卡/世界书）让模型真正「读过这本书」 */
 export function buildIterChatMessages(input: {
   workTitle: string;
   chapters: readonly IterChapterRef[];
   history: readonly { role: 'user' | 'assistant'; content: string }[];
   userText: string;
+  /** 预读取的书籍资料（角色卡人设/世界书要点/设定），缺省时不注入 */
+  bookBrief?: string;
 }): GenerateMessage[] {
   const catalog = input.chapters
     .map((c) => `第${c.index}章《${c.title}》：${c.excerpt.slice(0, 200)}…`)
     .join('\n');
+  const brief = input.bookBrief ? `\n\n【本书资料（已预读取）】\n${input.bookBrief}` : '';
   return [
-    { role: 'system', content: ITER_SYSTEM.replaceAll('BOOK_TITLE', input.workTitle) + `\n\n【当前章节目录】\n${catalog || '（暂无章节）'}` },
+    { role: 'system', content: ITER_SYSTEM.replaceAll('BOOK_TITLE', input.workTitle) + brief + `\n\n【当前章节目录】\n${catalog || '（暂无章节）'}` },
     ...input.history.slice(-12).map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: input.userText },
   ];
@@ -74,19 +77,24 @@ export function parseIterReply(text: string): IterReply | null {
   }
 }
 
-/** 新版本重写消息：保留情节骨架 + 按要点重写 + 全文输出（不输出解释） */
+/** 新版本重写消息：保留情节骨架 + 按要点重写 + 全文输出（不输出解释）；bookBrief 让重写贴合全书设定 */
 export function buildRewriteMessages(input: {
   workTitle: string;
   chapter: { index: number; title: string; content: string };
   brief: string;
+  /** 预读取的书籍资料（角色卡/世界书），缺省时不注入 */
+  bookBrief?: string;
 }): GenerateMessage[] {
+  const brief = input.bookBrief ? `\n\n【本书资料（已预读取）】\n${input.bookBrief}` : '';
   return [
     {
       role: 'system',
       content:
         '你是资深小说改稿写手。根据「修改要点」重写整章：保留原文情节骨架与关键转折，按要点调整/增删场景；' +
+        '人物言行必须符合「本书资料」中的角色设定；' +
         '字数硬性要求：不少于 2500 字（与原文相当或更长），写足内容再收尾，禁止提前收束；' +
-        '只输出重写后的正文全文，禁止任何解释、标题或元信息；全程使用简体中文。',
+        '只输出重写后的正文全文，禁止任何解释、标题或元信息；全程使用简体中文。' +
+        brief,
     },
     {
       role: 'user',

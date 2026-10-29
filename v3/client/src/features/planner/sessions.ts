@@ -17,6 +17,8 @@ export interface PlannerTurn {
   text: string;
   questions?: PlannerQuestion[];
   failed?: boolean;
+  /** 大纲流被中断的半成品（反馈⑥）：折叠展示原始内容 + 引导「继续」，不直接倾倒原始 JSON */
+  interrupted?: boolean;
 }
 
 export interface PlannerSession {
