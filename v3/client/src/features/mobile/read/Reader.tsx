@@ -305,7 +305,7 @@ export default function Reader() {
       {/* 操作引导（首次无记录时） */}
       {hintOpen && !resumeTip && (
         <div
-          className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-center text-xs leading-5 text-white"
+          className="m-fade fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-center text-xs leading-5 text-white"
           data-testid="reader-hint"
         >
           点正文任意位置即从该处开始听书 · 右下角 ☰ 呼出菜单 · 选中文字可划线评论
@@ -325,7 +325,7 @@ export default function Reader() {
 
       {/* 听书提示 toast（合成失败跳段/停止等非阻塞消息） */}
       {toast && !resumeTip && (
-        <div className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs text-white" data-testid="reader-tts-toast">
+        <div className="m-fade fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs text-white" data-testid="reader-tts-toast">
           {toast}
         </div>
       )}

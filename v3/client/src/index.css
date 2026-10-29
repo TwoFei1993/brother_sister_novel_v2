@@ -517,6 +517,66 @@ a,
 }
 .m-rise { animation: m-rise 0.28s ease both; }
 
+/* ---------- 动效体系（反馈：app 端平滑动画；曲线柔和收尾，尊重系统减弱动效） ---------- */
+:root {
+  --m-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 遮罩/整页淡入 */
+@keyframes m-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.m-fade { animation: m-fade 0.22s ease both; }
+
+/* 底部弹层上滑（sheet） */
+@keyframes m-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.m-sheet { animation: m-sheet-up 0.32s var(--m-ease) both; }
+
+/* 小卡浮现（居中对话框/气泡） */
+@keyframes m-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.m-pop { animation: m-pop 0.24s var(--m-ease) both; }
+
+/* 列表/网格子项依次入场（仅前 12 个加延迟，长列表不加） */
+.m-stagger > * { animation: m-rise 0.3s var(--m-ease) both; }
+.m-stagger > *:nth-child(2) { animation-delay: 0.03s; }
+.m-stagger > *:nth-child(3) { animation-delay: 0.06s; }
+.m-stagger > *:nth-child(4) { animation-delay: 0.09s; }
+.m-stagger > *:nth-child(5) { animation-delay: 0.12s; }
+.m-stagger > *:nth-child(6) { animation-delay: 0.15s; }
+.m-stagger > *:nth-child(7) { animation-delay: 0.18s; }
+.m-stagger > *:nth-child(8) { animation-delay: 0.21s; }
+.m-stagger > *:nth-child(9) { animation-delay: 0.24s; }
+.m-stagger > *:nth-child(10) { animation-delay: 0.27s; }
+.m-stagger > *:nth-child(11) { animation-delay: 0.3s; }
+.m-stagger > *:nth-child(12) { animation-delay: 0.33s; }
+
+/* 统一按压反馈（大按钮/封面卡） */
+.m-press { transition: transform 0.12s ease; }
+.m-press:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .m-rise,
+  .m-fade,
+  .m-sheet,
+  .m-pop,
+  .m-stagger > * {
+    animation: none;
+  }
+  .m-press {
+    transition: none;
+  }
+  .m-press:active {
+    transform: none;
+  }
+}
+
 /* 阅读器正文：衬线 + 舒展段距 + 章节眉花线 */
 .m-reader-body p { font-family: var(--m-serif); }
 .m-reader-ornament {

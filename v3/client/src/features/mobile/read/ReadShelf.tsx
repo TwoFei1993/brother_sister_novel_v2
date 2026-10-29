@@ -39,9 +39,9 @@ function MoveSheet({
 }) {
   const [newTag, setNewTag] = useState('');
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
+    <div className="m-fade fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
       <div
-        className="safe-bottom max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4"
+        className="m-sheet safe-bottom max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4"
         onClick={(e) => e.stopPropagation()}
         data-testid="read-move-sheet"
       >
@@ -154,7 +154,7 @@ export default function ReadShelf() {
     );
   }
 
-  const grid = 'grid grid-cols-3 gap-x-3 gap-y-4 px-4';
+  const grid = 'm-stagger grid grid-cols-3 gap-x-3 gap-y-4 px-4';
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-4 pt-4">

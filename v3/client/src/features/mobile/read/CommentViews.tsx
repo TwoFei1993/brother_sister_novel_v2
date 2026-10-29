@@ -60,7 +60,7 @@ export function CommentSheet({
   return (
     <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={onDismiss}>
       <div
-        className="w-full rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
+        className="m-sheet w-full rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
         onClick={(e) => e.stopPropagation()}
         data-testid="comment-sheet"
       >

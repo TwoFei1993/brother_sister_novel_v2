@@ -318,9 +318,9 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
 
       {/* 换声弹层（全量音色：Edge 免费 + MiniMax 全量） */}
       {picking && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setPicking(null)}>
+        <div className="m-fade fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setPicking(null)}>
           <div
-            className="max-h-[75vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
+            className="m-sheet max-h-[75vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
             onClick={(e) => e.stopPropagation()}
             data-testid="cast-sheet"
           >

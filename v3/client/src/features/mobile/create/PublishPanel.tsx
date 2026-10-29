@@ -76,7 +76,7 @@ export default function PublishPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]" data-testid="publish-panel">
+    <div className="m-fade fixed inset-0 z-50 flex flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]" data-testid="publish-panel">
       {/* 顶栏：返回 / 标题 / 改动计数 */}
       <header className="safe-top flex shrink-0 items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2">
         <button

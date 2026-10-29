@@ -338,7 +338,7 @@ export default function PlannerPage() {
               </div>
             )}
             {turns.map((t, i) => (
-              <div key={i} className={t.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+              <div key={i} className={`m-pop ${t.role === 'user' ? 'flex justify-end' : 'flex justify-start'}`}>
                 <div
                   data-testid={`planner-turn-${t.role}`}
                   className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${

@@ -108,7 +108,7 @@ export default function MobileWork() {
 
       {!loading && !loadError && work && (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div key={pane} className="m-rise min-h-0 flex-1 overflow-y-auto">
             {pane === 'text' && (
               <TextPane work={work} chapters={chapters} current={current} gen={gen} onPick={setChapterId} onDone={done} />
             )}

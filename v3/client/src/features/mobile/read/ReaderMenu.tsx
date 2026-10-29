@@ -64,7 +64,7 @@ export default function ReaderMenu({
   const paraMode = tts !== undefined && tts.paraTotal > 0;
   return (
     <div
-      className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]/95 px-4 pb-3 pt-3 backdrop-blur-sm"
+      className="m-sheet safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]/95 px-4 pb-3 pt-3 backdrop-blur-sm"
       data-testid="reader-menu"
     >
       <div className="mb-2 flex items-center justify-between text-xs text-[hsl(var(--fg-muted))]" data-testid="reader-progress">

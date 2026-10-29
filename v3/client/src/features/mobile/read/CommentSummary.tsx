@@ -27,7 +27,7 @@ export default function CommentSummary({
   const byChapter = new Map(chapters.map((c) => [c.msg.id, c]));
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]" data-testid="comment-summary">
+    <div className="m-fade fixed inset-0 z-50 flex flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]" data-testid="comment-summary">
       <header className="safe-top flex shrink-0 items-center gap-2 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2">
         <button type="button" onClick={onClose} className="flex h-9 min-w-9 items-center justify-center rounded-lg" aria-label="关闭总结">
           <X className="h-5 w-5" aria-hidden />

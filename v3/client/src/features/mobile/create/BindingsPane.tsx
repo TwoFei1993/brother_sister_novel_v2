@@ -149,9 +149,9 @@ export default function BindingsPane({
 
       {/* 选用弹层：按归属书二级分组，点选=绑定 */}
       {picking && refs && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setPicking(null)}>
+        <div className="m-fade fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setPicking(null)}>
           <div
-            className="max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
+            className="m-sheet max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
             onClick={(e) => e.stopPropagation()}
             data-testid={`bind-picker-${picking}`}
           >
