@@ -19,7 +19,7 @@ import type { Comment, CommentType } from '@shared/comment';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
-import { useMobileTts } from '../useMobileTts';
+import { playerSetSpeed, setPlayerErrorSink, useBookPlayer, type PlayerBook } from '../../../lib/tts/tts-player';
 import CatalogPanel from './CatalogPanel';
 import CommentSummary from './CommentSummary';
 import { CommentsSection, CommentSheet } from './CommentViews';
@@ -39,8 +39,6 @@ interface PublishedChapter {
 
 const COMMENT_TYPES: readonly CommentType[] = ['改错', '添加', '感悟'];
 
-/** 稳定的空段落数组（无章时喂给 useMobileTts，保持引用稳定避免误停） */
-const EMPTY_PARAS: readonly string[] = [];
 
 export default function Reader() {
   const { id } = useParams<{ id: string }>();
@@ -65,6 +63,11 @@ export default function Reader() {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 3000);
   }
+  // 全局听书引擎的失败提示接入本页 toast（引擎常驻，页面切换不中断播放）
+  useEffect(() => {
+    setPlayerErrorSink(notifyTts);
+    return () => setPlayerErrorSink(null);
+  }, []);
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
   function patchFont(patch: Partial<ReaderFont>): void {
@@ -97,8 +100,15 @@ export default function Reader() {
 
   const { chapterIdx, jumpTo, scrollPct, resumeTip, hintOpen } = useReaderProgress(id, chapters, articleRef);
   const chapter = chapters[chapterIdx] ?? null;
-  // 听书引擎：音色取作品配音表（旁白/角色分声），段落引用稳定、切章自动停止；失败跳段 toast 提示
-  const tts = useMobileTts(chapter?.paras ?? EMPTY_PARAS, work?.voiceMap, notifyTts);
+  // 听书引擎（全局）：音色取作品配音表（旁白/角色分声）；失败跳段 toast 提示；退出书页后台续播
+  const book: PlayerBook | null = useMemo(
+    () =>
+      chapter && id
+        ? { bookId: id, title: work?.title ?? '未命名', paras: chapter.paras, voiceMap: work?.voiceMap ?? {} }
+        : null,
+    [chapter, id, work?.title, work?.voiceMap],
+  );
+  const tts = useBookPlayer(book);
   const ttsIdx = tts.playingIdx;
   /** 当前章评论（版本不匹配的折叠为历史批注） */
   const chapterComments = useMemo(
@@ -107,30 +117,49 @@ export default function Reader() {
   );
   const activeComments = chapterComments.filter((c) => c.versionId === chapter?.version.id);
 
-  /** 点击行为：正文区域内（含段落间空白）= 从最近段落开始听书；区域外保留左右 1/3 翻章；选区优先划线 */
+  /** 点击点是否落在文字上（caret 命中文本节点）；段落间空白/页边返回 false */
+  function hitText(x: number, y: number): boolean {
+    const d = document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node } | null;
+    };
+    if (d.caretRangeFromPoint) {
+      const r = d.caretRangeFromPoint(x, y);
+      return !!r && r.startContainer.nodeType === Node.TEXT_NODE;
+    }
+    const pos = d.caretPositionFromPoint?.(x, y);
+    return !!pos && pos.offsetNode.nodeType === Node.TEXT_NODE;
+  }
+
+  /** 点击行为（反馈⑥防误点）：点文字=从该段开始听书；点段落间空白=呼出/收起菜单；区域外保留左右 1/3 翻章 */
   function handleReaderTap(e: React.MouseEvent<HTMLDivElement>): void {
     if (pending) return;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return; // 划线选区优先
     const article = articleRef.current;
     if (article && article.contains(e.target as Node)) {
-      const paras = Array.from(article.querySelectorAll<HTMLElement>('[data-para-index]'));
-      let best = -1;
-      let bestDist = Infinity;
-      for (const el of paras) {
-        const r = el.getBoundingClientRect();
-        const d = Math.abs(e.clientY - (r.top + r.height / 2));
-        if (d < bestDist) {
-          bestDist = d;
-          best = Number(el.dataset.paraIndex);
+      if (hitText(e.clientX, e.clientY)) {
+        const paras = Array.from(article.querySelectorAll<HTMLElement>('[data-para-index]'));
+        let best = -1;
+        let bestDist = Infinity;
+        for (const el of paras) {
+          const r = el.getBoundingClientRect();
+          const d = Math.abs(e.clientY - (r.top + r.height / 2));
+          if (d < bestDist) {
+            bestDist = d;
+            best = Number(el.dataset.paraIndex);
+          }
+        }
+        if (best >= 0) {
+          void tts.playFrom(best);
+          return;
         }
       }
-      if (best >= 0) {
-        void tts.playFrom(best);
-        return;
-      }
+      // 空白处：呼出/收起菜单（替代旧「中央呼出」习惯）
+      setMenuOpen((v) => !v);
+      return;
     }
-    // 非正文区域：左右 1/3 翻章（菜单由右下角浮动按钮承载）
+    // 非正文区域：左右 1/3 翻章
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     if (x < rect.width / 3) jumpTo(chapterIdx - 1);
@@ -371,6 +400,8 @@ export default function Reader() {
           tts={ttsIdx >= 0 ? { paraIdx: ttsIdx, paraTotal: chapter.paras.length, onSeek: (i) => void tts.playFrom(i) } : undefined}
           font={font}
           onFontChange={patchFont}
+          speed={tts.speed}
+          onSpeedChange={(s) => playerSetSpeed(s)}
         />
       )}
 

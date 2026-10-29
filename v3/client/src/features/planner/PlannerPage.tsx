@@ -239,8 +239,8 @@ export default function PlannerPage() {
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]">
-      {/* 顶栏（safe-top 适配 APK 状态栏） */}
-      <header className="safe-top flex h-12 shrink-0 items-center gap-1 border-b border-[hsl(var(--border-soft))] px-3">
+      {/* 顶栏（safe-top 适配 APK 状态栏；不透明底——滚动内容不再从标题后透出） */}
+      <header className="safe-top flex h-12 shrink-0 items-center gap-1 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3">
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}

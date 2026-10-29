@@ -68,6 +68,13 @@ export function createApp(): Express {
   app.use(httpLogger);
   app.use(express.json({ limit: '50mb' }));
 
+  // API 响应禁缓存（反馈：改了配音/上架后阅读页拿到旧数据——APK WebView 会缓存无缓存头的 GET）。
+  // /data-assets 头像与静态产物不在 /api 前缀内，不受影响。
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
+
   // 角色卡头像静态托管（CardEditor 直接以 /data-assets/<id>.png 引用，无需 API 鉴权）。
   // DATA_DIR 每请求实时读 env（与 libraryDir/dataDir 同约定，测试注入即生效）；
   // handler 按目录惰性缓存，env 变更时重建一次，避免每请求新建 static 实例。

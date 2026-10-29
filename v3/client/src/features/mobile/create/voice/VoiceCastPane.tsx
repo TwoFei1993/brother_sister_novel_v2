@@ -49,8 +49,8 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
   const [detected, setDetected] = useState<DetectedSpeaker[] | null>(null);
   const [detectedPick, setDetectedPick] = useState<Record<string, boolean>>({});
   const [scanning, setScanning] = useState(false);
-  // —— 🤖 AI 分配 ——
-  const [aiBusy, setAiBusy] = useState(false);
+  // —— 🤖 AI 分配（分阶段反馈：拉卡 / AI 选声，避免长时间无响应感） ——
+  const [aiStage, setAiStage] = useState<'idle' | 'cards' | 'picking'>('idle');
 
   /** PATCH voiceMap（乐观锁：取最新 work；失败仅提示，本地已更新） */
   async function persist(next: Record<string, string>): Promise<void> {
@@ -183,8 +183,8 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
 
   /** 🤖 AI 智能分配：绑定角色（带人设）∪ 已配声名字 → LLM 从目录选声 → 幻觉/缺选用启发式兜底 */
   async function aiAssign(): Promise<void> {
-    if (aiBusy) return;
-    setAiBusy(true);
+    if (aiStage !== 'idle') return;
+    setAiStage('cards');
     setError(null);
     try {
       const briefs: Array<{ name: string; desc: string }> = [];
@@ -203,6 +203,7 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
       for (const n of names) {
         if (!seen.has(n)) briefs.push({ name: n, desc: '' });
       }
+      setAiStage('picking');
       const ai = await aiAssignVoices(briefs, ALL_VOICES);
       const next = { ...cast };
       const fallback = autoCastVoices(briefs.map((b) => b.name));
@@ -215,7 +216,7 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 分配失败，请重试');
     } finally {
-      setAiBusy(false);
+      setAiStage('idle');
     }
   }
 
@@ -250,11 +251,11 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
         <button
           type="button"
           onClick={() => void aiAssign()}
-          disabled={aiBusy || (chars.length === 0 && names.length === 0)}
+          disabled={aiStage !== 'idle' || (chars.length === 0 && names.length === 0)}
           data-testid="cast-ai-btn"
           className="h-8 flex-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
         >
-          {aiBusy ? 'AI 分配中…' : '🤖 AI 智能分配'}
+          {aiStage === 'cards' ? '拉取角色卡…' : aiStage === 'picking' ? 'AI 选声中…' : '🤖 AI 智能分配'}
         </button>
       </div>
       {error && <p className="mb-2 rounded-lg bg-[hsl(var(--danger))]/10 p-2 text-xs text-[hsl(var(--danger))]">{error}</p>}

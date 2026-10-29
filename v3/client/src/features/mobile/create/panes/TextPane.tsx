@@ -254,7 +254,9 @@ export function TextPane({
       )}
 
       {/* 听书条：按作品配音表分声朗读当前章（音色在「资料」分区配置）；本书生成中暂停入口 */}
-      {current && !editing && !myStreaming && <MobileTtsBar chapter={current} voiceMap={work.voiceMap} />}
+      {current && !editing && !myStreaming && (
+        <MobileTtsBar bookId={work.id} bookTitle={work.title} chapter={current} voiceMap={work.voiceMap} />
+      )}
 
       {/* ✨ AI 润色进行中（单行居中状态） */}
       {polishing && (

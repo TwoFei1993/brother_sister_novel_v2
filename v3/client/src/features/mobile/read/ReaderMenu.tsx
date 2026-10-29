@@ -34,6 +34,9 @@ export function saveFont(font: ReaderFont): void {
 }
 
 interface ReaderMenuProps {
+  /** 听书倍速（1/1.25/1.5/2，反馈⑤） */
+  speed: number;
+  onSpeedChange: (s: number) => void;
   chapterNo: number;
   lastChapterNo: number;
   chapterIdx: number;
@@ -49,6 +52,8 @@ interface ReaderMenuProps {
 }
 
 export default function ReaderMenu({
+  speed,
+  onSpeedChange,
   chapterNo,
   lastChapterNo,
   chapterIdx,
@@ -115,6 +120,27 @@ export default function ReaderMenu({
         >
           下一章
         </button>
+      </div>
+
+      {/* 语速（反馈⑤：1/1.25/1.5/2 倍，播放中即时生效） */}
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-[hsl(var(--fg-muted))]" data-testid="reader-speed-panel">
+        <span>语速</span>
+        {[1, 1.25, 1.5, 2].map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onSpeedChange(s)}
+            data-testid={`speed-${s}`}
+            aria-pressed={speed === s}
+            className={`h-8 flex-1 whitespace-nowrap rounded-lg border text-xs ${
+              speed === s
+                ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
+                : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+            }`}
+          >
+            {s}x
+          </button>
+        ))}
       </div>
 
       {/* 字体设置：字号 A-/A+ 与行距循环 */}

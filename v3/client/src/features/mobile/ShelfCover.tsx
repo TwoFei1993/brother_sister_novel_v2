@@ -32,7 +32,7 @@ export function ShelfBookCover({
       type="button"
       onClick={onClick}
       data-checked={checked ? 'true' : undefined}
-      className="m-press flex flex-col items-center gap-1 text-left"
+      className="m-press flex w-full flex-col items-center gap-1 text-left"
     >
       <span
         className="relative block aspect-[3/4] w-full overflow-hidden rounded-lg shadow-sm"
@@ -78,7 +78,7 @@ export function ShelfGroupCard({
 }) {
   const four = books.slice(0, 4);
   return (
-    <button type="button" onClick={onClick} className="m-press flex flex-col items-center gap-1 text-left" data-testid={`group-card-${tag}`}>
+    <button type="button" onClick={onClick} className="m-press flex w-full flex-col items-center gap-1 text-left" data-testid={`group-card-${tag}`}>
       <span className="relative block aspect-[3/4] w-full overflow-hidden rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-1 shadow-sm">
         <span className="grid h-full w-full grid-cols-2 grid-rows-2 gap-0.5">
           {[0, 1, 2, 3].map((i) => {

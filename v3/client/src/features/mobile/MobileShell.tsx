@@ -12,6 +12,7 @@ import { BookMarked, Feather, MessageCircle, UserRound } from 'lucide-react';
 
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
+import MiniPlayer from './MiniPlayer';
 
 /** 图标走 lucide 线性 SVG：随主题变色（emoji 无法跟随墨玉/宣纸换肤），跨平台渲染一致 */
 const ALL_TABS = [
@@ -50,6 +51,8 @@ export default function MobileShell() {
       <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
+      {/* 悬浮听书小窗（番茄式：离开书页后续播，点开可停/回书；阅读页内不显示） */}
+      <MiniPlayer />
       {!fullscreen && (
         <nav
           data-testid="mobile-tabbar"
