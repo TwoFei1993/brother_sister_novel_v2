@@ -5,8 +5,8 @@
  * - 绑定：PATCH work.bindings 追加 active 记录（fromChapter=检出章），实体 origin=本书
  * - 幂等：重试时同名实体以 POST 的幂等语义兜底（角色卡按 name 幂等回既有）
  */
-import { apiFetch } from '../../../api/client';
-import { uuid } from '../../../lib/uuid';
+import { apiFetch } from '../../../../api/client';
+import { uuid } from '../../../../lib/uuid';
 import { bookOrigin } from '@shared/assets/origin';
 import type { FactionAsset } from '@shared/assets/faction';
 import type { DetectedAsset } from '@shared/message';

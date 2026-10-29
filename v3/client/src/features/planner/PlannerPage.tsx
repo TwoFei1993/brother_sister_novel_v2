@@ -41,6 +41,8 @@ export default function PlannerPage() {
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 本轮流式请求的中止器（⏹ 停止 / 90s 无响应看门狗） */
+  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0];
@@ -103,6 +105,20 @@ export default function PlannerPage() {
     if (opts.isReroll) updateActive((s) => ensureTitle({ ...s, turns: [...s.turns.slice(0, -2), userTurn] }));
     else updateActive((s) => ensureTitle({ ...s, turns: [...s.turns, userTurn] }));
     setBusy(true);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    // 看门狗：90s 无任何帧（上游挂死）自动中止，避免「卡死」
+    let lastActivity = Date.now();
+    let timedOut = false;
+    const touch = (): void => {
+      lastActivity = Date.now();
+    };
+    const watchdog = window.setInterval(() => {
+      if (Date.now() - lastActivity > 90_000) {
+        timedOut = true;
+        ac.abort();
+      }
+    }, 5000);
     try {
       const msgs = plannerMessages(history, proposal);
       const prefs = useSettingsStore.getState().llmPrefs;
@@ -124,6 +140,7 @@ export default function PlannerPage() {
             }),
             {
               onChunk: (delta) => {
+                touch();
                 if (!streaming) {
                   streaming = true;
                   setStreamingText('');
@@ -132,6 +149,7 @@ export default function PlannerPage() {
                 setStreamingText(full);
               },
               onThinking: (delta) => {
+                touch();
                 streaming = true;
                 thinkingFull += delta;
                 setStreamingText('💭' + thinkingFull.slice(-500)); // 思考流打字机（尾部 500 字）
@@ -139,9 +157,12 @@ export default function PlannerPage() {
               onError: (e) => reject(new Error(e.message)),
               onDone: () => undefined,
             },
+            ac.signal,
           )
             .then(() => resolve({ text: full, thinkingFull })) // think 剥离在 parsePlannerReply 内部处理
-            .catch(reject);
+            .catch((err: unknown) => {
+              reject(err instanceof Error && err.name === 'AbortError' ? new Error(timedOut ? '向导长时间无响应，已自动停止' : '已停止') : err);
+            });
         });
 
       // 推理模型可能把预算吃在思考上（JSON 半截/空文本）→ 加倍预算重试一次（ed735c0 同模式）
@@ -173,9 +194,16 @@ export default function PlannerPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败，请重试');
     } finally {
+      window.clearInterval(watchdog);
+      abortRef.current = null;
       setStreamingText(null);
       setBusy(false);
     }
+  }
+
+  /** ⏹ 手动停止本轮流式（不再等待上游） */
+  function stopStreaming(): void {
+    abortRef.current?.abort();
   }
 
   async function confirmImport(): Promise<void> {
@@ -285,7 +313,7 @@ export default function PlannerPage() {
 
         {/* 右列：聊天流 + 输入区 */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 overflow-y-auto px-4 py-6">
+          <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 overflow-y-auto px-3 pb-12 pt-4 md:px-4 md:py-6">
             {/* 空态引导（走查条目⑧）：新会话只有一条欢迎气泡时，给可点的示例想法，降低空白首屏的启动门槛 */}
             {turns.length <= 1 && !busy && (
               <div className="flex flex-col items-center gap-3 pt-8 text-center" data-testid="planner-empty-guide">
@@ -476,6 +504,17 @@ export default function PlannerPage() {
                 data-testid="planner-input"
                 className="max-h-32 min-h-[40px] min-w-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
               />
+              {busy && (
+                <button
+                  type="button"
+                  onClick={stopStreaming}
+                  data-testid="planner-stop"
+                  aria-label="停止生成"
+                  className="h-10 shrink-0 rounded-lg border border-[hsl(var(--danger))]/40 px-3 text-sm text-[hsl(var(--danger))]"
+                >
+                  ⏹
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void send(input)}

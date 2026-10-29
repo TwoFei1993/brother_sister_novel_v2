@@ -16,7 +16,7 @@ import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 import type { UseGenerateResult } from '../../../hooks/useGenerate';
 
-import { ChapterChips } from './WorkPanes';
+import { ChapterChips } from './panes/ChapterChips';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
 type Gen = Pick<UseGenerateResult, 'streaming' | 'swipeRegenerate'>;

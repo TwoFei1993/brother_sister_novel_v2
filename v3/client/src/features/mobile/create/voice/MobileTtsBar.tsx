@@ -6,9 +6,9 @@
  */
 import { useMemo } from 'react';
 
-import { NARRATOR_SPEAKER } from '../../../lib/tts/voice-route';
-import { routeMobileParas } from '../../../lib/tts/mobile-cast';
-import { useMobileTts } from '../useMobileTts';
+import { NARRATOR_SPEAKER } from '../../../../lib/tts/voice-route';
+import { routeMobileParas } from '../../../../lib/tts/mobile-cast';
+import { useMobileTts } from '../../useMobileTts';
 import type { Message } from '@shared/message';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };

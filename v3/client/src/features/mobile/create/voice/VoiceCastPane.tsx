@@ -9,22 +9,22 @@
  */
 import { useEffect, useState } from 'react';
 
-import { apiFetch } from '../../../api/client';
-import { getAsset, listCharacters } from '../../../api/library';
-import { listMessages, updateWork } from '../../../api/works';
+import { apiFetch } from '../../../../api/client';
+import { getAsset, listCharacters } from '../../../../api/library';
+import { listMessages, updateWork } from '../../../../api/works';
 import {
   ALL_VOICES,
   NARRATOR_CAST_ID,
   normalizeVoiceMap,
   scanSpeakers,
   type DetectedSpeaker,
-} from '../../../lib/tts/mobile-cast';
-import { NARRATOR_VOICE_KEY, autoCastVoices } from '../../../lib/tts/voice-route';
+} from '../../../../lib/tts/mobile-cast';
+import { NARRATOR_VOICE_KEY, autoCastVoices } from '../../../../lib/tts/voice-route';
 import type { CharacterAsset } from '@shared/card';
 import type { Work } from '@shared/work';
 
-import VoicePicker from '../VoicePicker';
-import { aiAssignVoices } from './voice-cast-ai';
+import VoicePicker from '../../VoicePicker';
+import { aiAssignVoices, aiNormalizeSpeakers } from './voice-cast-ai';
 
 interface Props {
   work: Work;
@@ -136,9 +136,24 @@ export default function VoiceCastPane({ work, onUpdated }: Props) {
       }
       const known = new Set([...names, NARRATOR_VOICE_KEY]);
       const found = scanSpeakers(paras, known);
-      setDetected(found);
-      setDetectedPick(Object.fromEntries(found.map((d) => [d.name, true])));
-      if (found.length === 0) setError('正文中没有发现未配声的新角色（对白需用「名字：」开头才会被识别）');
+      if (found.length === 0) {
+        setError('正文中没有发现未配声的新角色（对白需用「名字：」开头才会被识别）');
+        return;
+      }
+      // AI 归并同一角色的不同写法、剔除非角色名（「镇国公坐到床边/低声道」都归镇国公）；失败降级正则结果
+      let finalList = found;
+      try {
+        const normalized = await aiNormalizeSpeakers(found);
+        if (normalized.length > 0) {
+          const countOf = (n: string): number =>
+            found.filter((d) => d.name.includes(n) || n.includes(d.name)).reduce((m, d) => Math.max(m, d.count), 0);
+          finalList = normalized.map((name) => ({ name, count: countOf(name) }));
+        }
+      } catch {
+        setError('AI 归并失败，已展示正则粗扫结果');
+      }
+      setDetected(finalList);
+      setDetectedPick(Object.fromEntries(finalList.map((d) => [d.name, true])));
     } catch {
       setError('正文扫描失败，请重试');
     } finally {

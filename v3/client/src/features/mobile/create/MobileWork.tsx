@@ -15,8 +15,10 @@ import type { Message } from '@shared/message';
 import SelectionTools from '../../workbench/SelectionTools';
 import BindingsPane from './BindingsPane';
 import PublishPanel from './PublishPanel';
-import VoiceCastPane from './VoiceCastPane';
-import { OutlinePane, TextPane, AssetsPane } from './WorkPanes';
+import VoiceCastPane from './voice/VoiceCastPane';
+import { OutlinePane } from './panes/OutlinePane';
+import { TextPane } from './panes/TextPane';
+import { AssetsPane } from './panes/AssetsPane';
 import VersionsPane from './WorkVersions';
 
 type PaneId = 'text' | 'outline' | 'versions' | 'assets';

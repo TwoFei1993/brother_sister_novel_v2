@@ -1,61 +1,26 @@
 /**
- * 移动创作分区：正文 / 大纲（占位）/ 资料（纯展示组件，编排见 MobileWork）
- *
- * - TextPane：章节选择 + 激活版本正文（就地编辑写回当前版本，PATCH 失败回滚）+ 指令生成下一章
- * - OutlinePane：对话大纲 Phase2 引导卡（桌面 /planner 承载完整向导）
- * - AssetsPane：作品设定摘要 + 章节大纲（高亮下一章节点）
+ * 正文分区：章节选择 + 激活版本正文（就地编辑写回，PATCH 失败回滚）+ 手写/润色/重roll +
+ * 指令生成下一章 + 批量连写。流式块与待绑定卡独立成件，编排数据全部来自 MobileWork。
  */
 import { useEffect, useState } from 'react';
-import { BookOpen, Brain, Dices, Map, SquarePen, Zap } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { BookOpen, Dices, SquarePen, Zap } from 'lucide-react';
 
-import { apiFetch } from '../../../api/client';
-import { generateTextOnce } from '../../../api/llm';
-import { patchMessage, updateWork, upsertMessage } from '../../../api/works';
-import { useWorkStore } from '../../../stores/work';
-import { useSettingsStore } from '../../../stores/settings';
-import { appendSwipe, buildChapterMessage } from '../../../hooks/generation-flow';
-import { chapterChip, chapterTitle } from '../../../lib/chapter-title';
+import { apiFetch } from '../../../../api/client';
+import { generateTextOnce } from '../../../../api/llm';
+import { patchMessage, upsertMessage } from '../../../../api/works';
+import { useWorkStore } from '../../../../stores/work';
+import { useSettingsStore } from '../../../../stores/settings';
+import { appendSwipe, buildChapterMessage } from '../../../../hooks/generation-flow';
+import { chapterTitle } from '../../../../lib/chapter-title';
 import type { DetectedAsset, Message } from '@shared/message';
 import type { Work } from '@shared/work';
-import type { UseGenerateResult } from '../../../hooks/useGenerate';
 
+import { ChapterChips } from './ChapterChips';
+import { PendingAssetsCard } from './PendingAssetsCard';
+import { ThinkingInline } from './ThinkingInline';
 import { confirmPendingAsset } from './pending-assets';
-import MobileTtsBar from './MobileTtsBar';
-import OutlineIterChat from './OutlineIterChat';
-
-type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
-type Gen = Pick<UseGenerateResult, 'streaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate' | 'thinkingBuffer' | 'runBatch' | 'runByOutline' | 'batch'>;
-
-/** 章节选择条：横向滚动 chips，选中高亮 */
-export function ChapterChips({
-  chapters,
-  currentId,
-  onPick,
-}: {
-  chapters: readonly ChapterMsg[];
-  currentId: string | undefined;
-  onPick: (id: string) => void;
-}) {
-  return (
-    <div className="flex gap-1.5 overflow-x-auto px-4 py-2" data-testid="chapter-chips">
-      {chapters.map((c) => (
-        <button
-          key={c.id}
-          type="button"
-          onClick={() => onPick(c.id)}
-          className={`h-7 shrink-0 rounded-full border px-3 text-xs ${
-            c.id === currentId
-              ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
-              : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
-          }`}
-        >
-          {chapterChip(c.chapter.index, c.chapter.title)}
-        </button>
-      ))}
-    </div>
-  );
-}
+import MobileTtsBar from '../voice/MobileTtsBar';
+import type { ChapterMsg, Gen } from './types';
 
 export function TextPane({
   work,
@@ -81,16 +46,9 @@ export function TextPane({
   const [sharedImport, setSharedImport] = useState(false);
   /** ✨ AI 润色进行中（生成新版本） */
   const [polishing, setPolishing] = useState(false);
-
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
-  async function rerollCurrent(): Promise<void> {
-    if (!current || gen.streaming) return;
-    setRerollTarget(current);
-    const msg = await gen.swipeRegenerate(work, useWorkStore.getState().messages, current);
-    setRerollTarget(null);
-    onDone(msg);
-  }
+
   /** 章切换时同步检出清单（取当前章的 extra.newAssets） */
   useEffect(() => {
     setPendingList(current?.extra.newAssets ?? []);
@@ -103,6 +61,14 @@ export function TextPane({
     } catch {
       alert('素材入库失败，请重试');
     }
+  }
+
+  async function rerollCurrent(): Promise<void> {
+    if (!current || gen.streaming) return;
+    setRerollTarget(current);
+    const msg = await gen.swipeRegenerate(work, useWorkStore.getState().messages, current);
+    setRerollTarget(null);
+    onDone(msg);
   }
 
   function startEdit(): void {
@@ -203,7 +169,7 @@ export function TextPane({
         </div>
       )}
 
-      {/* 激活版本正文（标题独占一行；操作按钮等宽一行不折行——窄屏竖排折行反馈修复） */}
+      {/* 激活版本正文（标题独占一行；操作按钮等宽一行不折行） */}
       {current && (
         <div className="mx-4 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
           <h2 className="truncate text-sm font-semibold">
@@ -316,51 +282,13 @@ export function TextPane({
       )}
 
       {/* 待绑定确认（D8）：本章检出的新角色/势力/世界观 */}
-      {pendingList.length > 0 && (
-        <div className="mx-4 mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3" data-testid="pending-assets">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-              本章检出 {pendingList.length} 个新素材，确认后入库并绑定到本书
-            </p>
-            <label className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-              <input
-                type="checkbox"
-                checked={sharedImport}
-                onChange={(e) => setSharedImport(e.target.checked)}
-                data-testid="shared-import-check"
-              />
-              共享入库
-            </label>
-          </div>
-          <ul className="flex flex-col gap-1.5">
-            {pendingList.map((d) => (
-              <li key={d.name} className="flex items-center gap-2 text-xs">
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">{d.name}</span>
-                  <span className="ml-1 text-[hsl(var(--fg-muted))]">
-                    （{d.kind === 'character' ? '角色' : d.kind === 'faction' ? '势力' : '世界观'}）{d.summary.slice(0, 24)}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void confirmAsset(d)}
-                  data-testid={`confirm-asset-${d.name}`}
-                  className="shrink-0 rounded-lg border border-amber-500/50 px-2 py-1 text-amber-700 dark:text-amber-400"
-                >
-                  入库并绑定
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingList((l) => l.filter((x) => x !== d))}
-                  className="shrink-0 rounded-lg px-2 py-1 text-[hsl(var(--fg-muted))]"
-                >
-                  忽略
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <PendingAssetsCard
+        list={pendingList}
+        sharedImport={sharedImport}
+        onSharedImport={setSharedImport}
+        onConfirm={(d) => void confirmAsset(d)}
+        onDismiss={(d) => setPendingList((l) => l.filter((x) => x !== d))}
+      />
 
       {/* ✍️ 手写第一章（自己写/粘贴，写完可 AI 润色） */}
       {chapters.length === 0 && !gen.streaming && (
@@ -419,188 +347,6 @@ export function TextPane({
           {directive.trim() ? '生成' : '续写'}
         </button>
       </div>
-    </div>
-  );
-}
-
-/** 大纲分区：对话大纲·迭代聊天（P2.3）——聊某章怎么改→确认→生成新版本；建书向导仍在桌面 /planner */
-export function OutlinePane({
-  work,
-  chapters,
-  onDone,
-}: {
-  work: Work;
-  chapters: readonly ChapterMsg[];
-  onDone: (msg: Message) => void;
-}) {
-  if (chapters.length === 0) {
-    return (
-      <div className="px-4 py-10 text-center">
-        <Map className="mx-auto h-10 w-10 text-[hsl(var(--fg-muted))]" strokeWidth={1.5} aria-hidden />
-        <p className="mt-3 text-sm font-medium">对话大纲</p>
-        <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-[hsl(var(--fg-muted))]">
-          先在「正文」分区写第一章，之后就能在这里和助手聊任何一章的修改。
-        </p>
-        <Link
-          to="/planner"
-          className="mt-4 inline-flex h-10 items-center rounded-xl border border-[hsl(var(--border-soft))] px-5 text-sm"
-        >
-          新书策划向导（桌面版）↗
-        </Link>
-      </div>
-    );
-  }
-  return <OutlineIterChat work={work} chapters={chapters.map((msg) => ({ msg }))} onDone={onDone} />;
-}
-
-/** 资料分区：作品设定摘要 + 章节大纲（可点击改写标题/要点，PATCH work.settings） */
-export function AssetsPane({ work, nextIndex, onUpdated }: { work: Work; nextIndex: number; onUpdated: (w: Work) => void }) {
-  const s = work.settings;
-  const outlines = s.chapterOutlines ?? [];
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftPlot, setDraftPlot] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  function startEdit(o: { index: number; title: string; plot: string }): void {
-    setEditingIdx(o.index);
-    setDraftTitle(o.title);
-    setDraftPlot(o.plot);
-  }
-
-  /** 保存改写：settings 整体替换（乐观锁），失败提示重试 */
-  async function saveOutline(index: number): Promise<void> {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const nextOutlines = outlines.map((o) =>
-        o.index === index ? { ...o, title: draftTitle.trim() || o.title, plot: draftPlot } : o,
-      );
-      const latest = await apiFetch<Work>(`/api/works/${work.id}`);
-      const updated = await updateWork(work.id, {
-        revision: latest.revision,
-        settings: { ...work.settings, chapterOutlines: nextOutlines },
-      });
-      onUpdated(updated);
-      setEditingIdx(null);
-    } catch {
-      alert('大纲保存失败（可能版本冲突），请重试');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-3 px-4 py-3">
-      <section className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-        <h2 className="mb-2 text-sm font-semibold">作品设定</h2>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs leading-5">
-          <dt className="text-[hsl(var(--fg-muted))]">题材</dt>
-          <dd>{s.subGenre || s.genre}</dd>
-          <dt className="text-[hsl(var(--fg-muted))]">核心矛盾</dt>
-          <dd className="whitespace-pre-wrap">{s.coreConflict || '—'}</dd>
-          <dt className="text-[hsl(var(--fg-muted))]">力量体系</dt>
-          <dd className="whitespace-pre-wrap">{s.powerSystem || '—'}</dd>
-          <dt className="text-[hsl(var(--fg-muted))]">基调</dt>
-          <dd>{s.storyTones.join(' / ') || '—'}</dd>
-        </dl>
-      </section>
-
-      <section className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-        <h2 className="mb-2 text-sm font-semibold">章节大纲</h2>
-        <p className="mb-2 text-[10px] text-[hsl(var(--fg-muted))]">点条目可改写标题与剧情要点（改写后按大纲写以此为准）</p>
-        {outlines.length === 0 && (
-          <p className="text-xs text-[hsl(var(--fg-muted))]">暂无章节大纲（可在桌面版一键导入或对话大纲生成）</p>
-        )}
-        <ol className="flex flex-col gap-1.5">
-          {outlines.map((o) => {
-            const active = o.index === nextIndex;
-            if (editingIdx === o.index) {
-              return (
-                <li key={o.index} className="rounded-lg border border-[hsl(var(--accent))]/50 bg-[hsl(var(--accent))]/5 p-2.5" data-testid={`outline-edit-${o.index}`}>
-                  <input
-                    value={draftTitle}
-                    onChange={(e) => setDraftTitle(e.target.value)}
-                    aria-label={`第${o.index}章标题`}
-                    className="mb-1.5 h-9 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none focus:border-[hsl(var(--accent))]"
-                  />
-                  <textarea
-                    value={draftPlot}
-                    onChange={(e) => setDraftPlot(e.target.value)}
-                    rows={4}
-                    aria-label={`第${o.index}章剧情要点`}
-                    className="w-full resize-y rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-2 text-xs leading-5 outline-none focus:border-[hsl(var(--accent))]"
-                  />
-                  <div className="mt-1.5 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void saveOutline(o.index)}
-                      disabled={saving}
-                      data-testid={`outline-save-${o.index}`}
-                      className="h-8 flex-1 rounded-lg bg-[hsl(var(--accent))] text-xs font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
-                    >
-                      {saving ? '保存中…' : '保存'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingIdx(null)}
-                      className="h-8 flex-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))]"
-                    >
-                      取消
-                    </button>
-                  </div>
-                </li>
-              );
-            }
-            return (
-              <li key={o.index}>
-                <button
-                  type="button"
-                  onClick={() => startEdit(o)}
-                  data-testid={`outline-item-${o.index}`}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-xs leading-5 ${
-                    active ? 'border border-[hsl(var(--accent))]/50 bg-[hsl(var(--accent))]/10' : ''
-                  }`}
-                >
-                  <span className={active ? 'font-medium text-[hsl(var(--accent))]' : 'font-medium'}>
-                    {chapterTitle(o.index, o.title)}
-                  </span>
-                  {active && <span className="ml-1.5 text-[10px] text-[hsl(var(--accent))]">← 下一章</span>}
-                  <p className="mt-0.5 text-[hsl(var(--fg-muted))]">{o.plot}</p>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-    </div>
-  );
-}
-
-/** 💭 思考折叠块（DeepSeek 式）：流式中默认展开跟随思考，正文开始后自动收起为一行（重roll场景默认收起） */
-function ThinkingInline({ text, done, startCollapsed = false }: { text: string; done: boolean; startCollapsed?: boolean }) {
-  const [open, setOpen] = useState(!startCollapsed);
-  useEffect(() => {
-    if (done) setOpen(false);
-  }, [done]);
-  return (
-    <div className="mb-3 overflow-hidden rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        data-testid="mobile-thinking-toggle"
-        className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-[hsl(var(--fg-muted))]"
-      >
-        <Brain className="h-3.5 w-3.5" aria-hidden />
-        {done ? '已深度思考（点击展开）' : '深度思考中…'}
-        <span className="ml-auto">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div className="max-h-56 overflow-y-auto px-3 pb-2 text-xs leading-5 whitespace-pre-wrap text-[hsl(var(--fg-muted))]">
-          {text.slice(-2000)}
-        </div>
-      )}
     </div>
   );
 }

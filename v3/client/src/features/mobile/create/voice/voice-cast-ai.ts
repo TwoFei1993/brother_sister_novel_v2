@@ -1,17 +1,49 @@
 /**
  * AI 配音导演（反馈：分配应有 AI 智能分配）：角色人设 → 从 MiniMax 音色目录中选声。
+ * 另含 AI 人物识别归并（反馈：识别不准——「镇国公坐到床边」「镇国公低声道」应都归为镇国公）。
  *
  * - generateTextOnce（非流式，预算兜底重试内置）；要求严格 JSON 输出
  * - 解析后逐个校验：选中的 id 必须在目录内（幻觉 id 置空，由调用方用性别启发式兜底）
  */
-import { generateTextOnce } from '../../../api/llm';
-import { useSettingsStore } from '../../../stores/settings';
-import type { CastVoiceOption } from '../../../lib/tts/mobile-cast';
+import { generateTextOnce } from '../../../../api/llm';
+import { useSettingsStore } from '../../../../stores/settings';
+import type { CastVoiceOption } from '../../../../lib/tts/mobile-cast';
 
 /** 参与分配的角色简介（desc 取角色卡 description/personality 摘要） */
 export interface RoleBrief {
   name: string;
   desc: string;
+}
+
+/** 前缀扫描候选 → LLM 归并同一角色的不同写法、剔除非角色名；失败由调用方降级回正则结果 */
+export async function aiNormalizeSpeakers(candidates: ReadonlyArray<{ name: string; count: number }>): Promise<string[]> {
+  const prefs = useSettingsStore.getState().llmPrefs;
+  const listText = candidates.map((c) => `${c.name}（出现 ${c.count} 次）`).join('\n');
+  const text = await generateTextOnce(
+    {
+      source: prefs.source,
+      model: prefs.model,
+      temperature: 0.2,
+      thinking: prefs.thinking !== false,
+      messages: [
+        {
+          role: 'user',
+          content:
+            `以下是从小说正文「角色名：对白」格式提取的说话人候选（正则粗扫，含误报和同一角色的不同写法）。\n` +
+            `请整理出真正的角色名清单：归并同一角色的变体（如「镇国公坐到床边」「镇国公低声道」都是镇国公；「崔氏笑道」归为崔氏），` +
+            `剔除明显不是角色名的（叙述句、代词开头等）。\n` +
+            `输出严格的 JSON 字符串数组（如 ["镇国公","崔氏"]），不要任何解释。\n\n${listText}`,
+        },
+      ],
+    },
+    4096,
+  );
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  const jsonText = /\[[\s\S]*\]/.exec(cleaned)?.[0];
+  if (!jsonText) throw new Error('AI 返回格式异常');
+  const parsed = JSON.parse(jsonText) as unknown;
+  if (!Array.isArray(parsed)) throw new Error('AI 返回格式异常');
+  return parsed.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim());
 }
 
 export async function aiAssignVoices(roles: readonly RoleBrief[], catalog: readonly CastVoiceOption[]): Promise<Record<string, string>> {
