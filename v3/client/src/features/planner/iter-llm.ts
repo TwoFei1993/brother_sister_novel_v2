@@ -77,24 +77,25 @@ export function parseIterReply(text: string): IterReply | null {
   }
 }
 
-/** 新版本重写消息：保留情节骨架 + 按要点重写 + 全文输出（不输出解释）；bookBrief 让重写贴合全书设定 */
+/** 新版本重写消息：保留情节骨架 + 按要点重写 + 全文输出（不输出解释）；bookBrief 让重写贴合全书设定（review #6：无资料时不引用不存在的内容） */
 export function buildRewriteMessages(input: {
   workTitle: string;
   chapter: { index: number; title: string; content: string };
   brief: string;
-  /** 预读取的书籍资料（角色卡/世界书），缺省时不注入 */
+  /** 预读取的书籍资料（角色卡/世界书），缺省时不注入也不提及 */
   bookBrief?: string;
 }): GenerateMessage[] {
-  const brief = input.bookBrief ? `\n\n【本书资料（已预读取）】\n${input.bookBrief}` : '';
+  const briefBlock = input.bookBrief
+    ? `\n\n【本书资料（已预读取）——人物言行必须严格符合以下角色与世界设定】\n${input.bookBrief}`
+    : '';
   return [
     {
       role: 'system',
       content:
         '你是资深小说改稿写手。根据「修改要点」重写整章：保留原文情节骨架与关键转折，按要点调整/增删场景；' +
-        '人物言行必须符合「本书资料」中的角色设定；' +
         '字数硬性要求：不少于 2500 字（与原文相当或更长），写足内容再收尾，禁止提前收束；' +
         '只输出重写后的正文全文，禁止任何解释、标题或元信息；全程使用简体中文。' +
-        brief,
+        briefBlock,
     },
     {
       role: 'user',

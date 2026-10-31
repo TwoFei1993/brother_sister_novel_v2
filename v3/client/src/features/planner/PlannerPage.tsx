@@ -89,11 +89,12 @@ export default function PlannerPage() {
     return { ...s, title: titleOf(s.turns) };
   }
 
-  async function send(text: string, opts: { isReroll?: boolean } = {}): Promise<void> {
+  async function send(text: string, opts: { isReroll?: boolean; fromInput?: boolean } = {}): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
     setError(null);
-    if (!opts.isReroll) setInput(''); // 反馈⑤：发送后清空输入框（重roll 不经输入框，无影响）
+    // 反馈⑤（review #5）：仅输入框发起的发送清空输入框——chip/问题提交/重roll 不经输入框，不动草稿
+    if (opts.fromInput) setInput('');
 
     // 关键：本次消息必须进 LLM 历史（setSessions 是异步的，不能用旧值拼）
     const base = opts.isReroll ? turns.slice(0, -2) : turns;
@@ -120,15 +121,17 @@ export default function PlannerPage() {
         ac.abort();
       }
     }, 5000);
+    // 半成品捕获（review #1）：full 提升到 send 作用域——catch 里中断/停止时已收到的内容不丢弃
+    let full = '';
+    let thinkingFull = '';
+    let finishReason: string | null = null;
     try {
       const msgs = plannerMessages(history, proposal);
       const prefs = useSettingsStore.getState().llmPrefs;
       // 流式打字机（推理模型思考久，无流式会像卡死）：思考流/正文增量实时显示
       let streaming = false;
-      const callPlanner = (maxTokens: number): Promise<{ text: string; thinkingFull: string }> =>
+      const callPlanner = (maxTokens: number): Promise<{ text: string; thinkingFull: string; finishReason: string | null }> =>
         new Promise((resolve, reject) => {
-          let full = '';
-          let thinkingFull = '';
           void generateStream(
             buildGenerateBody({
               source: prefs.source,
@@ -155,12 +158,16 @@ export default function PlannerPage() {
                 thinkingFull += delta;
                 setStreamingText('💭' + thinkingFull.slice(-500)); // 思考流打字机（尾部 500 字）
               },
+              onFinish: (reason) => {
+                touch();
+                finishReason = reason; // review #4：截断信号（finish_reason=length）确定性记录
+              },
               onError: (e) => reject(new Error(e.message)),
               onDone: () => undefined,
             },
             ac.signal,
           )
-            .then(() => resolve({ text: full, thinkingFull })) // think 剥离在 parsePlannerReply 内部处理
+            .then(() => resolve({ text: full, thinkingFull, finishReason })) // think 剥离在 parsePlannerReply 内部处理
             .catch((err: unknown) => {
               reject(err instanceof Error && err.name === 'AbortError' ? new Error(timedOut ? '向导长时间无响应，已自动停止' : '已停止') : err);
             });
@@ -177,13 +184,15 @@ export default function PlannerPage() {
         parsed = parsePlannerReply(text);
       }
       if (!parsed) {
-        // 解析失败分两类：纯讨论照常展示；疑似大纲半成品（流式中断/输出截断）→ 中断卡片
+        // 解析失败分两类（review #4：截断用确定性信号 finish_reason=length 判断，不再纯靠启发式）：
+        // 疑似大纲半成品（截断/流中断）→ 中断卡片；纯讨论照常展示
         const clean = text.trim();
-        const outlineLike = /"chapters"|"index"\s*:|\\"index\\\\"|"plot"/.test(clean) || clean.length > 1200;
-        const turn = outlineLike
-          ? { role: 'assistant' as const, text: clean, interrupted: true }
-          : { role: 'assistant' as const, text: clean || '（空回复）' };
-        updateActive((s) => ({ ...s, turns: [...s.turns, turn] }));
+        const outlineLike = /"chapters"|"index"\s*:|"plot"/.test(clean);
+        if (result.finishReason === 'length' || outlineLike) {
+          updateActive((s) => ({ ...s, turns: [...s.turns, { role: 'assistant' as const, text: clean, interrupted: true }] }));
+          return;
+        }
+        updateActive((s) => ({ ...s, turns: [...s.turns, { role: 'assistant' as const, text: clean || '（空回复）' }] }));
         return;
       }
       // 思考显示兜底：流式 thinking 帧缺失的模型，从正文里提取 <think> 块为可折叠思考
@@ -198,7 +207,20 @@ export default function PlannerPage() {
         updateActive((s) => ({ ...s, proposal: proposalParsed }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '请求失败，请重试');
+      // review #1：⏹ 手动停止 / 90s 看门狗 / 流式断流三条中断路径——已累积的大纲半成品不丢弃，转中断卡片
+      const partial = full.trim();
+      const outlinePartial = partial.length > 400 && /"chapters"|"index"\s*:|"plot"/.test(partial);
+      if (outlinePartial) {
+        updateActive((s) => ({ ...s, turns: [...s.turns, { role: 'assistant' as const, text: partial, interrupted: true }] }));
+        const msg = err instanceof Error ? err.message : '';
+        if (msg !== '已停止' && !msg.startsWith('向导长时间')) {
+          setError(`生成中断：${msg}——内容已保留，可发「继续」接着写`);
+        }
+      } else {
+        setError(err instanceof Error ? err.message : '请求失败，请重试');
+        // review #5：失败时恢复输入框草稿（成功路径已清空，这里还原）
+        if (opts.fromInput) setInput(trimmed);
+      }
     } finally {
       window.clearInterval(watchdog);
       abortRef.current = null;
@@ -518,7 +540,7 @@ export default function PlannerPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !busy) {
                     e.preventDefault();
-                    void send(input);
+                    void send(input, { fromInput: true });
                   }
                 }}
                 rows={1}
@@ -541,7 +563,7 @@ export default function PlannerPage() {
               )}
               <button
                 type="button"
-                onClick={() => void send(input)}
+                onClick={() => void send(input, { fromInput: true })}
                 disabled={busy || importing || !input.trim()}
                 data-testid="planner-send"
                 className="h-10 shrink-0 rounded-lg bg-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"

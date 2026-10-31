@@ -1,18 +1,17 @@
 /**
  * 对话大纲·迭代聊天（P2.3，移动端大纲分区）：聊某章怎么改 → 确认 → 生成新版本
  *
- * - 预读取书籍资料（反馈②）：挂载即拉绑定角色卡人设/世界书要点/作品设定注入提示词——
- *   每本书的大纲对话都是独立会话且「读过这本书」；顶部展示已读取摘要
+ * - 预读取书籍资料（反馈②）：useBookBrief 复用 loadAssembleAssets（与正文生成同源：按章绑定生效、
+ *   并行拉取）注入提示词；每本书的大纲对话都是独立会话且「读过这本书」；顶部展示已读取摘要
  * - 关键词+按钮双通道（共识 D5）：AI 提示关键词时直接给【确认生成新版本】按钮（点击=发送关键词，同代码路径）
  * - 新版本 = 基于锁定章当前激活版本全文 + 对话累积要点重写，appendSwipe 追加（旧版本不动，自动命名 vN）
  * - 会话态内存级（MVP 不持久化聊天历史；生成的新版本落库为章节版本资产）
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { BookOpenCheck, Check, Target } from 'lucide-react';
 
-import { apiFetch } from '../../../api/client';
 import type { GenerateMessage } from '../../../api/llm';
-import { buildGenerateBody, generateTextOnce } from '../../../api/llm';
+import { generateTextOnce } from '../../../api/llm';
 import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
@@ -28,6 +27,7 @@ import {
   parseIterReply,
   type IterChapterRef,
 } from '../../planner/iter-llm';
+import { useBookBrief } from './useBookBrief';
 
 interface ChatLine {
   role: 'user' | 'assistant';
@@ -52,6 +52,7 @@ export default function OutlineIterChat({
   const [busy, setBusy] = useState(false);
   const [lockedIndex, setLockedIndex] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { brief: bookBrief, stat: briefStat, ok: briefOk } = useBookBrief(work);
 
   const chapterRefs = useMemo<IterChapterRef[]>(
     () =>
@@ -63,74 +64,6 @@ export default function OutlineIterChat({
     [chapters],
   );
   const locked = chapters.find(({ msg }) => msg.chapter!.index === lockedIndex) ?? null;
-
-  // —— 预读取书籍资料（反馈②）：绑定角色卡人设 + 世界书要点 + 作品设定 → 注入提示词 ——
-  const [bookBrief, setBookBrief] = useState<string>('');
-  const [briefStat, setBriefStat] = useState<string>('读取书籍资料中…');
-  useEffect(() => {
-    let alive = true;
-    const clip = (v: unknown, n: number): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
-    (async () => {
-      const parts: string[] = [];
-      const s = work.settings;
-      const settingBits = [
-        s.subGenre || s.genre,
-        s.coreConflict ? `核心矛盾：${clip(s.coreConflict, 80)}` : '',
-        s.powerSystem ? `力量体系：${clip(s.powerSystem, 60)}` : '',
-      ].filter(Boolean);
-      if (settingBits.length > 0) parts.push(`设定：${settingBits.join('；')}`);
-      let charN = 0;
-      let wbN = 0;
-      await Promise.all([
-        (async () => {
-          for (const cid of work.characterIds.slice(0, 12)) {
-            try {
-              const a = (await apiFetch<{ card?: { data?: Record<string, unknown> } }>(`/api/characters/${cid}`)) as {
-                card?: { data?: Record<string, unknown> };
-                name?: string;
-              };
-              const d = a.card?.data ?? {};
-              const bits = [clip(d.description, 150), clip(d.personality, 80)].filter(Boolean);
-              if (bits.length > 0) {
-                charN += 1;
-                parts.push(`角色「${clip(d.name, 20) || a.name || cid.slice(0, 6)}」(${clip(d.role, 20) || '角色'})：${bits.join('；')}`);
-              }
-            } catch {
-              /* 单卡失败跳过 */
-            }
-          }
-        })(),
-        (async () => {
-          for (const wid of work.worldbookIds.slice(0, 6)) {
-            try {
-              const w = (await apiFetch<{ raw?: { entries?: Record<string, { comment?: unknown; content?: unknown }> } }>(`/api/worldbooks/${wid}`)) as {
-                name?: string;
-                raw?: { entries?: Record<string, { comment?: unknown; content?: unknown }> };
-              };
-              const entries = Object.values(w.raw?.entries ?? {});
-              const head = entries
-                .map((e) => clip(e.comment, 40) || clip(e.content, 40))
-                .filter(Boolean)
-                .slice(0, 6)
-                .join('；');
-              if (head) {
-                wbN += 1;
-                parts.push(`世界书《${clip(w.name, 24) || wid.slice(0, 6)}》：${head}`);
-              }
-            } catch {
-              /* 单本失败跳过 */
-            }
-          }
-        })(),
-      ]);
-      if (!alive) return;
-      setBookBrief(parts.join('\n'));
-      setBriefStat(charN + wbN > 0 ? `已读取资料：角色 ${charN} · 世界书 ${wbN}` : '未绑定角色卡/世界书（可先在「资料」分区选用）');
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [work]);
 
   function scrollBottom(): void {
     requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }));
@@ -166,7 +99,7 @@ export default function OutlineIterChat({
           content: active?.content ?? '',
         },
         brief,
-        bookBrief,
+        bookBrief: briefOk ? bookBrief : undefined,
       }),
     );
     if (!text) {
@@ -205,6 +138,13 @@ export default function OutlineIterChat({
       setBusy(true);
       try {
         await rewriteLockedChapter(brief);
+      } catch (err) {
+        // review #2：确认/重写主链路必须有错误兜底（generateTextOnce 空输出/4xx 抛错），不能 unhandled rejection
+        setHistory((h) => [
+          ...h,
+          { role: 'assistant', content: `⚠️ 生成失败：${err instanceof Error ? err.message : '未知错误'}，请重试。` },
+        ]);
+        scrollBottom();
       } finally {
         setBusy(false);
       }
@@ -213,7 +153,7 @@ export default function OutlineIterChat({
 
     setBusy(true);
     try {
-      const raw = await callLlm(buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text, bookBrief }));
+      const raw = await callLlm(buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text, bookBrief: briefOk ? bookBrief : undefined }));
       const parsed = parseIterReply(raw);
       const reply = parsed?.reply ?? raw; // 解析失败：原文当回复显示
       if (parsed?.chapterIndex != null) setLockedIndex(parsed.chapterIndex);
