@@ -123,6 +123,7 @@ export function createApp(): Express {
     const p = req.path;
     if (p.startsWith('/auth/')) return next(); // 登录/注册/登出
     if (p.startsWith('/community')) return next(); // 留言板：路由内 authRequired 分级
+    if (p.startsWith('/tts/')) return next(); // 听书合成：登录即可用（读者听书；ttsRouter 内自带 authRequired）——压力测试实测读者被 403
     if (p.startsWith('/works/') && p.endsWith('/comments')) return next(); // 评论：读者可写
     if (AUTHOR_ONLY_PREFIXES.some((pre) => p === pre || p.startsWith(`${pre}/`))) {
       return requireAuthor(req, res, next); // 创作域整组作者专属（读写在内）
