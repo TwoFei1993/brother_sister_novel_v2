@@ -202,6 +202,9 @@ export function playerStart(book: PlayerBook, fromIdx = 0): void {
     playerSeek(fromIdx);
     return;
   }
+  // 关键：换书启动必须写入 bookId/title——UI（进度条/悬浮窗）靠 bookId 匹配显示，
+  // 缺失会导致「引擎在播但界面全静默」（深度验证 T6-e 实锤）
+  set({ bookId: book.bookId, title: book.title, paraCount: book.paras.length, idx: fromIdx, playing: true });
   runLoop(fromIdx);
 }
 

@@ -347,7 +347,7 @@ export default function Reader() {
         onClick={() => setMenuOpen((v) => !v)}
         data-testid="reader-menu-fab"
         aria-label={menuOpen ? '关闭菜单' : '打开菜单'}
-        className="fixed bottom-6 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-lg text-white shadow-lg backdrop-blur-sm active:scale-95"
+        className="fixed bottom-6 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-lg text-white shadow-lg backdrop-blur-sm active:scale-95"
       >
         {menuOpen ? '✕' : '☰'}
       </button>

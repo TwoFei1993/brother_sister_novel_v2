@@ -365,7 +365,11 @@ export default function MobileBookshelf() {
           {allTags.length > 0 && (
             <button
               type="button"
-              onClick={() => setCollapsed(collapsed.length > 0 ? [] : allTags)}
+              onClick={() => {
+                const next = collapsed.length > 0 ? [] : allTags;
+                setCollapsed(next);
+                saveCollapsed(next); // 持久化（原实现漏写，刷新后收起状态丢失）
+              }}
               data-testid="toggle-groups-btn"
               className="mb-2 ml-1 text-[11px] text-[hsl(var(--fg-muted))]"
             >

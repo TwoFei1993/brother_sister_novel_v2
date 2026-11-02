@@ -107,11 +107,11 @@ export default function LoginPage() {
           {mode === 'login' ? '作者可只输密码进入；读者请输入用户名' : '注册读者账号（阅读+评论+留言）'}
         </p>
 
-        {(mode === 'register' || username.length > 0) && (
+        {(mode === 'register' || username.length > 0 || mode === 'login') && (
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="用户名"
+            placeholder={mode === 'login' ? '用户名（作者可留空）' : '用户名'}
             autoComplete="username"
             className={`${inputCls} border-[hsl(var(--border-soft))]`}
           />
