@@ -270,24 +270,12 @@ export function useGenerate(): UseGenerateResult {
         persistMessageId: baseId,
         maxTokensScale: 2,
       }));
-      // 最后防线：续写轮耗尽仍截断 → 入库 extra.truncatedSwipeId（版本级标记，UI 必显「未写完」
-      // 提示——不依赖启发式，截断恰好落在句号边界时 isTruncatedText 漏检，此类残章此前无声入库）
-      if (msg) {
-        const finish = useGenerationStore.getState().finishReason;
-        const tw = work.settings.targetChapterWords ?? 3000;
-        if (looksTruncated(finish, msg.content, tw)) {
-          msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipeId } };
-          try {
-            await persistMessage(work.id, msg);
-          } catch {
-            /* 标记落库失败不阻塞返回 */
-          }
-        }
-      }
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
-      // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）
+      // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）。
+      // 仅对有效产出润色——meta 占位/崩溃循环稿润色无意义，白烧一次调用（巡检修复）
       const polishModel = useSettingsStore.getState().llmPrefs.polishModel;
-      if (msg && polishModel) {
+      const polishable = msg !== null && invalidReasonOf(msg) === null && Boolean(polishModel);
+      if (polishable) {
         try {
           const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
             method: 'POST',
@@ -303,7 +291,7 @@ export function useGenerate(): UseGenerateResult {
                     '你是资深小说编辑。对下面的章节全文做语言润色：保持全部情节、对话与事实，字数变化不超过 10%；' +
                     '提升语言质感、消除重复与平庸表达；不改变人称与叙事结构。只输出润色后的正文本身，禁止任何解释或元信息。',
                 },
-                { role: 'user', content: msg.content },
+                { role: 'user', content: msg!.content },
               ],
             }),
           });
@@ -320,6 +308,22 @@ export function useGenerate(): UseGenerateResult {
           }
         } catch {
           // 润色失败保留原稿（静默——正文本身已可用）
+        }
+      }
+      // 最后防线（巡检修复：必须对有效产出标记，且在润色之后——润色生成新版本时标记跟随最终版本；
+      // meta 占位/崩溃循环稿不标：它们有自己的占位/重试语义，且 swipe 场景占位已 append 进 swipes，
+      // 误标会指向崩溃候选）。入库 extra.truncatedSwipeId（版本级标记，UI 必显「未写完」提示——
+      // 不依赖启发式，截断恰好落在句号边界时 isTruncatedText 漏检，此类残章此前无声入库）
+      if (msg && invalidReasonOf(msg) === null) {
+        const finish = useGenerationStore.getState().finishReason;
+        const tw = work.settings.targetChapterWords ?? 3000;
+        if (looksTruncated(finish, msg.content, tw)) {
+          msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipeId } };
+          try {
+            await persistMessage(work.id, msg);
+          } catch {
+            /* 标记落库失败不阻塞返回 */
+          }
         }
       }
       // 重试一次后仍无效（或本次即失败）：返回 null——调用方不上架（batch 以 null 终止）；
@@ -368,8 +372,9 @@ export function useGenerate(): UseGenerateResult {
         promptDirective: directive,
         maxTokensScale: 2,
       }));
-      // 最后防线同 generateChapter：续写耗尽仍截断 → 版本级标记（新候选位于末位 swipe）
-      if (msg) {
+      // 最后防线同 generateChapter：仅对有效产出标记（占位崩溃稿已 append 进 swipes，误标会
+      // 指向崩溃候选导致提示条误显），新候选位于末位 swipe
+      if (msg && invalidReasonOf(msg) === null) {
         const finish = useGenerationStore.getState().finishReason;
         const tw = work.settings.targetChapterWords ?? 3000;
         if (looksTruncated(finish, msg.content, tw)) {

@@ -56,7 +56,17 @@ export default function OutlineIterChat({
   const listRef = useRef<HTMLDivElement>(null);
   const { brief: bookBrief, stat: briefStat, ok: briefOk } = useBookBrief(work);
 
-  // 会话变化即落盘（挂载恢复 + 每次变更持久化，workId 变化时整体重读）
+  // 最新会话的 ref 镜像 + 卸载落盘：AI 回复到达时组件可能已卸载（用户发完消息就切分区），
+  // 变更 useEffect 不再运行——卸载 cleanup 用 ref 兜底保存最后一轮（巡检修复）
+  const latestRef = useRef({ history, lockedIndex });
+  latestRef.current = { history, lockedIndex };
+  useEffect(() => {
+    const id = work.id;
+    return () => saveIterChat(id, latestRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [work.id]);
+
+  // 会话变化即落盘（挂载恢复 + 每次变更持久化）
   useEffect(() => {
     saveIterChat(work.id, { history, lockedIndex });
   }, [work.id, history, lockedIndex]);

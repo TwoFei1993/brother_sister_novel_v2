@@ -108,7 +108,12 @@ export default function MobileWork() {
 
       {!loading && !loadError && work && (
         <>
-          <div key={pane} className="m-rise min-h-0 flex-1 overflow-y-auto">
+          {/* 分区切换动画放外层包装（key 变化重触发）且必须用纯 opacity 淡入（m-fade）：
+              任何 transform 动画（m-rise）的元素会成为 fixed 后代的 containing block——
+              transformed scroller 更会让 fixed 随内容滚动（实测 fab/弹层跑到内容中部）。
+              opacity 不创建 containing block，分区内所有弹层/悬浮元素保持真视口定位 */}
+          <div key={pane} className="m-fade min-h-0 flex-1 flex">
+            <div className="min-h-0 flex-1 overflow-y-auto">
             {pane === 'text' && (
               <TextPane work={work} chapters={chapters} current={current} gen={gen} onPick={setChapterId} onDone={done} />
             )}
@@ -143,6 +148,7 @@ export default function MobileWork() {
                 </div>
               </>
             )}
+            </div>
           </div>
           {/* 选段 AI 工具（润色/扩写/重写）：与桌面同源组件，应用后 PATCH 幂等覆盖（失败回滚） */}
           <SelectionTools
