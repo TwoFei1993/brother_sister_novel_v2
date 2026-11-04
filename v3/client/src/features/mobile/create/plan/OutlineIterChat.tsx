@@ -86,6 +86,23 @@ export default function OutlineIterChat({
     requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }));
   }
 
+  /** 追加对话轮并显式落盘（巡检修复）：卸载后 setHistory 是 no-op 且渲染期 ref 同步不再运行，
+   *  只靠 useEffect/unmount cleanup 会丢最后一轮——以 ref 为唯一事实源，setState+落盘同步写 */
+  function appendTurns(lines: ChatLine[]): ChatLine[] {
+    const next = [...latestRef.current.history, ...lines];
+    latestRef.current = { history: next, lockedIndex: latestRef.current.lockedIndex };
+    setHistory(next);
+    saveIterChat(work.id, latestRef.current);
+    return next;
+  }
+
+  /** 更新锁定章并同步落盘（同 appendTurns 语义） */
+  function setLocked(idx: number | null): void {
+    latestRef.current = { history: latestRef.current.history, lockedIndex: idx };
+    setLockedIndex(idx);
+    saveIterChat(work.id, latestRef.current);
+  }
+
   async function callLlm(messages: GenerateMessage[]): Promise<string> {
     // generateTextOnce：思考跟随用户设置 + 空输出自动加倍预算重试一次（推理模型思考吃满预算的通用兜底）
     return generateTextOnce(
@@ -105,7 +122,7 @@ export default function OutlineIterChat({
     if (!locked) return;
     const target = locked.msg;
     const active = target.swipes[target.swipeId];
-    setHistory((h) => [...h, { role: 'assistant', content: `⏳ 正在按要点重写第${target.chapter!.index}章，生成后自动成为新版本…` }]);
+    appendTurns([{ role: 'assistant', content: `⏳ 正在按要点重写第${target.chapter!.index}章，生成后自动成为新版本…` }]);
     scrollBottom();
     const text = await callLlm(
       buildRewriteMessages({
@@ -120,7 +137,7 @@ export default function OutlineIterChat({
       }),
     );
     if (!text) {
-      setHistory((h) => [...h, { role: 'assistant', content: '⚠️ 生成失败（模型无输出），请重试。' }]);
+      appendTurns([{ role: 'assistant', content: '⚠️ 生成失败（模型无输出），请重试。' }]);
       scrollBottom();
       return;
     }
@@ -132,8 +149,7 @@ export default function OutlineIterChat({
       console.warn('[OutlineIterChat] 新版本持久化失败');
     }
     onDone(updated);
-    setHistory((h) => [
-      ...h,
+    appendTurns([
       {
         role: 'assistant',
         content: `✅ 新版本已生成（${updated.swipes.at(-1)?.name}），可在「版本」分区查看切换；旧版本原样保留。`,
@@ -146,7 +162,7 @@ export default function OutlineIterChat({
     const text = rawText.trim();
     if (!text || busy) return;
     setInput('');
-    setHistory((h) => [...h, { role: 'user', content: text }]);
+    const history = appendTurns([{ role: 'user', content: text }]);
     scrollBottom();
 
     // 关键词命中：锁定章 + 有要点 → 直接重写（关键词等价确认按钮，同代码路径）
@@ -157,10 +173,7 @@ export default function OutlineIterChat({
         await rewriteLockedChapter(brief);
       } catch (err) {
         // review #2：确认/重写主链路必须有错误兜底（generateTextOnce 空输出/4xx 抛错），不能 unhandled rejection
-        setHistory((h) => [
-          ...h,
-          { role: 'assistant', content: `⚠️ 生成失败：${err instanceof Error ? err.message : '未知错误'}，请重试。` },
-        ]);
+        appendTurns([{ role: 'assistant', content: `⚠️ 生成失败：${err instanceof Error ? err.message : '未知错误'}，请重试。` }]);
         scrollBottom();
       } finally {
         setBusy(false);
@@ -173,11 +186,11 @@ export default function OutlineIterChat({
       const raw = await callLlm(buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text, bookBrief: briefOk ? bookBrief : undefined }));
       const parsed = parseIterReply(raw);
       const reply = parsed?.reply ?? raw; // 解析失败：原文当回复显示
-      if (parsed?.chapterIndex != null) setLockedIndex(parsed.chapterIndex);
-      setHistory((h) => [...h, { role: 'assistant', content: reply }]);
+      if (parsed?.chapterIndex != null) setLocked(parsed.chapterIndex);
+      appendTurns([{ role: 'assistant', content: reply }]);
       scrollBottom();
     } catch {
-      setHistory((h) => [...h, { role: 'assistant', content: '⚠️ 助手暂时联系不上（网络/模型错误），稍后再试。' }]);
+      appendTurns([{ role: 'assistant', content: '⚠️ 助手暂时联系不上（网络/模型错误），稍后再试。' }]);
       scrollBottom();
     } finally {
       setBusy(false);
