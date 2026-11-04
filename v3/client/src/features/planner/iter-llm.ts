@@ -33,6 +33,44 @@ export interface IterReply {
   rewriteBrief: string | null;
 }
 
+/** ---------- 迭代会话持久化（反馈：切分区回来对话丢失——内存级 useState 升级 localStorage） ---------- */
+
+export interface IterChatLine {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface IterChatState {
+  history: IterChatLine[];
+  /** 已锁定待改的章号（null=未锁定） */
+  lockedIndex: number | null;
+}
+
+const iterKey = (workId: string): string => `v3-outline-iter-chat-${workId}`;
+
+/** 读迭代会话（坏存储返回空态） */
+export function loadIterChat(workId: string): IterChatState {
+  try {
+    const raw = localStorage.getItem(iterKey(workId));
+    if (raw) {
+      const d = JSON.parse(raw) as IterChatState;
+      if (Array.isArray(d.history)) return { history: d.history, lockedIndex: d.lockedIndex ?? null };
+    }
+  } catch {
+    /* 坏存储重建 */
+  }
+  return { history: [], lockedIndex: null };
+}
+
+/** 写迭代会话（隐私模式静默） */
+export function saveIterChat(workId: string, s: IterChatState): void {
+  try {
+    localStorage.setItem(iterKey(workId), JSON.stringify(s));
+  } catch {
+    /* 静默 */
+  }
+}
+
 const ITER_SYSTEM = `你是小说《BOOK_TITLE》的创作助手（对话大纲·迭代阶段）。作者会用自然语言说某一章想怎么改（如"第2章太平淡，想要一场雨夜追逐"）。
 你的任务：
 1. 理解作者想改哪一章（chapterIndex=章号数字，没说清=null）。

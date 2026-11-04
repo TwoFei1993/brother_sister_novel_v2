@@ -5,9 +5,9 @@
  *   并行拉取）注入提示词；每本书的大纲对话都是独立会话且「读过这本书」；顶部展示已读取摘要
  * - 关键词+按钮双通道（共识 D5）：AI 提示关键词时直接给【确认生成新版本】按钮（点击=发送关键词，同代码路径）
  * - 新版本 = 基于锁定章当前激活版本全文 + 对话累积要点重写，appendSwipe 追加（旧版本不动，自动命名 vN）
- * - 会话态内存级（MVP 不持久化聊天历史；生成的新版本落库为章节版本资产）
+ * - 会话持久化（反馈：切分区回来对话丢失）：history+lockedIndex 按 workId 存 localStorage，卸载/切换不丢
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpenCheck, Check, Target } from 'lucide-react';
 
 import type { GenerateMessage } from '../../../../api/llm';
@@ -24,15 +24,15 @@ import {
   buildRewriteMessages,
   extractRewriteText,
   hitsIterKeyword,
+  loadIterChat,
   parseIterReply,
+  saveIterChat,
   type IterChapterRef,
+  type IterChatLine,
 } from '../../../planner/iter-llm';
 import { useBookBrief } from './useBookBrief';
 
-interface ChatLine {
-  role: 'user' | 'assistant';
-  content: string;
-}
+interface ChatLine extends IterChatLine {}
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
 
@@ -47,12 +47,19 @@ export default function OutlineIterChat({
   onDone: (msg: Message) => void;
 }) {
   const prefs = useSettingsStore((s) => s.llmPrefs);
-  const [history, setHistory] = useState<ChatLine[]>([]);
+  /** 惰性初始化读 localStorage（仅一次）：切分区卸载后回来，对话与锁定章原样恢复 */
+  const [stored] = useState(() => loadIterChat(work.id));
+  const [history, setHistory] = useState<ChatLine[]>(stored.history);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [lockedIndex, setLockedIndex] = useState<number | null>(null);
+  const [lockedIndex, setLockedIndex] = useState<number | null>(stored.lockedIndex);
   const listRef = useRef<HTMLDivElement>(null);
   const { brief: bookBrief, stat: briefStat, ok: briefOk } = useBookBrief(work);
+
+  // 会话变化即落盘（挂载恢复 + 每次变更持久化，workId 变化时整体重读）
+  useEffect(() => {
+    saveIterChat(work.id, { history, lockedIndex });
+  }, [work.id, history, lockedIndex]);
 
   const chapterRefs = useMemo<IterChapterRef[]>(
     () =>

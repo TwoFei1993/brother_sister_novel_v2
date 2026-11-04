@@ -22,9 +22,11 @@ function chapterMsg(index: number, title: string, content: string): Message {
 }
 
 describe('chapterSkeletonLine（单章骨架）', () => {
-  it('书名号标题 + 首段截断', () => {
+  it('书名号标题 + 首段 + 末段（结尾钩子）', () => {
     const m = chapterMsg(1, '小票', '第一章正文开头。\n第二章内容另起一段。');
-    expect(chapterSkeletonLine(m)).toBe('《小票》第一章正文开头。');
+    const line = chapterSkeletonLine(m);
+    expect(line).toContain('《小票》第一章正文开头。');
+    expect(line).toContain('……第二章内容另起一段。'); // 末段承载前章结尾钩子（连贯性修复）
   });
 
   it('长首段截断加省略号', () => {

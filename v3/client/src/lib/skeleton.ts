@@ -7,21 +7,28 @@ import type { Message } from '@shared/message';
 
 /** 单章首段截取上限（字符），控制 token 开销 */
 const PER_CHAPTER_LIMIT = 100;
+/** 末段（结尾钩子）截取上限：承接前章悬念的关键在结尾而非开头 */
+const TAIL_LIMIT = 60;
 /** 携带完整骨架（标题+首段）的最大章数；更早的章节只保留标题行 */
 const MAX_FULL_SKELETON = 20;
 
-/** 单章骨架文本：书名号标题 + 首段截断（正文非字符串时仅标题） */
+/** 单章骨架文本：书名号标题 + 首段 + 末段截断（正文非字符串时仅标题）。
+ *  末段承载前章的结尾钩子——章节连贯性修复：只带首段时被裁章节的悬念去向不明，
+ *  模型看不到前章怎么收尾，续写变成每章自起自收的独立小故事 */
 export function chapterSkeletonLine(m: Message, bodyLimit = PER_CHAPTER_LIMIT): string {
   const title = typeof m.chapter?.title === 'string' ? m.chapter.title.trim() : '';
   const prefix = title ? `《${title}》` : '';
   const body = typeof m.content === 'string' ? m.content.replace(/^#[^\n]*\n/, '') : '';
-  const firstPara = body
+  const paras = body
     .split(/\n+/)
     .map((s) => s.trim())
-    .find(Boolean) ?? '';
+    .filter(Boolean);
+  const firstPara = paras[0] ?? '';
   if (!firstPara) return prefix;
   const head = firstPara.slice(0, bodyLimit);
-  return `${prefix}${head}${firstPara.length > bodyLimit ? '…' : ''}`;
+  const lastPara = paras.length > 1 ? paras[paras.length - 1] : '';
+  const tail = lastPara ? `……${lastPara.slice(-TAIL_LIMIT)}` : firstPara.length > bodyLimit ? '…' : '';
+  return `${prefix}${head}${tail}`;
 }
 
 /** 组装骨架注入块：dropped 无章节消息返回空串（不注入） */
