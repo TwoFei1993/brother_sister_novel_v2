@@ -33,7 +33,15 @@ export function buildNovelMainPrompt(targetWords: number): TavernPrompt {
 /** 末尾写作要求块：首行章标题 + 字数下限 + 输出纪律 + 反退化纪律
  *  （泄露形态对照实测：对 System 寒暄 / 确认语 / 思考流 / 选项；退化形态对照深度测试：短语重复循环 / 开头句式跨章复用。
  *  首行标题为用户反馈⑧：正文开头即章节名，ReadingView 经 parseChapterTitle 剥离后仍以标题 heading 展示） */
-export function buildChapterRequirement(targetWords: number): string {
+export function buildChapterRequirement(targetWords: number, progress?: { chapter: number; total: number }): string {
+  // 全书创作目标（借鉴成熟写作软件：目标章数驱动节奏）——接近尾声时提示收束伏笔，
+  // 超出目标不再硬刹车（作者加章是常态，只提示不强制）
+  const goal =
+    progress && progress.total > 0
+      ? progress.chapter >= Math.ceil(progress.total * 0.85)
+        ? `\n- 全书节奏：本书规划约 ${progress.total} 章，当前第 ${progress.chapter} 章已进入尾声阶段——本章与后续章节注意逐步回收已埋伏笔、收敛支线，向结局推进（不强行完结，自然收束）\n`
+        : `\n- 全书节奏：本书规划约 ${progress.total} 章，当前写至第 ${progress.chapter} 章——本章按正常节奏推进主线，可在合适处埋设后续章节的伏笔\n`
+      : '';
   return (
     '【本章写作要求】\n' +
     '- 正文第一行先输出本章标题（格式：`# 第N章 标题` 一行），紧接正文；除此之外不要输出其他标题或元信息\n' +
@@ -46,6 +54,7 @@ export function buildChapterRequirement(targetWords: number): string {
     '- 语言纯度：全文使用简体中文，禁止出现任何英文单词、字母或拼音（真实品牌/单位等必要专有名词除外）\n' +
     '- 对话说话人锚定：每句对话必须让读者分清是谁在说——优先用动作/神态引导' +
     '（如「苏檀皱眉：」「他放下杯子，」），长对话轮替时至少每三句锚定一次说话人；' +
-    '禁止连续多句无主的裸对话'
+    '禁止连续多句无主的裸对话' +
+    goal
   );
 }

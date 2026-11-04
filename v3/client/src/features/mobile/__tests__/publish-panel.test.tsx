@@ -13,7 +13,7 @@ import { aiVersion, type Message } from '@shared/message';
 
 import { patchMessage } from '../../../api/works';
 import { useWorkStore } from '../../../stores/work';
-import PublishPanel from '../create/PublishPanel';
+import PublishPanel from '../create/publish/PublishPanel';
 
 vi.mock('../../../api/works', () => ({ patchMessage: vi.fn().mockResolvedValue({ ok: true }) }));
 

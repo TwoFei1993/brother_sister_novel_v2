@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 
 import type { Work } from '@shared/work';
 
-import { loadAssembleAssets } from '../../../hooks/generation-pipeline';
+import { loadAssembleAssets } from '../../../../hooks/generation-pipeline';
 
 export interface BookBriefResult {
   /** 组装好的资料文本（注入提示词用；不可用时为空串） */
@@ -41,13 +41,15 @@ export function useBookBrief(work: Work): BookBriefResult {
         if (settingBits.length > 0) parts.push(`设定：${settingBits.join('；')}`);
         let charN = 0;
         let wbN = 0;
-        for (const card of assets.cards) {
+        assets.cards.forEach((card, i) => {
           const d = card.data ?? {};
           const bits = [clip(d.description, 150), clip(d.personality, 80)].filter(Boolean);
-          if (bits.length === 0) continue;
+          const bio = clip(assets.bios[i], 200);
+          if (bio) bits.push(`小传：${bio}`);
+          if (bits.length === 0) return;
           charN += 1;
           parts.push(`角色「${clip(d.name, 24) || '未命名'}」：${bits.join('；')}`);
-        }
+        });
         for (const wb of assets.worldbooks) {
           const entries = Object.values(wb.raw?.entries ?? {});
           const head = entries

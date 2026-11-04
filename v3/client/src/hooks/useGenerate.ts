@@ -199,6 +199,32 @@ export function useGenerate(): UseGenerateResult {
     collapse: COLLAPSE_RETRY_SUFFIX,
   };
 
+  /** 截断自动续写轮数上限（4 轮）：推理模型思考吃预算的章常需多轮补完；
+   *  「写到一半就没了」的主要治理手段——每轮续完重新检测，直到写完或达上限 */
+  const MAX_TRUNCATE_ROUNDS = 4;
+
+  /** 截断自动续写（generateChapter/swipeRegenerate 共用）：双判据——
+   *  1) 上游 finish_reason='length'/'max_tokens'（决定性：输出被 max_tokens 腰斩，无论结尾标点）
+   *  2) 启发式：结尾无句末标点的连续叙述（断流等无 finish 帧场景的兜底）
+   *  runOpts(partial) 由调用方给定续写轮的入库语义（普通章按消息 id 幂等覆盖 / swipe 候选更新） */
+  const continueTruncated = async (
+    work: Work,
+    ctxMessages: Message[],
+    directive: string,
+    first: Message | null,
+    runOpts: (partial: string) => Parameters<typeof run>[3],
+  ): Promise<Message | null> => {
+    let msg = first;
+    for (let rounds = 0; rounds < MAX_TRUNCATE_ROUNDS && msg; rounds += 1) {
+      const finish = useGenerationStore.getState().finishReason;
+      const outputTruncated = finish === 'length' || finish === 'max_tokens';
+      if (!outputTruncated && !isTruncatedText(msg.content)) break;
+      const partial = msg.content;
+      msg = await run(work, ctxMessages, buildContinueDirective(partial), runOpts(partial));
+    }
+    return msg;
+  };
+
   const generateChapter = useCallback(
     async (work: Work, messages: Message[], directive: string) => {
       // 重试复用同一 targetId：入库按 messageId 幂等 upsert，重试结果覆盖首次无效行
@@ -217,23 +243,15 @@ export function useGenerate(): UseGenerateResult {
           maxTokensScale: 3,
         });
       }
-      // 截断自动续写（feedback：经常没写完就结束）：双判据——
-      // 1) 上游 finish_reason='length'/'max_tokens'（决定性：输出被 max_tokens 腰斩，无论结尾标点）
-      // 2) 启发式：结尾无句末标点的连续叙述（断流等无 finish 帧场景的兜底）
-      // 最多续写 2 轮（每轮续完重新检测；推理模型思考吃预算的章常需两轮才补完）
-      for (let rounds = 0; rounds < 2 && msg; rounds += 1) {
-        const finish = useGenerationStore.getState().finishReason;
-        const outputTruncated = finish === 'length' || finish === 'max_tokens';
-        if (!outputTruncated && !isTruncatedText(msg.content)) break;
-        const partial = msg.content;
-        msg = await run(work, messages, buildContinueDirective(partial), {
-          targetId,
-          initialBuffer: partial,
-          promptDirective: directive,
-          persistMessageId: msg.id, // 补完结果同 id 覆盖（否则半成品行以孤儿形式残留，重载出现重复章节）
-          maxTokensScale: 2, // 腰斩常因思考挤占预算——续写轮同样抬预算（2 倍）
-        });
-      }
+      // 截断自动续写（补完结果同 id 幂等覆盖；腰斩常因思考挤占预算——续写轮抬预算 2 倍）
+      const baseId = msg?.id ?? targetId;
+      msg = await continueTruncated(work, messages, directive, msg, (partial) => ({
+        targetId,
+        initialBuffer: partial,
+        promptDirective: directive,
+        persistMessageId: baseId,
+        maxTokensScale: 2,
+      }));
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
       // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）
       const polishModel = useSettingsStore.getState().llmPrefs.polishModel;
@@ -295,25 +313,33 @@ export function useGenerate(): UseGenerateResult {
       }
       // 对齐 chat 语义：上下文取 target 之前（被重roll章节的旧候选不进上下文）
       const directive = target.directive ?? '';
-      let msg = await run(work, historyBeforeTarget(messages, target.id), directive, {
+      const ctx = historyBeforeTarget(messages, target.id);
+      let msg = await run(work, ctx, directive, {
         targetId: target.id,
         initialBuffer: '',
         swipeTarget: target,
       });
       const reason = invalidReasonOf(msg);
       if (msg && reason) {
-        msg = await run(work, historyBeforeTarget(messages, target.id), directive, {
+        msg = await run(work, ctx, directive, {
           targetId: target.id,
           initialBuffer: '',
           swipeTarget: target,
           promptDirective: directive + RETRY_SUFFIX[reason], // 后缀只进提示词，不入库 metadata
         });
       }
+      // 重roll 同样走截断自动续写（与 generateChapter 同判据同轮数；候选经 swipeTarget 更新落库）
+      msg = await continueTruncated(work, ctx, directive, msg, (partial) => ({
+        targetId: target.id,
+        initialBuffer: partial,
+        swipeTarget: target,
+        promptDirective: directive,
+        maxTokensScale: 2,
+      }));
       // 重试一次后仍无效（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
       return invalidReasonOf(msg) ? null : msg;
     },
     [run],
-
   );
 
   const stop = useCallback(() => {

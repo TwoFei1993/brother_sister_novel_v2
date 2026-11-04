@@ -18,6 +18,8 @@ export const CharacterAssetSchema = z.strictObject({
   avatar: z.string().optional(),
   /** 归属三态（可选，缺省=无归属；安卓 app Phase2） */
   origin: AssetOriginSchema.optional(),
+  /** 人物小传（可选）：作者手写的角色生平/背景故事，生成时以「人物小传」块注入提示词；null=清除 */
+  bio: z.string().nullish(),
   /** 酒馆原生 V2 卡（含 spec/spec_version/data 全量字段，原样保存） */
   card: TavernCardV2Schema,
 });

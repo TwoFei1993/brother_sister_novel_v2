@@ -14,12 +14,12 @@ import type { Message } from '@shared/message';
 
 import SelectionTools from '../../workbench/SelectionTools';
 import BindingsPane from './BindingsPane';
-import PublishPanel from './PublishPanel';
+import PublishPanel from './publish/PublishPanel';
 import VoiceCastPane from './voice/VoiceCastPane';
 import { OutlinePane } from './panes/OutlinePane';
 import { TextPane } from './panes/TextPane';
 import { AssetsPane } from './panes/AssetsPane';
-import VersionsPane from './WorkVersions';
+import VersionsPane from './publish/WorkVersions';
 
 type PaneId = 'text' | 'outline' | 'versions' | 'assets';
 
@@ -116,6 +116,7 @@ export default function MobileWork() {
               <OutlinePane
                 work={work}
                 chapters={chapters}
+                onApplied={setWork}
                 onDone={(msg) => {
                   upsertLocal(msg);
                   setChapterId(msg.id);

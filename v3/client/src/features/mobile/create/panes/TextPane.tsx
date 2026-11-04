@@ -3,22 +3,22 @@
  * 指令生成下一章 + 批量连写。流式块与待绑定卡独立成件，编排数据全部来自 MobileWork。
  */
 import { useEffect, useState } from 'react';
-import { BookOpen, Dices, SquarePen, Zap } from 'lucide-react';
+import { BookOpen, Dices, List, SquarePen, Zap } from 'lucide-react';
 
 import { apiFetch } from '../../../../api/client';
-import { generateTextOnce } from '../../../../api/llm';
 import { patchMessage, upsertMessage } from '../../../../api/works';
 import { useWorkStore } from '../../../../stores/work';
-import { useSettingsStore } from '../../../../stores/settings';
-import { appendSwipe, buildChapterMessage } from '../../../../hooks/generation-flow';
+import { buildChapterMessage } from '../../../../hooks/generation-flow';
 import { chapterTitle } from '../../../../lib/chapter-title';
+import { isTruncatedText } from '../../../../lib/truncation';
 import type { DetectedAsset, Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
-import { ChapterChips } from './ChapterChips';
+import { ChapterChips, ChapterDrawer } from './ChapterNav';
 import { PendingAssetsCard } from './PendingAssetsCard';
 import { ThinkingInline } from './ThinkingInline';
-import { confirmPendingAsset } from './pending-assets';
+import { confirmPendingAsset } from './PendingAssetsCard';
+import { polishChapterText } from './polish';
 import MobileTtsBar from '../voice/MobileTtsBar';
 import type { ChapterMsg, Gen } from './types';
 
@@ -51,6 +51,10 @@ export function TextPane({
   const otherStreaming = gen.streaming && gen.streamingWorkId !== null && gen.streamingWorkId !== work.id;
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
+  /** 📑 章节目录抽屉（左下角悬浮入口，写完一章后不必滚回顶部切章） */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  /** 当前章是否疑似未写完（截断启发式；正文卡显示「接着写」入口） */
+  const currentTruncated = Boolean(current && !editing && !myStreaming && isTruncatedText(current.content));
 
   /** 章切换时同步检出清单（取当前章的 extra.newAssets） */
   useEffect(() => {
@@ -128,30 +132,7 @@ export function TextPane({
     if (!confirm('AI 润色：保持情节与人物不变，提升文笔与节奏，生成新版本（当前版本保留）。继续？')) return;
     setPolishing(true);
     try {
-      const prefs = useSettingsStore.getState().llmPrefs;
-      const text = await generateTextOnce(
-        {
-          source: prefs.source,
-          model: prefs.model,
-          temperature: 0.6,
-          thinking: prefs.thinking !== false,
-          messages: [
-            {
-              role: 'user',
-              content:
-                `你是资深小说编辑。请在完全不改变以下章节的情节走向、人物性格、对话内容与事实设定的前提下润色正文：` +
-                `修正病句与错别字、提升文字质感与画面感、优化叙事节奏。直接输出润色后的全文，不要任何解释、标题或前后缀。` +
-                `\n\n【章节】第${current.chapter.index}章 ${current.chapter.title || ''}\n\n【正文】\n${current.content}`,
-            },
-          ],
-        },
-        16384,
-      );
-      const cleaned = text.trim();
-      if (!cleaned) throw new Error('模型无输出');
-      const updated = appendSwipe(current, cleaned, {});
-      useWorkStore.getState().upsertLocal(updated);
-      await patchMessage(work.id, updated);
+      onDone(await polishChapterText(work, current));
     } catch (err) {
       alert(`润色失败：${err instanceof Error ? err.message : '未知错误'}`);
     } finally {
@@ -182,9 +163,37 @@ export function TextPane({
       {/* 激活版本正文（标题独占一行；操作按钮等宽一行不折行） */}
       {current && (
         <div className="mx-4 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-          <h2 className="text-sm font-semibold leading-snug [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
-            {chapterTitle(current.chapter.index, current.chapter.title)}
-          </h2>
+          <div className="flex items-start gap-2">
+            <h2 className="min-w-0 flex-1 text-sm font-semibold leading-snug [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+              {chapterTitle(current.chapter.index, current.chapter.title)}
+            </h2>
+            {/* 📑 目录入口（写完章在正文中部也能一键切章） */}
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="章节目录"
+              data-testid="chapter-drawer-btn-card"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]"
+            >
+              <List className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          {/* 残章提示：截断启发式检出未写完（写到一半戛然而止）——持续可见的一键续写 */}
+          {currentTruncated && (
+            <div
+              className="mt-2 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400"
+              data-testid="truncated-tip"
+            >
+              <span className="min-w-0 flex-1">⚠️ 本章疑似未写完（生成在中途停止）</span>
+              <button
+                type="button"
+                onClick={() => void gen.continueFromPartial(work, useWorkStore.getState().messages, current.content).then(onDone)}
+                className="shrink-0 rounded-lg border border-amber-500/50 px-2.5 py-1 text-amber-600 dark:text-amber-400"
+              >
+                ⏵ 接着写
+              </button>
+            </div>
+          )}
           {!editing && !myStreaming && (
             <div className="mt-2 flex gap-2">
               <button
@@ -359,6 +368,22 @@ export function TextPane({
           {directive.trim() ? '生成' : '续写'}
         </button>
       </div>
+
+      {/* 📑 章节目录悬浮入口（左下角，不随滚动移动——写完一章任意位置一键呼出） */}
+      {chapters.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="章节目录"
+          data-testid="chapter-drawer-btn"
+          className="m-press fixed bottom-28 left-4 z-40 flex h-11 items-center gap-1.5 rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3.5 text-xs shadow-lg"
+        >
+          <List className="h-4 w-4" aria-hidden />
+          目录
+        </button>
+      )}
+
+      <ChapterDrawer open={drawerOpen} chapters={chapters} currentId={current?.id} onPick={onPick} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }

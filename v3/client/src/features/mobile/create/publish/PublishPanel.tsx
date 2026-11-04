@@ -9,9 +9,9 @@
 import { useMemo, useState } from 'react';
 import { Check, X } from 'lucide-react';
 
-import { patchMessage } from '../../../api/works';
-import { useWorkStore } from '../../../stores/work';
-import { chapterTitle } from '../../../lib/chapter-title';
+import { patchMessage } from '../../../../api/works';
+import { useWorkStore } from '../../../../stores/work';
+import { chapterTitle } from '../../../../lib/chapter-title';
 import type { Message } from '@shared/message';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };

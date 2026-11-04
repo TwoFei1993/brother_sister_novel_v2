@@ -65,6 +65,19 @@ describe('novel 写作要求注入（requirements）', () => {
     expect(text).toContain('System');
     expect(text).toContain('禁止');
   });
+
+  it('创作目标进度：前期章节注入规划总章数与埋伏笔提示，接近尾声注入收束提示', async () => {
+    const { buildChapterRequirement } = await import('../prompt/novel/requirements');
+    const early = buildChapterRequirement(3000, { chapter: 5, total: 100 });
+    expect(early).toContain('规划约 100 章');
+    expect(early).toContain('第 5 章');
+    expect(early).toContain('伏笔');
+    const late = buildChapterRequirement(3000, { chapter: 90, total: 100 });
+    expect(late).toContain('尾声阶段');
+    expect(late).toContain('回收已埋伏笔');
+    // 无进度（chat 兜底等场景）不注入节奏段
+    expect(buildChapterRequirement(3000)).not.toContain('全书节奏');
+  });
 });
 
 describe('postprocessMessage 集成卫生层', () => {

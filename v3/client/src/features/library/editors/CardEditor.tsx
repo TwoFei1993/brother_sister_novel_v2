@@ -17,9 +17,6 @@ import EditorShell, { NumberField, SelectField, TextField } from './EditorShell'
 
 const getCharacter = (id: string): Promise<CharacterAsset> => apiFetch<CharacterAsset>(`/api/characters/${id}`);
 
-const updateCharacter = (id: string, card: TavernCardV2, name: string): Promise<CharacterAsset> =>
-  apiFetch<CharacterAsset>(`/api/characters/${id}`, { method: 'PATCH', body: JSON.stringify({ card, name }) });
-
 /** depth_prompt.role：V2 spec 为字符串枚举 */
 const DP_ROLE_OPTIONS = [
   { value: 'system', label: 'system' },
@@ -38,6 +35,8 @@ export interface CardEditorProps {
 export default function CardEditor({ characterId, onClose, onSaved, notify }: CardEditorProps) {
   const [card, setCard] = useState<TavernCardV2 | null>(null);
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
+  /** 人物小传（壳层自有字段 bio：作者手写的角色生平，导入导出 PNG 不经过 card 体） */
+  const [bio, setBio] = useState('');
   const [fallbackName, setFallbackName] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,6 +52,7 @@ export default function CardEditor({ characterId, onClose, onSaved, notify }: Ca
         if (!alive) return;
         setCard(asset.card);
         setAvatar(asset.avatar);
+        setBio(asset.bio ?? '');
         setFallbackName(asset.name);
       })
       .catch((err: unknown) => {
@@ -103,7 +103,14 @@ export default function CardEditor({ characterId, onClose, onSaved, notify }: Ca
     if (!card) return;
     setSaving(true);
     try {
-      await updateCharacter(characterId, card, typeof data?.name === 'string' && data.name ? data.name : fallbackName);
+      await apiFetch<CharacterAsset>(`/api/characters/${characterId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          card,
+          name: typeof data?.name === 'string' && data.name ? data.name : fallbackName,
+          ...(bio.trim() ? { bio: bio.trim() } : { bio: null }), // 空小传清除字段（partial 合并需显式置 null）
+        }),
+      });
       setDirty(false);
       notifyRef.current('ok', '角色卡已保存');
       onSaved();
@@ -139,6 +146,7 @@ export default function CardEditor({ characterId, onClose, onSaved, notify }: Ca
           )}
 
           <TextField label="名字" tip="角色名（data.name），保存后同步列表显示名" value={s(data.name)} onChange={(name) => patchData({ name })} />
+          <TextField label="人物小传" tip="作者手写的角色生平/背景故事（传记、经历、重要往事），生成正文时以「人物小传」整块注入——适合一时兴起写的详细背景" textarea rows={6} value={bio} onChange={setBio} />
           <TextField label="人设描述" tip="角色卡描述：角色的外貌/性格/背景设定，每轮注入给 AI（description）" textarea rows={8} value={s(data.description)} onChange={(description) => patchData({ description })} />
           <TextField label="性格" tip="性格摘要（personality）" textarea rows={3} value={s(data.personality)} onChange={(personality) => patchData({ personality })} />
           <TextField label="场景" tip="开场场景设定（scenario）" textarea rows={3} value={s(data.scenario)} onChange={(scenario) => patchData({ scenario })} />

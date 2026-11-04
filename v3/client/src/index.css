@@ -545,6 +545,13 @@ a,
 }
 .m-sheet { animation: m-sheet-up 0.32s var(--m-ease) both; }
 
+/* 左侧抽屉滑入（章节目录） */
+@keyframes m-drawer-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.m-drawer-left { animation: m-drawer-left 0.28s var(--m-ease) both; }
+
 /* 小卡浮现（居中对话框/气泡） */
 @keyframes m-pop {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
@@ -574,6 +581,7 @@ a,
   .m-rise,
   .m-fade,
   .m-sheet,
+  .m-drawer-left,
   .m-pop,
   .m-stagger > * {
     animation: none;

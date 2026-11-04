@@ -10,14 +10,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { BookOpenCheck, Check, Target } from 'lucide-react';
 
-import type { GenerateMessage } from '../../../api/llm';
-import { generateTextOnce } from '../../../api/llm';
-import { useWorkStore } from '../../../stores/work';
+import type { GenerateMessage } from '../../../../api/llm';
+import { generateTextOnce } from '../../../../api/llm';
+import { useWorkStore } from '../../../../stores/work';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
-import { useSettingsStore } from '../../../stores/settings';
-import { patchMessage } from '../../../api/works';
-import { appendSwipe } from '../../../hooks/generation-flow';
+import { useSettingsStore } from '../../../../stores/settings';
+import { patchMessage } from '../../../../api/works';
+import { appendSwipe } from '../../../../hooks/generation-flow';
 import {
   ITER_KEYWORD,
   buildIterChatMessages,
@@ -26,7 +26,7 @@ import {
   hitsIterKeyword,
   parseIterReply,
   type IterChapterRef,
-} from '../../planner/iter-llm';
+} from '../../../planner/iter-llm';
 import { useBookBrief } from './useBookBrief';
 
 interface ChatLine {

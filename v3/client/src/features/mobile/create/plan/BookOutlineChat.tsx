@@ -8,8 +8,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { CircleHelp, History, Sparkles } from 'lucide-react';
 
-import { generateTextOnce } from '../../../api/llm';
-import { useSettingsStore } from '../../../stores/settings';
+import { generateTextOnce } from '../../../../api/llm';
+import { useSettingsStore } from '../../../../stores/settings';
 import type { Work } from '@shared/work';
 
 import {
@@ -22,9 +22,9 @@ import {
   saveChat,
   type AppliedVersion,
   type BookTurn,
-} from '../../planner/book-planner';
-import { parsePlannerReply, type PlannerProposal } from '../../planner/planner-llm';
-import PlannerQuestions from '../../planner/PlannerQuestions';
+} from '../../../planner/book-planner';
+import { parsePlannerReply, type PlannerProposal } from '../../../planner/planner-llm';
+import PlannerQuestions from '../../../planner/PlannerQuestions';
 import { applyProposalToBook, restoreBookSlice, type ApplyStage } from './book-outline-apply';
 
 interface Props {

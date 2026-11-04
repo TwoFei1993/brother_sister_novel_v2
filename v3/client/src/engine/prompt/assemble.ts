@@ -40,6 +40,8 @@ export interface AssembleContext {
   preset: TavernPreset;
   /** 角色卡，按 characterIds 顺序 */
   cards: TavernCardV2[];
+  /** 人物小传（作者手写角色生平，与 cards 同序对齐；可空缺省） */
+  bios?: readonly string[];
   /** Work 级开关「允许角色卡覆盖预设」（§4.4，默认开） */
   allowCardOverride: boolean;
   /** scanWorldInfo 产出 */
@@ -150,10 +152,20 @@ export function assemblePrompt(ctx: AssembleContext): AssembleResult {
   const settingsBlock = buildSettingsBlock(ctx.workSettings);
   const scenarioText = [joinCards(ctx.cards, (d) => d.scenario), settingsBlock].filter(Boolean).join('\n\n');
 
+  // 人物小传（作者手写角色生平）：与卡序对齐拼进人设块（空小传跳过）
+  const bios = ctx.bios ?? [];
+  const bioText = ctx.cards
+    .map((c, i) => {
+      const bio = (bios[i] ?? '').trim();
+      return bio ? `【人物小传：${textOf(c.data.name).trim() || '未命名'}】\n${bio}` : '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
   const blocks: Record<string, string> = {
     main: mainOverride || textOf(promptById.get('main')?.content),
     worldInfoBefore: ctx.worldbookScan.before.join('\n\n'),
-    charDescription: joinCards(ctx.cards, (d) => d.description),
+    charDescription: [joinCards(ctx.cards, (d) => d.description), bioText].filter(Boolean).join('\n\n'),
     charPersonality: joinCards(ctx.cards, (d) => d.personality),
     scenario: scenarioText,
     worldInfoAfter: ctx.worldbookScan.after.join('\n\n'),

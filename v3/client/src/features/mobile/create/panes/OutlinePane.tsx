@@ -7,8 +7,8 @@
 import { useState } from 'react';
 import { Map, MessagesSquare, NotebookPen } from 'lucide-react';
 
-import OutlineIterChat from '../OutlineIterChat';
-import BookOutlineChat from '../BookOutlineChat';
+import OutlineIterChat from '../plan/OutlineIterChat';
+import BookOutlineChat from '../plan/BookOutlineChat';
 import type { ChapterMsg } from './types';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';

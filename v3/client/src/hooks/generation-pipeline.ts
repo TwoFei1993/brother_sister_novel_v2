@@ -56,6 +56,8 @@ import {
 export interface AssembleAssets {
   preset: TavernPreset | null;
   cards: TavernCardV2[];
+  /** 人物小传（作者手写角色生平；与 cards 同序对齐，空串=无小传） */
+  bios: string[];
   worldbooks: WorldbookAsset[];
   /** 势力介绍（P2.2；整块注入提示词资料区，无逐条激活语义） */
   factions: FactionAsset[];
@@ -97,19 +99,23 @@ export async function loadAssembleAssets(work: Work, chapterIndex?: number): Pro
   const characterIds = effectiveAssetIds(work, 'character', chapterIndex);
   const worldbookIds = effectiveAssetIds(work, 'worldbook', chapterIndex);
   const factionIds = effectiveAssetIds(work, 'faction', chapterIndex);
-  const [preset, cards, books, factions, regexScripts] = await Promise.all([
+  const [preset, cardAssets, books, factions, regexScripts] = await Promise.all([
     work.presetId
       ? apiFetch<PresetAsset>(`/api/presets/${work.presetId}`).then((a) => a.raw).catch(() => null)
       : Promise.resolve(null),
     Promise.all(
       characterIds.map((id) =>
-        apiFetch<CharacterAsset>(`/api/characters/${id}`).then((a) => a.card).catch(() => null),
+        apiFetch<CharacterAsset>(`/api/characters/${id}`).catch(() => null),
       ),
     ),
     Promise.all(worldbookIds.map((id) => apiFetch<WorldbookAsset>(`/api/worldbooks/${id}`).catch(() => null))),
     Promise.all(factionIds.map((id) => apiFetch<FactionAsset>(`/api/factions/${id}`).catch(() => null))),
     loadRegexScripts(work),
   ]);
+  // 壳层人物小传随卡同序保留（拉取失败的卡小传一并丢弃，序号对齐由 filter 同步完成）
+  const keptCards = cardAssets.filter((a): a is CharacterAsset => a !== null);
+  const cards = keptCards.map((a) => a.card);
+  const bios = keptCards.map((a) => a.bio ?? '');
   const factionList = factions.filter((f): f is FactionAsset => f !== null);
   // 势力注入（D4「整块注入」）：构造成伪世界书 constant 条目，复用世界书引擎的既有注入路径（不动引擎）
   const factionBook: WorldbookAsset | null =
@@ -136,7 +142,8 @@ export async function loadAssembleAssets(work: Work, chapterIndex?: number): Pro
       : null;
   return {
     preset,
-    cards: cards.filter((c): c is TavernCardV2 => c !== null),
+    cards,
+    bios,
     worldbooks: [...books.filter((b): b is WorldbookAsset => b !== null), ...(factionBook ? [factionBook] : [])],
     factions: factionList,
     regexScripts,
@@ -244,6 +251,7 @@ export async function scanAndAssemble(
     const result = assemblePrompt({
       preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords),
       cards: assets.cards,
+      bios: assets.bios, // 人物小传（作者手写）随卡注入人设块
       // §4.4 卡覆盖预设开关：作品级设置，缺省视为开（与酒馆一致）
       allowCardOverride: work.allowCardOverride !== false,
       worldbookScan: scan,
@@ -255,7 +263,10 @@ export async function scanAndAssemble(
             // NEW_ASSETS_HINT 仅在有真实指令的章追加：空指令（⚡连写推进章）保持纯净，
             // 避免「剧情指引：」裸前缀被 hint 撑出（batch 测试锁定的语义）
             directive: tail.text + outlineHint + recallHint + skeletonHint + (tail.text ? NEW_ASSETS_HINT : ''),
-            chapterRequirement: buildChapterRequirement(targetWords),
+            chapterRequirement: buildChapterRequirement(targetWords, {
+              chapter: nextChapterIndex(messages),
+              total: work.settings.desiredChapterCount,
+            }),
           }
         : { userMessage: tail.text }),
       macroEnv: env,

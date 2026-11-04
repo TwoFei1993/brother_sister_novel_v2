@@ -60,7 +60,7 @@ async function finalizeWith(buffer: string): Promise<{ turn: Awaited<ReturnType<
     userText: '晚上吃什么',
     speaker: SPEAKER,
     swipeTarget: null,
-    assets: { preset: null, cards: [], worldbooks: [], factions: [], regexScripts: [] },
+    assets: { preset: null, cards: [], bios: [], worldbooks: [], factions: [], regexScripts: [] },
     env: buildChatMacroEnv(chatWork(), SPEAKER, { work: new Map(), global: new Map() }),
     prefs: { source: 'openai', model: 'm3' },
     promptTokens: 100,

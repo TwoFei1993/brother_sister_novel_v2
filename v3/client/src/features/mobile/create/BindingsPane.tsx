@@ -66,6 +66,39 @@ export default function BindingsPane({
   const nameOf = (kind: Kind, id: string): string =>
     refs?.[kind]?.find((r) => r.id === id)?.name ?? id.slice(0, 8);
 
+  /** ✍️ 角色小传快捷编辑（移动端入口）：弹层 textarea 直接改壳层 bio，保存 PATCH 角色 */
+  const [bioTarget, setBioTarget] = useState<{ id: string; name: string } | null>(null);
+  const [bioDraft, setBioDraft] = useState('');
+  const [bioSaving, setBioSaving] = useState(false);
+
+  async function openBio(id: string): Promise<void> {
+    setBioTarget({ id, name: nameOf('character', id) });
+    setBioDraft('');
+    setBioSaving(false);
+    try {
+      const a = await apiFetch<CharacterAsset>(`/api/characters/${id}`);
+      setBioDraft(a.bio ?? '');
+    } catch {
+      // 拉取失败仍可编辑（保存以服务端合并为准）
+    }
+  }
+
+  async function saveBio(): Promise<void> {
+    if (!bioTarget || bioSaving) return;
+    setBioSaving(true);
+    try {
+      await apiFetch(`/api/characters/${bioTarget.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ bio: bioDraft.trim() || null }),
+      });
+      setBioTarget(null);
+    } catch {
+      alert('小传保存失败，请重试');
+    } finally {
+      setBioSaving(false);
+    }
+  }
+
   /** 切换绑定（勾选/取消）：取最新 revision 后 PATCH 对应 ids 数组 */
   async function toggleBind(kind: Kind, assetId: string): Promise<void> {
     setError(null);
@@ -132,7 +165,7 @@ export default function BindingsPane({
           {ids.length === 0 && <p className="text-xs text-[hsl(var(--fg-muted))]">未绑定——点「＋ 选用」从素材库选取</p>}
           <ul className="flex flex-wrap gap-1.5">
             {ids.map((id) => (
-              <li key={id}>
+              <li key={id} className="flex items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => void toggleBind(kind, id)}
@@ -141,6 +174,17 @@ export default function BindingsPane({
                 >
                   {nameOf(kind, id)} <X className="inline h-3.5 w-3.5 align-[-1px]" aria-hidden />
                 </button>
+                {kind === 'character' && (
+                  <button
+                    type="button"
+                    onClick={() => void openBio(id)}
+                    title="写人物小传（生平/背景，生成时整块注入）"
+                    data-testid={`bio-edit-${id}`}
+                    className="rounded-full border border-[hsl(var(--border-soft))] px-1.5 py-1 text-[11px] leading-none text-[hsl(var(--fg-muted))]"
+                  >
+                    📝
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -182,6 +226,44 @@ export default function BindingsPane({
                 </ul>
               </section>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ✍️ 角色小传弹层（底部滑入）：保存写壳层 bio，生成正文时以「人物小传」块注入 */}
+      {bioTarget && (
+        <div className="m-fade fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setBioTarget(null)}>
+          <div
+            className="m-sheet w-full rounded-t-2xl bg-[hsl(var(--surface))] p-4 pb-8"
+            onClick={(e) => e.stopPropagation()}
+            data-testid="bio-sheet"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">人物小传 · {bioTarget.name}</h3>
+              <button type="button" onClick={() => setBioTarget(null)} className="text-xs text-[hsl(var(--fg-muted))]">
+                取消
+              </button>
+            </div>
+            <p className="mb-2 text-[11px] text-[hsl(var(--fg-muted))]">
+              随手写的角色生平/背景/重要往事；生成正文时整块注入提示词，与角色卡人设叠加生效。
+            </p>
+            <textarea
+              value={bioDraft}
+              onChange={(e) => setBioDraft(e.target.value)}
+              rows={10}
+              data-testid="bio-textarea"
+              placeholder="例如：沈清晏生于江南沈府，七岁那年母亲因病去世……"
+              className="w-full resize-y rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-3 text-sm leading-7 outline-none focus:border-[hsl(var(--accent))]"
+            />
+            <button
+              type="button"
+              onClick={() => void saveBio()}
+              disabled={bioSaving}
+              data-testid="bio-save"
+              className="mt-3 h-10 w-full rounded-xl bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-50"
+            >
+              {bioSaving ? '保存中…' : '保存小传'}
+            </button>
           </div>
         </div>
       )}

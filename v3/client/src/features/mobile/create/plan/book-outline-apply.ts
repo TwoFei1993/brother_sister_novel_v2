@@ -5,8 +5,8 @@
  * - restoreBookSlice：恢复历史版本的资料切片（不动已绑定的卡/书）
  * 失败均抛错由调用方提示；onStage 供 UI 展示阶段进度（拉卡/建世界书/写资料）。
  */
-import { apiFetch } from '../../../api/client';
-import { updateWork } from '../../../api/works';
+import { apiFetch } from '../../../../api/client';
+import { updateWork } from '../../../../api/works';
 import type { Work } from '@shared/work';
 
 import {
@@ -14,8 +14,8 @@ import {
   proposalToSlice,
   pushHistory,
   type AppliedVersion,
-} from '../../planner/book-planner';
-import type { PlannerProposal } from '../../planner/planner-llm';
+} from '../../../planner/book-planner';
+import type { PlannerProposal } from '../../../planner/planner-llm';
 
 export type ApplyStage = 'cards' | 'worldbook' | 'settings';
 

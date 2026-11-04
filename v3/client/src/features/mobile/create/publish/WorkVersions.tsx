@@ -8,15 +8,15 @@
  * - 上架状态标记（publishedVersionId 对应版本显示「已上架」，上架管理 Phase1 后续任务接入）
  */
 import { Dices, FileText, Trash2 } from 'lucide-react';
-import { forkManualVersion } from '../../../hooks/generation-flow';
-import { deleteMessage, patchMessage } from '../../../api/works';
-import { useWorkStore } from '../../../stores/work';
-import { chapterTitle } from '../../../lib/chapter-title';
+import { forkManualVersion } from '../../../../hooks/generation-flow';
+import { deleteMessage, patchMessage } from '../../../../api/works';
+import { useWorkStore } from '../../../../stores/work';
+import { chapterTitle } from '../../../../lib/chapter-title';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
-import type { UseGenerateResult } from '../../../hooks/useGenerate';
+import type { UseGenerateResult } from '../../../../hooks/useGenerate';
 
-import { ChapterChips } from './panes/ChapterChips';
+import { ChapterChips } from '../panes/ChapterNav';
 
 type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
 type Gen = Pick<UseGenerateResult, 'streaming' | 'swipeRegenerate'>;
