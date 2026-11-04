@@ -14,7 +14,7 @@ export function ChapterChips({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto px-4 py-2" data-testid="chapter-chips">
+    <div className="scrollbar-none flex gap-1.5 overflow-x-auto px-4 py-2" data-testid="chapter-chips">
       {chapters.map((c) => (
         <button
           key={c.id}

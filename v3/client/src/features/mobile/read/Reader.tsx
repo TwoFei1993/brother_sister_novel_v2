@@ -39,6 +39,13 @@ interface PublishedChapter {
 
 const COMMENT_TYPES: readonly CommentType[] = ['改错', '添加', '感悟'];
 
+/** 阅读渲染清洗：剥离 markdown 加粗/斜体星号——AI 正文偶带 **裸标记**，
+ * 桌面端走 markdown 渲染不裸露，移动端纯文本渲染需在段切分时统一剥离
+ * （清洗后的 paras 同时供划线快照与 TTS 朗读，quote 匹配保持一致）。 */
+function stripMarkdownMarks(s: string): string {
+  return s.replace(/\*\*/g, '').replace(/\*/g, '');
+}
+
 
 export default function Reader() {
   const { id } = useParams<{ id: string }>();
@@ -90,7 +97,7 @@ export default function Reader() {
           if (chapter === undefined || chapter.publishedVersionId == null) continue;
           const version = m.swipes.find((v) => v.id === chapter.publishedVersionId);
           if (!version) continue;
-          published.push({ msg: m as ChapterMsg, version, paras: version.content.split('\n').filter((p) => p.trim() !== '') });
+          published.push({ msg: m as ChapterMsg, version, paras: version.content.split('\n').filter((p) => p.trim() !== '').map(stripMarkdownMarks) });
         }
         published.sort((a, b) => a.msg.chapter.index - b.msg.chapter.index);
         setChapters(published);
@@ -285,9 +292,10 @@ export default function Reader() {
         </button>
       </header>
 
-      {/* 正文（点击分区 + 划线） */}
+      {/* 正文（点击分区 + 划线）；章节 chips 仅多章时渲染（单章孤立悬浮无意义） */}
       <div className="m-reader-body" onMouseUp={handleSelection} onClick={handleReaderTap} data-testid="reader-body">
-        <div className="flex gap-1.5 overflow-x-auto px-4 pt-3">
+        {chapters.length > 1 && (
+        <div className="scrollbar-none flex gap-1.5 overflow-x-auto px-4 pt-3">
           {chapters.map((c, i) => (
             <button
               key={c.msg.id}
@@ -306,6 +314,7 @@ export default function Reader() {
             </button>
           ))}
         </div>
+        )}
 
         {chapter && (
           <article

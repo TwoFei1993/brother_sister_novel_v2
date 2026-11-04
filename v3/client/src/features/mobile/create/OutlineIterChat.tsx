@@ -189,7 +189,7 @@ export default function OutlineIterChat({
           <p className="px-3 text-xs text-[hsl(var(--fg-muted))]">和助手聊某一章想怎么改——它问清楚后会请你确认生成新版本（旧版本保留）</p>
         )}
         {!locked && chapterRefs.length > 0 && (
-          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="scrollbar-none mt-2 flex gap-1.5 overflow-x-auto pb-1">
             {chapterRefs.slice(-8).map((c) => (
               <button
                 key={c.index}

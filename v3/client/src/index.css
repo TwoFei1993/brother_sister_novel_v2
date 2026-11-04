@@ -321,6 +321,15 @@
 
 /* ---------- 工具类 ---------- */
 
+/* 横滚细条隐藏滚动条（章节 chips 等）：保留滚动手势，去掉 Windows/安卓的原生粗滚动条 */
+@utility scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* safe-area 避让（PWA 全屏时刘海/手势条） */
 @utility safe-top {
   padding-top: max(0.75rem, env(safe-area-inset-top));

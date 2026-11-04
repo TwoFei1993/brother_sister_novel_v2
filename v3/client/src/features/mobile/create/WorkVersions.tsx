@@ -83,16 +83,6 @@ export default function VersionsPane({
           <div className="mx-4 mb-2 flex gap-2">
             <button
               type="button"
-              onClick={() => void removeChapter()}
-              data-testid="mobile-delete-ch-btn"
-              title="删除本章"
-              className="flex h-9 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-red-400/40 text-xs text-red-400"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden />
-              删除
-            </button>
-            <button
-              type="button"
               onClick={() => void reroll()}
               disabled={gen.streaming}
               title="同指令重写本章，追加新版本（旧版本保留）"
@@ -112,6 +102,16 @@ export default function VersionsPane({
             >
               <FileText className="h-4 w-4" aria-hidden />
               手改
+            </button>
+            <button
+              type="button"
+              onClick={() => void removeChapter()}
+              data-testid="mobile-delete-ch-btn"
+              title="删除本章"
+              className="flex h-9 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-red-400/40 text-xs text-red-400"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+              删除
             </button>
           </div>
 

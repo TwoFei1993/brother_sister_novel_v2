@@ -51,7 +51,7 @@ export default function SettingsPage() {
 
       <nav
         aria-label="设置分区"
-        className="mb-5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="scrollbar-none mb-5 flex gap-2 overflow-x-auto"
       >
         {SECTIONS.map((s) => (
           <button

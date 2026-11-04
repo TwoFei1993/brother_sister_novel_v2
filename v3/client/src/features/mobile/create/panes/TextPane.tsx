@@ -182,7 +182,7 @@ export function TextPane({
       {/* 激活版本正文（标题独占一行；操作按钮等宽一行不折行） */}
       {current && (
         <div className="mx-4 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-          <h2 className="truncate text-sm font-semibold">
+          <h2 className="text-sm font-semibold leading-snug [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
             {chapterTitle(current.chapter.index, current.chapter.title)}
           </h2>
           {!editing && !myStreaming && (

@@ -342,29 +342,6 @@ export default function PlannerPage() {
         {/* 右列：聊天流 + 输入区 */}
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 overflow-y-auto px-3 pb-12 pt-4 md:px-4 md:py-6">
-            {/* 空态引导（走查条目⑧）：新会话只有一条欢迎气泡时，给可点的示例想法，降低空白首屏的启动门槛 */}
-            {turns.length <= 1 && !busy && (
-              <div className="flex flex-col items-center gap-3 pt-8 text-center" data-testid="planner-empty-guide">
-                <p className="text-sm text-[hsl(var(--fg-muted))]">试一个开头（点击直接发送）：</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {[
-                    '写一本末世题材的兄妹互动小说，妹妹有净化异能',
-                    '星际题材，哥哥是飞船工程师，妹妹是AI人格',
-                    '都市日常向，兄妹合开一家深夜便利店',
-                  ].map((idea) => (
-                    <button
-                      key={idea}
-                      type="button"
-                      onClick={() => void send(idea)}
-                      data-testid="planner-idea-chip"
-                      className="rounded-full border border-[hsl(var(--border-soft))] px-3.5 py-2 text-xs text-[hsl(var(--fg))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))]"
-                    >
-                      {idea}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             {turns.map((t, i) => (
               <div key={i} className={`m-pop ${t.role === 'user' ? 'flex justify-end' : 'flex justify-start'}`}>
                 {t.interrupted ? (
@@ -412,6 +389,7 @@ export default function PlannerPage() {
                                     {opt}
                                   </span>
                                 ))}
+
                               </div>
                             )}
                           </li>
@@ -423,6 +401,30 @@ export default function PlannerPage() {
                 )}
               </div>
             ))}
+
+            {/* 空态引导（走查条目⑧）：新会话只有一条欢迎气泡时，给可点的示例想法，降低空白首屏的启动门槛 */}
+            {turns.length <= 1 && !busy && (
+              <div className="flex flex-col items-center gap-3 pt-8 text-center" data-testid="planner-empty-guide">
+                <p className="text-sm text-[hsl(var(--fg-muted))]">试一个开头（点击直接发送）：</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {[
+                    '写一本末世题材的兄妹互动小说，妹妹有净化异能',
+                    '星际题材，哥哥是飞船工程师，妹妹是AI人格',
+                    '都市日常向，兄妹合开一家深夜便利店',
+                  ].map((idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => void send(idea)}
+                      data-testid="planner-idea-chip"
+                      className="rounded-full border border-[hsl(var(--border-soft))] px-3.5 py-2 text-xs text-[hsl(var(--fg))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))]"
+                    >
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {busy && streamingText && (
               <div className="flex justify-start">
@@ -545,7 +547,7 @@ export default function PlannerPage() {
                 }}
                 rows={1}
                 disabled={busy || importing}
-                placeholder="描述你的创作想法，或对策划案提出修改意见…"
+                placeholder="描述你的创作想法…"
                 aria-label="向导输入"
                 data-testid="planner-input"
                 className="max-h-32 min-h-[40px] min-w-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
