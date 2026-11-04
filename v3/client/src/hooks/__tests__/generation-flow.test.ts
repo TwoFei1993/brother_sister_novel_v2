@@ -15,6 +15,8 @@ import {
   shouldRetry,
   swipeLimitError,
   toGenerationError,
+  calcOutputBudget,
+  looksTruncated,
 } from '../generation-flow';
 
 describe('shouldRetry（§9.1 网络类重试 ≤2 次，仅未产出内容时）', () => {
@@ -213,5 +215,51 @@ describe('toGenerationError', () => {
 
   it('普通 Error → unknown + 原始消息', () => {
     expect(toGenerationError(new Error('boom'))).toEqual({ code: 'unknown', message: 'boom' });
+  });
+});
+
+describe('calcOutputBudget（输出预算按目标字数反推——截断根因①的第一性修复）', () => {
+  it('3000 字目标 + 思考 → 18750（旧固定值 16384 不够写完整章）', () => {
+    expect(calcOutputBudget(3000, true)).toBe(Math.min(Math.ceil((3000 + 1500) * 1.5) + 12000, 64000));
+    expect(calcOutputBudget(3000, true)).toBe(18750);
+  });
+
+  it('目标字数越大预算越高；思考关 → 无思考余量、下限 8192', () => {
+    expect(calcOutputBudget(5000, true)).toBeGreaterThan(calcOutputBudget(3000, true));
+    expect(calcOutputBudget(3000, false)).toBe(8192); // 6750 < 下限 → 兜到 8192
+    expect(calcOutputBudget(100, false)).toBe(8192); // 极小目标回落下限
+    expect(calcOutputBudget(6000, false)).toBeGreaterThan(8192); // 大目标按字数上浮
+  });
+
+  it('续写/重试 scale 乘算且封顶 64000', () => {
+    expect(calcOutputBudget(3000, true, 2)).toBe(18750 * 2);
+    expect(calcOutputBudget(9000, true, 3)).toBe(64000);
+  });
+});
+
+describe('looksTruncated（截断判据——含句号边界盲区的字数兜底）', () => {
+  it('finish=length/max_tokens → 一律截断（无论结尾标点）', () => {
+    expect(looksTruncated('length', '写完了。', 3000)).toBe(true);
+    expect(looksTruncated('max_tokens', '写完了。', 3000)).toBe(true);
+  });
+
+  it('finish=stop → 尊重模型，永不判截断（可能作者就要短章）', () => {
+    expect(looksTruncated('stop', '短。', 3000)).toBe(false);
+  });
+
+  it('finish 缺失 + 结尾句号完整 + 字数达标 → 不判截断', () => {
+    const full = '他写完了这一章。'.repeat(200); // 1400 字 > 3000*0.7=2100？不足——改用更长文本
+    const long = full + '后续的情节继续推进下去直到远远超过目标字数下限为止。'.repeat(20);
+    expect(long.length).toBeGreaterThan(3000 * 0.7);
+    expect(looksTruncated(null, long, 3000)).toBe(false);
+  });
+
+  it('finish 缺失 + 句号收尾但字数远低于目标 → 句号边界截断盲区兜底判截断', () => {
+    const boundaryCut = '他忽然明白这理由并不全是pretext。'; // 恰好断在句号 → 启发式漏检形态
+    expect(looksTruncated(null, boundaryCut, 3000)).toBe(true);
+  });
+
+  it('finish 缺失 + 启发式命中（无句末标点）→ 截断', () => {
+    expect(looksTruncated(null, '雨夜的码头一片死寂，他攥紧手里的信跳上船头，头也不回地跳进了舱里', 3000)).toBe(true);
   });
 });

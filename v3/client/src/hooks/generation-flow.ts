@@ -12,6 +12,8 @@ import { aiVersion, manualVersion, manualVersionName, nextAiVersionName, type De
 
 import { ApiError } from '../api/client';
 
+import { isTruncatedText } from '../lib/truncation';
+
 import { uuid } from '../lib/uuid';
 export interface GenerationError {
   code: string;
@@ -58,6 +60,37 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 /** 「继续」指令：以半成品尾部 200 字作衔接锚点（§9.2 重组上下文再发起，非续传） */
 const CONTINUE_TAIL_CHARS = 200;
+
+/**
+ * 单次生成的输出预算（token）：由章节目标字数反推，而非固定值。
+ *
+ * 根因（「写到一半就没了」的第一性修复）：此前 effMaxTokens=max(8192, thinking?16384)，
+ * 与目标字数完全脱钩——推理模型思考流与正文共用 max_tokens（M3.1 实测思考可烧 12000+），
+ * 思考吃多后正文写到一半预算枯竭被上游腰斩（finish_reason=length）。
+ * 公式：正文上限字数 × 保守 token 密度（1.5/字，含标点与标题）+ 思考独立余量 12000。
+ * 3000 字 → 18750（旧逻辑 16384 不够）；5000 字 → 24750；重试/续写轮再乘 scale，封顶 64000。
+ */
+export function calcOutputBudget(targetWords: number, thinking: boolean, scale = 1): number {
+  const bodyTokens = Math.ceil((targetWords + 1500) * 1.5);
+  const budget = bodyTokens + (thinking ? 12000 : 0);
+  const floor = thinking ? 16384 : 8192;
+  return Math.min(Math.max(budget, floor) * scale, 64000);
+}
+
+/**
+ * 截断判据（续写触发的单一真相）：
+ * 1) finish_reason='length'/'max_tokens' —— 上游明示腰斩，决定性；
+ * 2) finish 帧缺失（null，流异常断开的典型形态）且启发式/字数任一命中：
+ *    - isTruncatedText：结尾无句末标点的连续叙述；
+ *    - 字数 < 目标×0.7：覆盖「截断恰好落在句号边界」的启发式盲区（启发式对此漏检）。
+ * finish='stop' 时尊重模型（可能作者指令就是短章），不做字数推断。
+ */
+export function looksTruncated(finish: string | null, content: string, targetWords: number): boolean {
+  if (finish === 'length' || finish === 'max_tokens') return true;
+  if (finish === 'stop') return false;
+  if (isTruncatedText(content)) return true;
+  return typeof content === 'string' && content.length > 0 && content.length < targetWords * 0.7;
+}
 
 export function buildContinueDirective(partial: string): string {
   const tail = partial.trimEnd().slice(-CONTINUE_TAIL_CHARS);

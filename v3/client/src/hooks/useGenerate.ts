@@ -25,12 +25,13 @@ import { useWorkStore } from '../stores/work';
 import {
   MAX_SWIPES,
   buildContinueDirective,
+  calcOutputBudget,
   historyBeforeTarget,
+  looksTruncated,
   nextChapterIndex,
   swipeLimitError,
   type BatchProgress,
 } from './generation-flow';
-import { isTruncatedText } from '../lib/truncation';
 import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { persistMessage } from './generation-pipeline';
 import { runGenerationStream } from './generation-runtime';
@@ -129,12 +130,11 @@ export function useGenerate(): UseGenerateResult {
           // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）
           const tail: AssembleTail = { kind: 'directive', text: opts.promptDirective ?? directive };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
-          // 推理模型预算：思考流会吃掉大量 max_tokens 且上游不遵守 budget_tokens 上限
-          // （M3.1 实测：budget 3000 烧到 4798，正文 0 字）——thinking 开启时输出预算
-          // 翻倍且保底 16384（小预算注定「只剩元信息」）；重试轮再乘 maxTokensScale
+          // 输出预算按章节目标字数动态反推（calcOutputBudget，见函数注释——「写到一半就没了」
+          // 的第一性修复：旧固定值与目标字数脱钩，推理模型思考吃多后正文半途预算枯竭被腰斩）
           const thinkingOn = prefs.thinking !== false;
-          const rawMax = (prefs.maxTokens ?? 8192) * (opts.maxTokensScale ?? 1);
-          const effMaxTokens = Math.min(Math.max(rawMax, thinkingOn ? 16384 : 0), 64000);
+          const targetWords = work.settings.targetChapterWords ?? 3000;
+          const effMaxTokens = calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1);
           const body = buildGenerateBody({
             source: prefs.source,
             model: prefs.model,
@@ -204,8 +204,7 @@ export function useGenerate(): UseGenerateResult {
   const MAX_TRUNCATE_ROUNDS = 4;
 
   /** 截断自动续写（generateChapter/swipeRegenerate 共用）：双判据——
-   *  1) 上游 finish_reason='length'/'max_tokens'（决定性：输出被 max_tokens 腰斩，无论结尾标点）
-   *  2) 启发式：结尾无句末标点的连续叙述（断流等无 finish 帧场景的兜底）
+   *  判据统一走 looksTruncated（finish 明示 / 无 finish 帧时启发式+字数兜底——句号边界截断盲区）
    *  runOpts(partial) 由调用方给定续写轮的入库语义（普通章按消息 id 幂等覆盖 / swipe 候选更新） */
   const continueTruncated = async (
     work: Work,
@@ -215,14 +214,32 @@ export function useGenerate(): UseGenerateResult {
     runOpts: (partial: string) => Parameters<typeof run>[3],
   ): Promise<Message | null> => {
     let msg = first;
+    const targetWords = work.settings.targetChapterWords ?? 3000;
     for (let rounds = 0; rounds < MAX_TRUNCATE_ROUNDS && msg; rounds += 1) {
       const finish = useGenerationStore.getState().finishReason;
-      const outputTruncated = finish === 'length' || finish === 'max_tokens';
-      if (!outputTruncated && !isTruncatedText(msg.content)) break;
+      if (!looksTruncated(finish, msg.content, targetWords)) break;
       const partial = msg.content;
       msg = await run(work, ctxMessages, buildContinueDirective(partial), runOpts(partial));
     }
     return msg;
+  };
+
+  /** 流中断自动恢复：run 返回 null（网络/上游错误中断，非用户停止）且已有部分内容时，
+   *  以缓冲区半成品为基底自动续写一轮——此前中断即整体丢弃出库，几千字白写（根因③） */
+  const rescueFromStreamBreak = async (
+    work: Work,
+    messages: Message[],
+    directive: string,
+    targetId: string,
+  ): Promise<Message | null> => {
+    const st = useGenerationStore.getState();
+    if (st.error === null || !st.partialKept || st.buffer.trim().length < 200) return null; // 用户停止/无实质内容 → 不救
+    return run(work, messages, buildContinueDirective(st.buffer), {
+      targetId,
+      initialBuffer: st.buffer,
+      promptDirective: directive,
+      maxTokensScale: 2,
+    });
   };
 
   const generateChapter = useCallback(
@@ -231,6 +248,7 @@ export function useGenerate(): UseGenerateResult {
       //（否则首次残章/崩溃行以孤儿形式留在库里，重载后出现垃圾章节）
       const targetId = uuid();
       let msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
+      if (msg === null) msg = await rescueFromStreamBreak(work, messages, directive, targetId);
       const reason = invalidReasonOf(msg);
       if (msg && reason) {
         // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；落库按首次消息 id 幂等覆盖）。
@@ -252,6 +270,20 @@ export function useGenerate(): UseGenerateResult {
         persistMessageId: baseId,
         maxTokensScale: 2,
       }));
+      // 最后防线：续写轮耗尽仍截断 → 入库 extra.truncatedSwipeId（版本级标记，UI 必显「未写完」
+      // 提示——不依赖启发式，截断恰好落在句号边界时 isTruncatedText 漏检，此类残章此前无声入库）
+      if (msg) {
+        const finish = useGenerationStore.getState().finishReason;
+        const tw = work.settings.targetChapterWords ?? 3000;
+        if (looksTruncated(finish, msg.content, tw)) {
+          msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipeId } };
+          try {
+            await persistMessage(work.id, msg);
+          } catch {
+            /* 标记落库失败不阻塞返回 */
+          }
+        }
+      }
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
       // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）
       const polishModel = useSettingsStore.getState().llmPrefs.polishModel;
@@ -336,6 +368,19 @@ export function useGenerate(): UseGenerateResult {
         promptDirective: directive,
         maxTokensScale: 2,
       }));
+      // 最后防线同 generateChapter：续写耗尽仍截断 → 版本级标记（新候选位于末位 swipe）
+      if (msg) {
+        const finish = useGenerationStore.getState().finishReason;
+        const tw = work.settings.targetChapterWords ?? 3000;
+        if (looksTruncated(finish, msg.content, tw)) {
+          msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipes.length - 1 } };
+          try {
+            await persistMessage(work.id, msg);
+          } catch {
+            /* 标记落库失败不阻塞返回 */
+          }
+        }
+      }
       // 重试一次后仍无效（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
       return invalidReasonOf(msg) ? null : msg;
     },

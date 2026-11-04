@@ -141,7 +141,7 @@ describe('useGenerate（review #1 断流事务）', () => {
   });
 
   it('正常流（含 [DONE]）→ 章节消息幂等入库一次，store 复位（#7 重构行为等价回归）', async () => {
-    stubDefaultRoute(['data: {"text":"第一段"}\n\n', 'data: [DONE]\n\n']);
+    stubDefaultRoute(['data: {"text":"第一段"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
     await renderHook();
     let result: Message | null = null;
     await act(async () => {
@@ -198,7 +198,7 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
         calls.push({ path, init: init ?? {} });
         if (path === '/api/llm/generate') {
           captured = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
-          return sseResponse(['data: {"text":"新候选"}\n\n', 'data: [DONE]\n\n']);
+          return sseResponse(['data: {"text":"新候选"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
         }
         if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
         if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
@@ -226,7 +226,7 @@ describe('useGenerate.swipeRegenerate（连续两次重roll 回归——用户�
       calls.push({ path, init: init ?? {} });
       if (path === '/api/llm/generate') {
         n += 1;
-        return sseResponse([`data: {"text":"重roll候选${n}"}\n\n`, 'data: [DONE]\n\n']);
+        return sseResponse([`data: {"text":"重roll候选${n}"}\n\n`, 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
       }
       if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
       if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
@@ -263,10 +263,10 @@ describe('useGenerate（元信息残章自动重试——质检T4「第二次消
       if (path === '/api/llm/generate') {
         genCalls += 1;
         if (genCalls === 1) {
-          return sseResponse(['data: {"text":"<thinking>只写了思考</thinking>"}\n\n', 'data: [DONE]\n\n']);
+          return sseResponse(['data: {"text":"<thinking>只写了思考</thinking>"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
         }
         retryBody = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
-        return sseResponse(['data: {"text":"这次是完整正文，剧情推进顺利。"}\n\n', 'data: [DONE]\n\n']);
+        return sseResponse(['data: {"text":"这次是完整正文，剧情推进顺利。"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
       }
       if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
       if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
@@ -287,7 +287,7 @@ describe('useGenerate（元信息残章自动重试——质检T4「第二次消
   it('首次即有效正文 → 不触发重试（单次调用）', async () => {
     // 注意：calls 由 stubFetch wrapper 统一记录，route 回调内不得再 push（否则同一请求双重计数）
     stubFetch((path) => {
-      if (path === '/api/llm/generate') return sseResponse(['data: {"text":"正常正文"}\n\n', 'data: [DONE]\n\n']);
+      if (path === '/api/llm/generate') return sseResponse(['data: {"text":"正常正文"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
       if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
       if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
       throw new Error(`unmocked fetch: ${path}`);
@@ -302,7 +302,7 @@ describe('useGenerate（元信息残章自动重试——质检T4「第二次消
   it('重试后仍残章（两次流都只回 thinking）→ 返回 null 且不入库（占位章不上架）', async () => {
     stubFetch((path) => {
       if (path === '/api/llm/generate') {
-        return sseResponse(['data: {"text":"<thinking>只写了思考</thinking>"}\n\n', 'data: [DONE]\n\n']);
+        return sseResponse(['data: {"text":"<thinking>只写了思考</thinking>"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
       }
       if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
       if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
@@ -325,7 +325,7 @@ describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容）'
       'data: {"thinking":"先想兄妹动机：是复仇还是逃离。"}\n\n',
       'data: {"thinking":"选逃离，留悬念。"}\n\n',
       'data: {"text":"# 第1章 雨夜\\n妹妹攥紧了哥哥的袖口。"}\n\n',
-      'data: [DONE]\n\n',
+      'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n',
     ]);
     await renderHook();
     let result: Message | null = null;
@@ -345,7 +345,7 @@ describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容）'
     stubDefaultRoute([
       'data: {"thinking":"流式思考"}\n\n',
       'data: {"text":"<think>标签思考</think>正文开始。"}\n\n',
-      'data: [DONE]\n\n',
+      'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n',
     ]);
     await renderHook();
     let result: Message | null = null;
@@ -358,7 +358,7 @@ describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容）'
   });
 
   it('无 thinking 帧且正文无标签 → extra.rawThinking 不落空串（字段缺省）', async () => {
-    stubDefaultRoute(['data: {"text":"纯净正文。"}\n\n', 'data: [DONE]\n\n']);
+    stubDefaultRoute(['data: {"text":"纯净正文。"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
     await renderHook();
     let result: Message | null = null;
     await act(async () => {

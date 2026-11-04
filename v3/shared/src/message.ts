@@ -71,6 +71,10 @@ export const MessageExtraSchema = z
     rawThinking: z.string().optional(),
     /** 本章新素材检测清单（<new_assets> 块解析产物；剥离自正文，作者确认后进素材库） */
     newAssets: z.array(DetectedAssetSchema).optional(),
+    /** 上游截断未补完的候选版本 id（finish_reason=length/max_tokens 且续写轮耗尽；启发式对
+     *  句号边界残章漏检，此标记是「必显提示+一键续写」的确定性依据。版本级粒度：激活版本
+     *  切换/补完/手改后 swipeId 变化即不再提示，由生成链路入库时写入） */
+    truncatedSwipeId: z.number().optional(),
   })
   .strict();
 export type MessageExtra = z.infer<typeof MessageExtraSchema>;

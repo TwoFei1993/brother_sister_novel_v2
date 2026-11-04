@@ -69,7 +69,7 @@ function stubBatchRoute(): void {
           return jsonRes({ text: '' });
         }
         generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
-        return sseResponse(['data: {"text":"章节正文内容，足够长的一段话。"}\n\n', 'data: [DONE]\n\n']);
+        return sseResponse(['data: {"text":"章节正文内容，足够长的一段话。"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
       }
       if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
       if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
@@ -250,7 +250,7 @@ describe('useGenerate.runBatch（一键连写）', () => {
           if (generateCalls === 2) {
             return sseResponse(['data: {"error":{"code":"LLM_TIMEOUT","message":"上游超时"}}\n\n']);
           }
-          return sseResponse(['data: {"text":"第一章正文，足够长。"}\n\n', 'data: [DONE]\n\n']);
+          return sseResponse(['data: {"text":"第一章正文，足够长。"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
         }
         if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
         if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });

@@ -21,8 +21,8 @@ import { useGenerate } from '../useGenerate';
 
 function sseResponse(text: string, finish?: string): Response {
   const encoder = new TextEncoder();
-  const frame: Record<string, unknown> = { text };
-  if (finish) frame.raw = { choices: [{ delta: {}, finish_reason: finish }] }; // 上游 raw 透传（finish_reason 提取源）
+  // server 显式 finish 字段透传（缺省 stop）；末尾必带 finish 帧——缺帧会触发字数兜底续写判据
+  const frame: Record<string, unknown> = { text, finish: finish ?? 'stop' };
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
@@ -162,12 +162,13 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
       msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
     });
 
-    // 链式补救：初稿崩溃 → 反重复后缀重试 → 仍崩（结尾无标点被截断续写接管）→
-    // 续写内容拼在崩溃段后，isCollapsedText 仍命中 → 不上架（batch 以 null 终止）
-    expect(generateBodies).toHaveLength(3);
+    // 链式补救：初稿崩溃 → 反重复后缀重试 → 仍崩 → 上游 finish=stop（正常结束）时不再
+    // 徒劳续写（续写只救「截断」不救「崩溃」，崩溃段续写后 isCollapsedText 仍命中）→
+    // 直接判死不上架（batch 以 null 终止），比旧链式少一次无效调用
+    expect(generateBodies).toHaveLength(2);
     expect(msg).toBeNull();
-    // 三次 run 各幂等入库一次且同一消息 id（末次覆盖，不产生重复章节行）
-    expect(messageBodies).toHaveLength(3);
+    // 两次 run 各幂等入库一次且同一消息 id（末次覆盖，不产生重复章节行）
+    expect(messageBodies).toHaveLength(2);
     expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
     expect(useGenerationStore.getState().error).toBeNull();
   });

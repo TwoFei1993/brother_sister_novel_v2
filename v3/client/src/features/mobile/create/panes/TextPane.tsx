@@ -54,8 +54,13 @@ export function TextPane({
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
   /** 📑 章节目录抽屉（左下角悬浮入口，写完一章后不必滚回顶部切章） */
   const [drawerOpen, setDrawerOpen] = useState(false);
-  /** 当前章是否疑似未写完（截断启发式；正文卡显示「接着写」入口） */
-  const currentTruncated = Boolean(current && !editing && !myStreaming && isTruncatedText(current.content));
+  /** 当前章是否未写完：入库时的版本级确定性标记（含句号边界截断，激活版本切换后不再提示）∨ 启发式兜底 */
+  const currentTruncated = Boolean(
+    current &&
+      !editing &&
+      !myStreaming &&
+      (current.extra.truncatedSwipeId === current.swipeId || isTruncatedText(current.content)),
+  );
 
   /** 章切换时同步检出清单（取当前章的 extra.newAssets） */
   useEffect(() => {
