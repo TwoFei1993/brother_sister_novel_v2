@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { WandSparkles } from 'lucide-react';
+import { Check, ListChecks, WandSparkles } from 'lucide-react';
 
 import { createWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
 import { useGenerationStore } from '../../../stores/generation';
@@ -163,7 +163,7 @@ function MoveSheet({
             ))}
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <input
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
@@ -282,16 +282,16 @@ export default function MobileBookshelf() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-4 pt-5">
-      <header className="mb-4 flex items-end justify-between">
-        <div>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-x-2 gap-y-2">
+        <div className="shrink-0">
           <p className="m-serif text-[11px] tracking-[0.5em] text-[hsl(var(--fg-muted))]">書 房</p>
           <h1 className="m-serif mt-0.5 text-2xl font-semibold leading-tight">{activeTag ?? '创作'}</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <Link
             to="/planner"
             data-testid="shelf-wizard-btn"
-            className="flex h-10 items-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs text-[hsl(var(--accent))]"
+            className="flex h-10 items-center gap-1 whitespace-nowrap rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs text-[hsl(var(--accent))]"
           >
             <WandSparkles className="h-4 w-4" aria-hidden />
             AI 向导
@@ -307,7 +307,19 @@ export default function MobileBookshelf() {
               managing ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
             }`}
           >
-            {managing ? '完成' : '📋 管理'}
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              {managing ? (
+                <>
+                  <Check className="h-3.5 w-3.5" aria-hidden />
+                  完成
+                </>
+              ) : (
+                <>
+                  <ListChecks className="h-3.5 w-3.5" aria-hidden />
+                  管理
+                </>
+              )}
+            </span>
           </button>
           <button
             type="button"
