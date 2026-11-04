@@ -30,6 +30,7 @@ export function TextPane({
   gen,
   onPick,
   onDone,
+  onGoOutline,
 }: {
   work: Work;
   chapters: readonly ChapterMsg[];
@@ -37,6 +38,8 @@ export function TextPane({
   gen: Gen;
   onPick: (id: string) => void;
   onDone: (msg: Message | null) => void;
+  /** 零章节空态引导：「先聊出大纲」跳大纲分区找策划助手 */
+  onGoOutline?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -319,14 +322,27 @@ export function TextPane({
 
       {/* ✍️ 手写第一章（自己写/粘贴，写完可 AI 润色） */}
       {chapters.length === 0 && !myStreaming && (
-        <button
-          type="button"
-          onClick={() => void createHandwriteChapter()}
-          data-testid="handwrite-chapter-btn"
-          className="mx-4 mb-2 flex h-11 w-[calc(100%-2rem)] items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs"
-        >
-          ✍️ 手写第一章（自己写 / 粘贴正文，写完可 AI 润色）
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => void createHandwriteChapter()}
+            data-testid="handwrite-chapter-btn"
+            className="mx-4 mb-2 flex h-11 w-[calc(100%-2rem)] items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs"
+          >
+            ✍️ 手写第一章（自己写 / 粘贴正文，写完可 AI 润色）
+          </button>
+          {/* 毫无头绪动线（入口可发现性修复）：策划对话在大纲分区，空态直接给入口 */}
+          {onGoOutline && (
+            <button
+              type="button"
+              onClick={onGoOutline}
+              data-testid="go-outline-btn"
+              className="mx-4 mb-2 flex h-11 w-[calc(100%-2rem)] items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent))]/5 text-xs text-[hsl(var(--accent))]"
+            >
+              🪄 毫无头绪？先去「大纲」和 AI 助手聊出全书策划案
+            </button>
+          )}
+        </>
       )}
 
       {/* 批量生成：⚡连写（写到目标章数）/ 📖按大纲（有大纲时） */}

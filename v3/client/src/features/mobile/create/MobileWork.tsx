@@ -4,7 +4,7 @@
  * 数据与生成完全复用桌面层：useWorkStore（loadWork/消息流）+ useGenerate（生成编排）；
  * 本组件只做移动装配与导航，分区实现见同目录 WorkPanes / WorkVersions。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { patchMessage } from '../../../api/works';
@@ -36,6 +36,12 @@ export default function MobileWork() {
   const { work, messages, loading, loadError, loadWork, upsertLocal, setWork } = useWorkStore();
   const gen = useGenerate();
   const [pane, setPane] = useState<PaneId>('text');
+  /** 用户是否主动切过分区（新书自动动线只让位给用户显式操作） */
+  const paneTouchedRef = useRef(false);
+  const pickPane = (p: PaneId): void => {
+    paneTouchedRef.current = true;
+    setPane(p);
+  };
   /** 当前编辑的章节消息（正文/版本分区共享；null=自动取最后一章） */
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -44,6 +50,14 @@ export default function MobileWork() {
     if (id) void loadWork(id);
     return () => useWorkStore.getState().reset();
   }, [id, loadWork]);
+
+  // 新书动线（入口可发现性修复）：零章节的书自动落在大纲分区——策划对话是零章节时的主用法，
+  // 藏在第二分区里用户找不到（反馈：《可爱的小猫》点进去「没有地方聊天」）；用户点过分区则尊重
+  useEffect(() => {
+    if (!loading && !loadError && work && messages.length === 0 && !paneTouchedRef.current) {
+      setPane('outline');
+    }
+  }, [loading, loadError, work, messages.length]);
 
   const chapters = messages.filter(
     (m): m is Message & { chapter: NonNullable<Message['chapter']> } => m.chapter !== undefined,
@@ -115,7 +129,15 @@ export default function MobileWork() {
           <div key={pane} className="m-fade min-h-0 flex-1 flex">
             <div className="min-h-0 flex-1 overflow-y-auto">
             {pane === 'text' && (
-              <TextPane work={work} chapters={chapters} current={current} gen={gen} onPick={setChapterId} onDone={done} />
+              <TextPane
+                work={work}
+                chapters={chapters}
+                current={current}
+                gen={gen}
+                onPick={setChapterId}
+                onDone={done}
+                onGoOutline={() => pickPane('outline')}
+              />
             )}
             {pane === 'outline' && (
               <OutlinePane
@@ -188,7 +210,7 @@ export default function MobileWork() {
                 aria-selected={pane === p.id}
                 data-testid={`pane-${p.id}`}
                 data-active={pane === p.id ? 'true' : 'false'}
-                onClick={() => setPane(p.id)}
+                onClick={() => pickPane(p.id)}
                 className={`m-tab m-serif flex-1 py-2.5 text-[13px] transition-colors ${
                   pane === p.id ? 'font-medium text-[hsl(var(--accent))]' : 'text-[hsl(var(--fg-muted))]'
                 }`}
