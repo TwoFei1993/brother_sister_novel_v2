@@ -34,6 +34,7 @@ vi.mock('../generation-pipeline', () => ({
 
 vi.mock('../../api/llm', () => ({
   buildGenerateBody: vi.fn(() => ({})),
+  cachedOutputBudget: vi.fn(() => null), // 预算协商缓存（useGenerate.prepare 消费）
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

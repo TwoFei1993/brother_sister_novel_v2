@@ -8,7 +8,7 @@
  *   novel = directive 通道 + 章节后处理入库；chat = userMessage 通道 + user/assistant 成对入库。
  * 不含 React hook；调用方（hook）经 bindController 注册 AbortController 以支持 stop()。
  */
-import { generateStream, type GenerateBody } from '../api/llm';
+import { generateStream, isMaxTokensReject, recordOutputBudget, type GenerateBody } from '../api/llm';
 import { createThinkSplitter } from '../lib/think-split';
 import { TypewriterPacer } from '../lib/reading/typewriter';
 import { useGenerationStore } from '../stores/generation';
@@ -59,6 +59,8 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
   let chunksReceived = 0;
   let attempt = 0;
   let streamError: GenerationError | null = null;
+  /** max_tokens 超限降级次数（预算协商——每降一次减半，最多 3 次） */
+  let budgetHalves = 0;
 
   // 打字机匀速：SSE chunk 先进 pacer 缓冲，再按固定节奏逐字进 store（中转攒批返回也平滑）。
   // chat 模式保持直通（intervalMs=0），不改变其既有时序。
@@ -77,7 +79,8 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     useSettingsStore.getState().llmPrefs.source === 'openai' ? createThinkSplitter() : null;
 
   try {
-    const { body, finalize } = await opts.prepare({ prefs, startedAt });
+    // body 用 let：max_tokens 超限协商降级时以减半预算重建（finalize 闭包不受影响）
+    let { body, finalize } = await opts.prepare({ prefs, startedAt });
 
     // ---------- 流式阶段（网络类错误 + 0 chunk → 指数退避重试 ≤2） ----------
     for (;;) {
@@ -112,6 +115,18 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
       } catch (err) {
         if (streamError) throw new GenerationFlowError(streamError);
         if (controller.signal.aborted) throw err; // 用户停止
+        // max_tokens 超限协商（与非流式 generateTextOnce 共用缓存）：请求体预算减半重建重试，
+        // 并记录该模型可用上界——下次调用（含其他链路）直接避开，不再浪费一次失败请求
+        if (isMaxTokensReject(err) && budgetHalves < 3) {
+          const cur = body.params?.max_tokens;
+          if (cur && cur > 4096) {
+            budgetHalves += 1;
+            const next = Math.max(4096, Math.floor(cur / 2));
+            body = { ...body, params: { ...(body.params ?? {}), max_tokens: next } };
+            recordOutputBudget(body.source, body.model, next);
+            continue;
+          }
+        }
         const ge = toGenerationError(err);
         if (shouldRetry(ge, chunksReceived, attempt)) {
           attempt += 1;

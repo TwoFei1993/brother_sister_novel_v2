@@ -16,7 +16,7 @@ import type { Work } from '@shared/work';
 
 import { apiFetch } from '../api/client';
 
-import { buildGenerateBody } from '../api/llm';
+import { buildGenerateBody, cachedOutputBudget } from '../api/llm';
 import { isCollapsedText } from '../engine/prompt/novel/collapse-detect';
 import { useGenerationStore } from '../stores/generation';
 import { useSettingsStore } from '../stores/settings';
@@ -131,10 +131,15 @@ export function useGenerate(): UseGenerateResult {
           const tail: AssembleTail = { kind: 'directive', text: opts.promptDirective ?? directive };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
           // 输出预算按章节目标字数动态反推（calcOutputBudget，见函数注释——「写到一半就没了」
-          // 的第一性修复：旧固定值与目标字数脱钩，推理模型思考吃多后正文半途预算枯竭被腰斩）
+          // 的第一性修复：旧固定值与目标字数脱钩，推理模型思考吃多后正文半途预算枯竭被腰斩）；
+          // 再避开该模型已知被拒的预算上界（协商缓存——generation-runtime/generateTextOnce 降级后回写）
           const thinkingOn = prefs.thinking !== false;
           const targetWords = work.settings.targetChapterWords ?? 3000;
-          const effMaxTokens = calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1);
+          const known = cachedOutputBudget(prefs.source, prefs.model);
+          const effMaxTokens = Math.min(
+            calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1),
+            known ?? Number.MAX_SAFE_INTEGER,
+          );
           const body = buildGenerateBody({
             source: prefs.source,
             model: prefs.model,

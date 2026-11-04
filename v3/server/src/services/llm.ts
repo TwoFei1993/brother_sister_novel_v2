@@ -94,6 +94,13 @@ export function translateUpstreamError(status: number, bodyText: string): LlmErr
   if ((status === 400 || status === 403) && /safety|blocked|prohibited/.test(lower)) {
     return new LlmError('LLM_REJECTED', `内容被上游安全策略拒绝：${bodyText.slice(0, 200)}`);
   }
+  // max_tokens 超限（客户端预算协商的降级信号——message 前缀是稳定判定标记，见 client isMaxTokensReject）
+  if (
+    (status === 400 || status === 413 || status === 502) &&
+    /max[_\s-]?tokens|too (large|long)|context[_\s-]?length|输出长度|长度超/.test(lower)
+  ) {
+    return new LlmError('LLM_UPSTREAM', `【max_tokens 超限】上游拒绝该输出预算：${bodyText.slice(0, 200)}`);
+  }
   if (status === 401 || status === 403) return new LlmError('LLM_AUTH', `密钥无效或无访问权限（上游 ${status}）`);
   if (status === 429) return new LlmError('LLM_QUOTA', '上游额度不足或触发限流（429），请稍后再试');
   if (status >= 500) return new LlmError('LLM_NET', `上游服务异常（${status}），请稍后再试`);

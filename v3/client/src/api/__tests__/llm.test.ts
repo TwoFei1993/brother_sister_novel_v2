@@ -4,7 +4,17 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildGenerateBody, extractFinishReason, generateStream, tokenizeMessages } from '../llm';
+import {
+  buildGenerateBody,
+  cachedOutputBudget,
+  extractFinishReason,
+  generateStream,
+  generateTextOnce,
+  isMaxTokensReject,
+  MAX_OUTPUT_TOKENS,
+  tokenizeMessages,
+} from '../llm';
+import { ApiError } from '../client';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -333,5 +343,81 @@ describe('extractFinishReason（上游 raw 透传的结束原因——截断自�
     expect(extractFinishReason(undefined)).toBeNull();
     expect(extractFinishReason('junk')).toBeNull();
     expect(extractFinishReason({ choices: [{ delta: { content: 'x' } }] })).toBeNull();
+  });
+});
+
+describe('isMaxTokensReject（预算协商的降级判定）', () => {
+  it('server 稳定标记（【max_tokens 超限】前缀，502 形态）命中', () => {
+    const err = new ApiError(502, '【max_tokens 超限】上游拒绝该输出预算：...');
+    expect(isMaxTokensReject(err)).toBe(true);
+  });
+  it('官方直连 400 原文关键词命中', () => {
+    expect(isMaxTokensReject(new ApiError(400, "max_tokens is too large: 32000. This model supports at most 16384"))).toBe(true);
+    expect(isMaxTokensReject(new ApiError(400, '该模型输出长度超出上限'))).toBe(true);
+  });
+  it('其他错误（5xx 网关抖动/4xx 业务错误/网络错误）不误判', () => {
+    expect(isMaxTokensReject(new ApiError(502, '上游服务异常（502）'))).toBe(false);
+    expect(isMaxTokensReject(new ApiError(400, '内容被上游安全策略拒绝'))).toBe(false);
+    expect(isMaxTokensReject(new Error('network down'))).toBe(false);
+  });
+});
+
+describe('generateTextOnce 预算协商（推理烧光 max_tokens 的彻底解）', () => {
+  function jsonResponse(payload: unknown, status = 200): Response {
+    return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('空输出 → 预算加倍重试成功，并缓存可用值', async () => {
+    const bodies: number[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_p: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { params?: { max_tokens?: number } };
+      bodies.push(body.params?.max_tokens ?? 0);
+      return bodies.length === 1 ? jsonResponse({ text: '' }) : jsonResponse({ text: '完整回复' });
+    }));
+    const text = await generateTextOnce({ source: 'openai', model: 'nego-m1', messages: [{ role: 'user', content: 'hi' }], thinking: true }, 1000);
+    expect(text).toBe('完整回复');
+    expect(bodies[1]).toBe(bodies[0] * 2); // 加倍
+    expect(bodies[0]).toBe(32000); // thinking 下限抬升（调用方只给 1000）
+    expect(cachedOutputBudget('openai', 'nego-m1')).toBe(bodies[1]); // 可用值已缓存
+  });
+
+  it('超限拒绝 → 减半协商成功，降级值即时缓存', async () => {
+    const bodies: number[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_p: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { params?: { max_tokens?: number } };
+      bodies.push(body.params?.max_tokens ?? 0);
+      if (bodies.length === 1) return jsonResponse({ error: '【max_tokens 超限】上游拒绝该输出预算' }, 502);
+      return jsonResponse({ text: '降级后成功' });
+    }));
+    const text = await generateTextOnce({ source: 'openai', model: 'nego-m2', messages: [{ role: 'user', content: 'hi' }], thinking: false }, 32000);
+    expect(text).toBe('降级后成功');
+    expect(bodies[1]).toBe(16000); // 32000 被拒 → 减半
+    expect(cachedOutputBudget('openai', 'nego-m2')).toBe(16000);
+  });
+
+  it('已有协商缓存 → 起步即避开被拒上界（不浪费失败请求）', async () => {
+    const bodies: number[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_p: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { params?: { max_tokens?: number } };
+      bodies.push(body.params?.max_tokens ?? 0);
+      return jsonResponse({ text: 'ok' });
+    }));
+    await generateTextOnce({ source: 'openai', model: 'nego-m2', messages: [{ role: 'user', content: 'hi' }], thinking: true }, 60000);
+    expect(bodies[0]).toBe(16000); // 已知上界 16000，ideal 60000 被 clamp
+  });
+
+  it('安全拒绝类 502（非超限）按空输出走协商循环后抛人话错误（与既有 502 语义一致）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: '内容被上游安全策略拒绝' }, 502)));
+    await expect(
+      generateTextOnce({ source: 'openai', model: 'nego-m3', messages: [{ role: 'user', content: 'hi' }], thinking: false }, 8192),
+    ).rejects.toThrow('模型无输出');
+  });
+
+  it('预算协商封顶 MAX_OUTPUT_TOKENS', () => {
+    expect(MAX_OUTPUT_TOKENS).toBe(64000);
   });
 });

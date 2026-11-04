@@ -149,33 +149,77 @@ export async function generateStream(
 /**
  * 非流式文本生成（一次性拿全文）：向导/选段工具/记忆抽取等场景共用。
  *
- * 推理模型预算兜底（ed735c0 同模式）：思考流会吃掉大量 max_tokens——
- * 首选预算拿到的 text 为空（思考吃满/被截断的半截）时，自动以加倍预算重试一次。
- * 上游偶发 5xx/网络抖动同样触发重试（4xx 业务错误直接抛）。
- * 重试后仍空 → 抛人话错误（调用方展示）。
+ * 输出预算协商（「推理烧光 max_tokens」的彻底解）：思考长度不可控，任何固定预算都可能
+ * 被思考流吃光——不再依赖猜的固定值，而是自适应协商：
+ *  ①起步预算给足（thinking 时下限 32000，与调用方传入值取大）；
+ *  ②空输出（思考吃满）→ 预算加倍重试，直到 MAX_OUTPUT_TOKENS；
+ *  ③上游 4xx 拒绝（max_tokens 超上限类）→ 减半重试并按模型缓存可用值（下次起手避开）；
+ *  ④成功值同样缓存（已验证可用）——协商结果跨调用记忆，同一模型只协商一次。
  */
+export const MAX_OUTPUT_TOKENS = 64000;
+
+const budgetCache = new Map<string, number>();
+const modelKey = (source: string, model?: string): string => `${source}:${model ?? ''}`;
+
+/** 该模型已协商出的可用输出预算（null=未协商过）；流式链路共以此避开已知被拒值 */
+export function cachedOutputBudget(source: LlmSource, model?: string): number | null {
+  return budgetCache.get(modelKey(source, model)) ?? null;
+}
+
+/** 记录协商结果（流式链路 4xx 降级后回写，与非流式共享同一份缓存） */
+export function recordOutputBudget(source: LlmSource, model: string | undefined, tokens: number): void {
+  budgetCache.set(modelKey(source, model), Math.max(4096, Math.min(tokens, MAX_OUTPUT_TOKENS)));
+}
+
+/** 是否为 max_tokens 超限拒绝：server 翻译层对上游 400/413+关键词打稳定前缀「【max_tokens 超限】」
+ *  （统一 502 返回，不能按 status 判）；直连场景官方 400 原文的关键词也覆盖。宽匹配宁可多降一次 */
+export function isMaxTokensReject(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  const msg = `${err.message}`.toLowerCase();
+  return /【max_tokens 超限】|max[_\s-]?tokens|too (large|long)|context[_\s-]?length|输出长度|长度超/.test(msg);
+}
+
 export async function generateTextOnce(
   input: Omit<BuildGenerateBodyInput, 'stream'>,
   budget = 8192,
 ): Promise<string> {
-  const call = async (maxTokens: number): Promise<string> => {
-    const body = buildGenerateBody({ ...input, maxTokens, stream: false });
+  const key = modelKey(input.source, input.model);
+  const known = budgetCache.get(key);
+  // 起步：调用方理想值与 thinking 下限取大，再避开已知被拒上界
+  let want = Math.min(
+    Math.max(budget, input.thinking !== false ? 32000 : budget),
+    known ?? MAX_OUTPUT_TOKENS,
+  );
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    let rejected = false;
     try {
+      const body = buildGenerateBody({ ...input, maxTokens: want, stream: false });
       const r = await apiFetch<{ text?: string }>('/api/llm/generate', {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      return r.text ?? '';
+      const text = r.text ?? '';
+      if (text.trim()) {
+        budgetCache.set(key, want); // 已验证可用（比缓存大则向上修订）
+        return text;
+      }
+      // 空输出：思考吃满预算（或上游空响应）→ 加倍
     } catch (err) {
-      if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err; // 4xx 业务错误不重试
-      return ''; // 5xx/网络抖动按空输出处理，交由外层加倍重试
+      if (isMaxTokensReject(err)) {
+        rejected = true;
+        want = Math.max(4096, Math.floor(want / 2));
+        budgetCache.set(key, want); // 立即记住可用上界，流式链路同步受益
+        continue;
+      }
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err; // 其他 4xx 业务错误不重试
+      // 5xx/网络抖动按空输出处理，交由加倍重试
     }
-  };
-  const first = await call(budget);
-  if (first.trim()) return first;
-  const second = await call(budget * 2);
-  if (second.trim()) return second;
-  throw new Error('模型无输出（已自动加倍预算重试），请稍后重试或更换模型');
+    const next = Math.min(want * 2, MAX_OUTPUT_TOKENS);
+    if (rejected && want <= 4096) break; // 已降到下限仍拒 → 真·能力不足
+    if (next === want) break; // 已到上限仍空 → 无预算可用
+    want = next;
+  }
+  throw new Error('模型无输出（预算已自动协商仍无产出），请稍后重试或更换模型');
 }
 
 /** POST /api/tokenize：按 source 精确/启发式计数（server 返回 {count, approximate}） */
