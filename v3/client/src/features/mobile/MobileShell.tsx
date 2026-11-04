@@ -12,6 +12,7 @@ import { BookMarked, Feather, MessageCircle, UserRound } from 'lucide-react';
 
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
+import { watchKeyboard } from '../../lib/keyboard';
 import MiniPlayer from './MiniPlayer';
 
 /** 图标走 lucide 线性 SVG：随主题变色（emoji 无法跟随墨玉/宣纸换肤），跨平台渲染一致 */
@@ -29,6 +30,10 @@ export default function MobileShell() {
   const { pathname } = useLocation();
   const isReader = useAuthStore((s) => s.user?.role === 'reader');
   const fullscreen = FULLSCREEN_PREFIXES.some((p) => pathname.startsWith(p));
+  // 软键盘遮挡兜底（edge-to-edge 下 adjustResize 可能失效）：键盘高度写入 --kb-height 供输入行抬升
+  useEffect(() => {
+    watchKeyboard();
+  }, []);
   // P3.1：读者 tab 隐藏创作域（服务端已 403 兜底，此处纯体验）
   const tabs = ALL_TABS.filter((t) => !t.authorOnly || !isReader);
   // 读者手输/书签直击创作页 → 重定向阅读页

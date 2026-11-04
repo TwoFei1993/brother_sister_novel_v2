@@ -91,7 +91,52 @@ export function pushHistory(workId: string, version: AppliedVersion): AppliedVer
   return list;
 }
 
-/** 书内策划系统提示词（注入本书既有上下文；长纲分卷规则防断流） */
+/** ---------- 会话存档（「🆕 新对话」：旧会话存档可随时恢复，不丢失） ---------- */
+
+const archKey = (workId: string): string => `v3-book-outline-arch-${workId}`;
+/** 存档上限：超出丢弃最旧（个人使用量级，控制 localStorage 体积） */
+const MAX_ARCHIVED = 6;
+
+export function listArchived(workId: string): BookChatState[] {
+  try {
+    const raw = localStorage.getItem(archKey(workId));
+    if (raw) {
+      const d = JSON.parse(raw) as BookChatState[];
+      if (Array.isArray(d)) return d;
+    }
+  } catch {
+    /* 坏存储当空 */
+  }
+  return [];
+}
+
+function saveArchived(workId: string, list: BookChatState[]): void {
+  try {
+    localStorage.setItem(archKey(workId), JSON.stringify(list.slice(-MAX_ARCHIVED)));
+  } catch {
+    /* 静默 */
+  }
+}
+
+/** 存档当前会话（有用户发言才算有效对话；空白/纯欢迎语不存） */
+export function archiveChat(workId: string, s: BookChatState): BookChatState[] {
+  const meaningful = s.turns.filter((t) => t.role === 'user').length > 0;
+  const list = listArchived(workId);
+  if (meaningful) saveArchived(workId, [...list, s]);
+  return listArchived(workId);
+}
+
+/** 恢复存档：从列表移除并返回（当前会话若有效由调用方先 archiveChat） */
+export function takeArchived(workId: string, index: number): BookChatState | null {
+  const list = listArchived(workId);
+  const picked = list[index];
+  if (!picked) return null;
+  saveArchived(workId, list.filter((_, i) => i !== index));
+  return picked;
+}
+
+/** 书内策划系统提示词（注入本书既有上下文；长纲分卷规则防断流）。
+ *  题材中立：不预设任何题材/人物关系框架（本项目支持任意题材——写什么跟什么） */
 export function bookPlannerSystem(input: {
   title: string;
   genre: string;
@@ -100,11 +145,13 @@ export function bookPlannerSystem(input: {
   chapterTail: string;
 }): string {
   return `你是小说《${input.title}》的策划编辑（这本书已存在${input.chapterCount > 0 ? `，已有 ${input.chapterCount} 章` : '，尚未写正文'}）。
-用户可能毫无头绪——你的职责是帮用户从零发散：世界观、主角与兄妹核心关系、势力、主要冲突、总章数与分卷大纲。
+用户可能毫无头绪——你的职责是帮用户从零发散：题材与文风基调、世界观、主角与核心人物关系、势力、主要冲突、总章数与分卷大纲。完全跟随用户给出的想法走，不要把任何特定题材套路（如亲情向、特定人物关系）套到用户的故事上。
 每次回复输出严格 JSON（无其他文字）：
 {"reply":"给用户的话","questions":[{"q":"问题","options":["候选项一","候选项二","候选项三"]}],"title":"书名","genre":"题材","outline":{...}或null}
 理解规则：每轮 reply 第一句先复述你对当前进度的理解；用户原话中的设定（书名/人名/数量/跨度）严格照用；拿不准才问、已确认绝不重复问；用户说「你决定/都行」时你直接替用户拍板并说明理由，不要再反问。
+【直接生成】规则：用户消息以「【直接生成】」开头时，跳过一切提问，直接拍板所有未定项并输出完整策划案（outline 填全、chapters 8-12 章起），reply 简述你替用户做的关键选择。
 questions 规则：每题 2-3 个具体候选项；无问题传空数组。
+提问阶段规则（很重要）：提问先宏观后具体——优先问「题材类型 / 故事基调 / 文风」（例如：轻松日常、权谋斗争、热血冒险、悬疑探案、温馨治愈、搞笑吐槽）、「目标读者与篇幅规模」，题材基调定了之后再问剧情细节与人物设定；禁止一上来就问具体情节走向。
 阶段流程：想法发散（多轮问答，outline=null）→ 关键点齐了出完整策划案（outline 填全）→ 用户提修改则只改对应部分并输出完整最新版 → 纯闲聊 outline=null。
 outline 结构：
 {"characters":[{"name":"姓名","role":"身份","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","chapters":[{"index":1,"title":"第1章 标题","plot":"要点80-150字"}]}

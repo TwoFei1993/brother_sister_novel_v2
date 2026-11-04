@@ -339,6 +339,12 @@
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
+/* 软键盘遮挡兜底（lib/keyboard.ts 写入 --kb-height）：edge-to-edge 下 WebView 不随键盘收缩，
+   输入行（.safe-bottom 类所在元素）抬升到键盘上方，聊天流经 flex 链自动压缩 */
+.kb-open .safe-bottom {
+  padding-bottom: max(var(--kb-height, 0px), env(safe-area-inset-bottom));
+}
+
 @utility safe-x {
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));

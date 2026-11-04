@@ -6,20 +6,23 @@
  * - 上下文持久化（localStorage 按 workId），离开页面再回来聊天记录不丢
  */
 import { useMemo, useRef, useState } from 'react';
-import { CircleHelp, History, Sparkles } from 'lucide-react';
+import { CircleHelp, History, MessageSquarePlus, Sparkles, Wand2 } from 'lucide-react';
 
 import { generateTextOnce } from '../../../../api/llm';
 import { useSettingsStore } from '../../../../stores/settings';
 import type { Work } from '@shared/work';
 
 import {
+  archiveChat,
   bookPlannerMessages,
   bookPlannerSystem,
+  listArchived,
   loadChat,
   loadHistory,
   proposalToSlice,
   pushHistory,
   saveChat,
+  takeArchived,
   type AppliedVersion,
   type BookTurn,
 } from '../../../planner/book-planner';
@@ -47,6 +50,7 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
   const [appliedMsg, setAppliedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [histOpen, setHistOpen] = useState(false);
+  const [archived, setArchived] = useState(() => listArchived(work.id));
   const history = useMemo(() => loadHistory(work.id), [work.id, appliedMsg]);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -82,16 +86,18 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
     setBusy(true);
     scrollBottom();
     try {
+      // 输出预算按思考开关给足：推理模型思考流与 JSON 输出共用 max_tokens（实测思考可烧 12000+），
+      // 旧值 10000 被思考吃光 → 「模型无输出」；32000 起步、generateTextOnce 空输出自动 ×2 重试
       const raw = await generateTextOnce(
         {
           source: prefs.source,
           model: prefs.model,
           messages: bookPlannerMessages(system, history, text, proposal),
           temperature: 0.8,
-          maxTokens: 10000,
+          maxTokens: prefs.thinking !== false ? 32000 : 16000,
           thinking: prefs.thinking !== false,
         },
-        24000,
+        prefs.thinking !== false ? 32000 : 16000,
       );
       const parsed = parsePlannerReply(strip(raw));
       if (!parsed) {
@@ -102,11 +108,41 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
       }
       scrollBottom();
     } catch (err) {
-      commit({ turns: [...history, { role: 'assistant' as const, text: `⚠️ ${err instanceof Error ? err.message : '请求失败，请重试'}` }], proposal });
+      // 失败回滚（巡检语义）：错误不写进持久会话（旧实现错误气泡永久留档且无重试入口，
+      // 用户只能重发导致重复消息）；恢复到发送前状态 + 输入框还原草稿 + 临时错误条提示
+      commit({ turns, proposal });
+      setInput(text);
+      setError(err instanceof Error ? err.message : '请求失败，请重试');
       scrollBottom();
     } finally {
       setBusy(false);
     }
+  }
+
+  /** 🆕 新对话：当前会话有实质内容则先存档（可恢复），再开空白会话（策划案一并清空） */
+  function startNewChat(): void {
+    if (busy) return;
+    if (!confirm('开一个新对话？当前对话会存档，可在「历史」里随时恢复。')) return;
+    const archived = archiveChat(work.id, { turns, proposal });
+    setArchived(archived);
+    const fresh = loadChat(work.id); // 空存储时返回默认欢迎会话
+    saveChat(work.id, { turns: fresh.turns, proposal: null });
+    setTurns(fresh.turns);
+    setProposal(null);
+    setError(null);
+    setHistOpen(false);
+  }
+
+  /** 恢复存档会话：当前会话若有效先自动存档，再切换到所选存档 */
+  function restoreFromArchive(index: number): void {
+    const picked = takeArchived(work.id, index);
+    if (!picked) return;
+    archiveChat(work.id, { turns, proposal }); // 当前会话有效则顺手存档
+    saveChat(work.id, picked);
+    setTurns(picked.turns);
+    setProposal(picked.proposal);
+    setError(null);
+    setHistOpen(false);
   }
 
   /** 确认策划案 → 一键应用（数据层编排见 book-outline-apply） */
@@ -147,16 +183,26 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="book-outline-chat">
-      {/* 状态条：说明 + 历史入口 */}
+      {/* 状态条：说明 + 新对话 + 历史入口 */}
       <div className="shrink-0 px-4 pt-3">
         <p className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--fg-muted))]" data-testid="book-outline-hint">
           <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          全书策划（每本书独立会话）——世界观 · 主角 · 势力 · 大纲，确认后一键写入「资料」
+          全书策划（每本书独立会话）——确认后一键写入「资料」
+          <button
+            type="button"
+            onClick={startNewChat}
+            data-testid="book-outline-new-chat"
+            title="开一个新对话（当前对话存档，可随时恢复）"
+            className="ml-auto flex shrink-0 items-center gap-1 text-[hsl(var(--accent))]"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+            新对话
+          </button>
           <button
             type="button"
             onClick={() => setHistOpen((v) => !v)}
             data-testid="book-outline-hist-btn"
-            className="ml-auto flex shrink-0 items-center gap-1 text-[hsl(var(--accent))]"
+            className="flex shrink-0 items-center gap-1 text-[hsl(var(--accent))]"
           >
             <History className="h-3.5 w-3.5" aria-hidden />
             历史{history.length > 0 ? `(${history.length})` : ''}
@@ -164,6 +210,32 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
         </p>
         {histOpen && (
           <div className="mt-1.5 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-2" data-testid="book-outline-hist-panel">
+            {/* 会话存档区（🆕 新对话的旧会话，可切换恢复） */}
+            <p className="px-1 text-[11px] font-medium text-[hsl(var(--fg))]">会话存档</p>
+            {archived.length === 0 ? (
+              <p className="px-1 pb-1 text-[11px] text-[hsl(var(--fg-muted))]">暂无——点「新对话」后旧对话自动存到这里</p>
+            ) : (
+              archived
+                .map((a, i) => (
+                  <div key={i} className="flex items-center gap-2 px-1 py-1 text-[11px]">
+                    <span className="min-w-0 flex-1 truncate text-[hsl(var(--fg-muted))]">
+                      {a.turns.filter((t) => t.role === 'user').length} 轮对话
+                      {a.proposal ? ` · 有策划案《${a.proposal.title}》` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => restoreFromArchive(i)}
+                      data-testid={`arch-restore-${i}`}
+                      className="shrink-0 rounded-md border border-[hsl(var(--border-soft))] px-2 py-0.5 text-[hsl(var(--accent))]"
+                    >
+                      切换到此对话
+                    </button>
+                  </div>
+                ))
+                .reverse()
+            )}
+            {/* 应用记录区（策划案版本快照，可回滚资料） */}
+            <p className="mt-1.5 px-1 text-[11px] font-medium text-[hsl(var(--fg))]">应用记录（资料版本）</p>
             {history.length === 0 ? (
               <p className="px-1 text-[11px] text-[hsl(var(--fg-muted))]">还没有应用记录——确认策划案后这里会存档每个版本</p>
             ) : (
@@ -261,6 +333,21 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
           </div>
         )}
       </div>
+
+      {/* 🎯 直接生成（跳过一切提问，AI 替你拍板所有未定项直接出完整策划案） */}
+      {!busy && (
+        <div className="shrink-0 px-4 pb-1">
+          <button
+            type="button"
+            onClick={() => void send('【直接生成】跳过提问，基于我已表达的想法直接拍板所有未定项，输出完整策划案。')}
+            data-testid="book-outline-fast"
+            className="flex h-8 w-full items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent))]/5 text-xs text-[hsl(var(--accent))]"
+          >
+            <Wand2 className="h-3.5 w-3.5" aria-hidden />
+            直接生成策划案（不想被提问，AI 替你决定一切）
+          </button>
+        </div>
+      )}
 
       {/* 输入行 */}
       <div className="safe-bottom flex shrink-0 gap-2 border-t border-[hsl(var(--border-soft))] px-4 py-2">
