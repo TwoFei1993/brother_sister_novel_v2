@@ -3,6 +3,7 @@
  * 指令生成下一章 + 批量连写。流式块与待绑定卡独立成件，编排数据全部来自 MobileWork。
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, Dices, List, SquarePen, Zap } from 'lucide-react';
 
 import { apiFetch } from '../../../../api/client';
@@ -369,21 +370,30 @@ export function TextPane({
         </button>
       </div>
 
-      {/* 📑 章节目录悬浮入口（左下角，不随滚动移动——写完一章任意位置一键呼出） */}
+      {/* 📑 章节目录入口 + 抽屉：portal 挂 body——分区容器带 m-rise 动画（fill both 持有 transform），
+          fixed 后代会退化为容器内定位（实测滚动后 fab 被滚走），portal 出去才是真视口固定 */}
       {chapters.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="章节目录"
-          data-testid="chapter-drawer-btn"
-          className="m-press fixed bottom-28 left-4 z-40 flex h-11 items-center gap-1.5 rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3.5 text-xs shadow-lg"
-        >
-          <List className="h-4 w-4" aria-hidden />
-          目录
-        </button>
+        <>
+          {createPortal(
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="章节目录"
+              data-testid="chapter-drawer-btn"
+              className="m-press fixed bottom-28 left-4 z-40 flex h-11 items-center gap-1.5 rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3.5 text-xs shadow-lg"
+            >
+              <List className="h-4 w-4" aria-hidden />
+              目录
+            </button>,
+            document.body,
+          )}
+        </>
       )}
 
-      <ChapterDrawer open={drawerOpen} chapters={chapters} currentId={current?.id} onPick={onPick} onClose={() => setDrawerOpen(false)} />
+      {createPortal(
+        <ChapterDrawer open={drawerOpen} chapters={chapters} currentId={current?.id} onPick={onPick} onClose={() => setDrawerOpen(false)} />,
+        document.body,
+      )}
     </div>
   );
 }
