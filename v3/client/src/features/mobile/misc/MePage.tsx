@@ -5,7 +5,7 @@
  * 移动端逐步补齐入口）。
  */
 import { Link } from 'react-router-dom';
-import { Brain } from 'lucide-react';
+import { Brain, Gauge } from 'lucide-react';
 
 import { useLogout } from '../../../hooks/useLogout';
 import { displayNameOf, useAuthStore } from '../../../stores/auth';
@@ -18,11 +18,16 @@ const THEMES = [
   { id: 'm-paper', label: '宣纸 · 昼' },
 ] as const;
 
+/** 速度优先候选模型（实测当前推理通道 ~19 字/秒；非推理轻量模型通常快 3-5 倍——
+ *  以服务商模型列表为准，此处是常用快捷候选 + 可自定义输入） */
+const FAST_MODELS = ['MiniMax-Text-01', 'MiniMax-M3.1-Flash', 'abab6.5s-chat'];
+
 export default function MePage() {
   const uiTheme = useSettingsStore((s) => s.uiTheme);
   const setUiTheme = useSettingsStore((s) => s.setUiTheme);
   const thinkingOn = useSettingsStore((s) => s.llmPrefs.thinking !== false);
-  const setThinking = useSettingsStore((s) => s.setLlmPrefs);
+  const setLlmPrefs = useSettingsStore((s) => s.setLlmPrefs);
+  const currentModel = useSettingsStore((s) => s.llmPrefs.model);
   const user = useAuthStore((s) => s.user);
   const logout = useLogout();
   const isReader = user?.role === 'reader';
@@ -61,7 +66,7 @@ export default function MePage() {
             role="switch"
             aria-checked={thinkingOn}
             data-testid="thinking-switch"
-            onClick={() => setThinking({ thinking: !thinkingOn })}
+            onClick={() => setLlmPrefs({ thinking: !thinkingOn })}
             className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
               thinkingOn ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--fg-muted))]/30'
             }`}
@@ -76,8 +81,46 @@ export default function MePage() {
       </section>
 
       {!isReader && (
-        <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-          <h2 className="mb-2 text-sm font-semibold">界面偏好</h2>
+        <>
+          {/* ⚡ 生成提速建议（实测归因：输出速度是硬瓶颈 ~19字/秒；换快模型是最大杠杆） */}
+          <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4" data-testid="speed-card">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Gauge className="h-4 w-4" aria-hidden />
+              生成提速
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[hsl(var(--fg-muted))]">
+              实测当前通道约 19 字/秒——换非推理轻量模型通常快 3-5 倍；配合「关思考 + 调小每章目标字数」效果最佳。
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {FAST_MODELS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setLlmPrefs({ model: m })}
+                  data-testid={`speed-model-${m}`}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] ${
+                    currentModel === m
+                      ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
+                      : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+                  }`}
+                >
+                  {m}
+                  {m === 'MiniMax-Text-01' ? '（快）' : ''}
+                </button>
+              ))}
+            </div>
+            <input
+              value={currentModel ?? ''}
+              onChange={(e) => setLlmPrefs({ model: e.target.value })}
+              placeholder="或直接输入服务商模型名"
+              data-testid="speed-model-input"
+              className="mt-2 h-8 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none focus:border-[hsl(var(--accent))]"
+            />
+            <p className="mt-1 text-[11px] text-[hsl(var(--fg-muted))]">每章目标字数在书内「资料」分区调整；思考开关在上方与正文分区均有。</p>
+          </section>
+
+          <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
+            <h2 className="mb-2 text-sm font-semibold">界面偏好</h2>
           <div className="flex gap-2">
             {THEMES.map((t) => (
               <button
@@ -96,11 +139,9 @@ export default function MePage() {
             ))}
           </div>
         </section>
-      )}
 
-      {!isReader && (
-        <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-          <h2 className="mb-2 text-sm font-semibold">创作工具</h2>
+          <section className="mb-3 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
+            <h2 className="mb-2 text-sm font-semibold">创作工具</h2>
           <div className="flex flex-col divide-y divide-[hsl(var(--border-soft))]">
             <Link to="/library" data-testid="me-library-link" className="flex items-center justify-between py-2.5 text-sm">
               资料库（角色卡 / 世界书 / 预设 / 正则）
@@ -115,7 +156,8 @@ export default function MePage() {
               <span className="text-xs text-[hsl(var(--fg-muted))]">›</span>
             </Link>
           </div>
-        </section>
+          </section>
+        </>
       )}
 
       <button

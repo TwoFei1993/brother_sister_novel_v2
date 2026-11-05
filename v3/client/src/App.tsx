@@ -19,6 +19,8 @@ const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const OutlineWizard = lazy(() => import('./features/misc/OutlineWizard'));
 const PlannerPage = lazy(() => import('./features/planner/PlannerPage'));
+// 全局 toast 宿主（连写章节完成通知等非阻塞提示；直接导入——体积极小无需懒加载分包）
+const ToastHost = lazy(() => import('./features/misc/ToastHost'));
 // 安卓 app 移动端路由树（/m/*，独立于桌面路由；见 discuss/2026-10-22-安卓app设计共识.md）
 const MobileShell = lazy(() => import('./features/mobile/MobileShell'));
 const MobileBookshelf = lazy(() => import('./features/mobile/create/MobileBookshelf'));
@@ -108,6 +110,7 @@ export default function App() {
     <BrowserRouter>
       <GlobalTheme />
       <MobileRedirect />
+      <ToastHost />
       <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

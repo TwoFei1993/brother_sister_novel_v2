@@ -56,7 +56,9 @@ export interface ParsedStatus {
 
 /**
  * 章节标题解析：
- * 1. 首行 `# 第N章 xxx` / `# xxx` → 剥离该行，剩余为正文；
+ * 1. 首行 `# 第N章 xxx` / `# xxx` → 剥离该行，剩余为正文；标题去掉「第N章」前缀——
+ *    章号由入库侧权威决定（nextChapterIndex），模型自拟的章号常与实际错位（如大纲覆盖到
+ *    第 14 章而续写位是第 13 章 → 显示「第13章《第14章 …》」自相矛盾）；
  * 2. 无标记 → directive 首句截 20 字兜底；
  * 3. 再兜底 `第{chapterIndex + 1}章`。
  */
@@ -68,8 +70,10 @@ export function parseChapterTitle(
   const probe = raw.trimStart();
   const matched = TITLE_LINE_RE.exec(probe);
   if (matched) {
+    // 「第N章 xxx」→ 只留 xxx（章号前缀剥离；无前缀的纯标题原样保留）
+    const stripped = matched[1].trim().replace(/^第\s*\d+\s*章[：:·\s]*/, '').trim();
     return {
-      title: matched[1].trim(),
+      title: stripped || `第${chapterIndex + 1}章`,
       content: probe.slice(matched[0].length).replace(/^\s+/, ''),
     };
   }

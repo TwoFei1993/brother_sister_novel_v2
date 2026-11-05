@@ -38,7 +38,7 @@ function makeScript(overrides: Partial<TavernRegexScript> = {}): TavernRegexScri
 describe('parseChapterTitle', () => {
   it('首行 `# 第N章 xxx` 剥离为标题，剩余为正文', () => {
     const { title, content } = parseChapterTitle('# 第3章 遗迹之门\n\n正文第一段。\n正文第二段。', undefined, 2);
-    expect(title).toBe('第3章 遗迹之门');
+    expect(title).toBe('遗迹之门'); // 章号前缀剥离：章号由入库侧权威决定（模型自拟章号常与实际错位）
     expect(content).toBe('正文第一段。\n正文第二段。');
   });
 
@@ -90,7 +90,7 @@ describe('postprocessMessage 串联', () => {
       chapterIndex: 0,
       regexScripts: scripts,
     });
-    expect(result.title).toBe('第1章 开端');
+    expect(result.title).toBe('开端');
     expect(result.content).toBe('SECRET 正文。'); // 双 false 脚本生效、promptOnly 跳过
     expect(result.statusSnapshot).toBeUndefined();
   });
@@ -100,7 +100,7 @@ describe('postprocessMessage 串联', () => {
       directive: '通过试炼',
       chapterIndex: 1,
     });
-    expect(result.title).toBe('第2章 试炼');
+    expect(result.title).toBe('试炼');
     expect(result.content).toBe('正文内容。');
     expect(result.statusSnapshot).toEqual({ HP: 88 });
   });
@@ -132,7 +132,7 @@ describe('extractThinking（反馈⑨：思考流捕获供折叠展示）', () =
   it('postprocessMessage 透传 thinking 且 content 不含思考（extra.rawThinking 的数据源）', () => {
     const r = postprocessMessage('<think>提纲：雨夜逃亡</think># 第3章 遗迹之门\n正文。', {});
     expect(r.thinking).toBe('提纲：雨夜逃亡');
-    expect(r.title).toBe('第3章 遗迹之门');
+    expect(r.title).toBe('遗迹之门');
     expect(r.content).toBe('正文。');
   });
 

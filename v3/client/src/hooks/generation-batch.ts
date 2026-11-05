@@ -22,6 +22,7 @@ import {
 } from './generation-flow';
 import { useGenerationStore } from '../stores/generation';
 import { useWorkStore } from '../stores/work';
+import { notifyDone, showToast } from '../lib/toast';
 
 /** 单章生成器（useGenerate.generateChapter 注入：内部已含大纲注入 + 守卫 + 无效输出重试） */
 export type ChapterRunner = (work: Work, messages: Message[], directive: string) => Promise<Message | null>;
@@ -40,6 +41,7 @@ export async function runChunkLoop(
   const total = work.settings.desiredChapterCount;
   if (useGenerationStore.getState().streaming) return; // 防重入（单章生成中不可发起连写）
   cancelRef.current = false;
+  const completed: number[] = [];
   try {
     let first = true;
     for (let done = 0; done < BATCH_CHUNK_SIZE; done++) {
@@ -48,12 +50,28 @@ export async function runChunkLoop(
       setBatch({ done: nextChapterIndex(messages) - 1, total, mode: 'chunk' });
       const msg = await generateChapter(work, messages, first ? firstDirective : '');
       first = false;
-      if (msg) useWorkStore.getState().upsertLocal(msg);
+      if (msg) {
+        useWorkStore.getState().upsertLocal(msg);
+        completed.push(msg.chapter!.index);
+        // 章节完成通知（后台挂着写也可感知进度）：文字 + 提示音
+        notifyDone(`✅ 第${msg.chapter!.index}章《${msg.chapter!.title || '未命名'}》已生成入库（${msg.content.length} 字）`, { duration: 4500 });
+      }
       if (!msg || cancelRef.current) break; // 出错/停止即停（error 已进 store 提示）
     }
   } finally {
     setBatch(null);
     cancelRef.current = false;
+    // 批次收尾汇总：完成 N 章正常结束 / 中途停止 / 到达目标
+    const remaining = remainingChapters(useWorkStore.getState().messages, total);
+    if (completed.length > 0) {
+      if (cancelRef.current || useGenerationStore.getState().error) {
+        showToast(`⏹ 连写已停止——本次完成 ${completed.length} 章（第${completed.join('、第')}章），点「继续」可接着写`, { duration: 6000 });
+      } else if (remaining > 0) {
+        showToast(`本批 ${completed.length} 章完成（第${completed.join('、第')}章）——还剩 ${remaining} 章，再点「一键连写」继续`, { duration: 6000 });
+      } else {
+        notifyDone(`🎉 全书连写完成！目标 ${total} 章全部到位`, { duration: 6000 });
+      }
+    }
   }
 }
 
@@ -71,6 +89,7 @@ export async function runOutlineLoop(
   if (!plan) return; // 无大纲/已覆盖完：按钮不应出现，防御兜底
   if (useGenerationStore.getState().streaming) return; // 防重入
   cancelRef.current = false;
+  const completed: number[] = [];
   try {
     const cap = limit && limit > 0 ? Math.min(plan.total, limit) : plan.total;
     for (let remain = cap; remain > 0; remain--) {
@@ -78,11 +97,23 @@ export async function runOutlineLoop(
       if (cancelRef.current) break;
       setBatch({ done: cap - remain, total: cap, mode: 'outline' });
       const msg = await generateChapter(work, current, OUTLINE_DIRECTIVE);
-      if (msg) useWorkStore.getState().upsertLocal(msg);
+      if (msg) {
+        useWorkStore.getState().upsertLocal(msg);
+        completed.push(msg.chapter!.index);
+        notifyDone(`✅ 第${msg.chapter!.index}章《${msg.chapter!.title || '未命名'}》已按大纲生成（${msg.content.length} 字）`, { duration: 4500 });
+      }
       if (!msg || cancelRef.current) break; // 出错/停止即停
     }
   } finally {
     setBatch(null);
     cancelRef.current = false;
+    if (completed.length > 0) {
+      const left = outlineRunPlan(useWorkStore.getState().messages, work.settings.chapterOutlines);
+      if (left && left.total > 0) {
+        showToast(`本批按大纲完成 ${completed.length} 章（第${completed.join('、第')}章）——大纲还剩 ${left.total} 章`, { duration: 6000 });
+      } else {
+        notifyDone(`🎉 按大纲生成全部完成（${completed.length} 章）！`, { duration: 6000 });
+      }
+    }
   }
 }
