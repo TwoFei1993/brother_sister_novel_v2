@@ -9,6 +9,7 @@ import { BookOpen, Dices, List, SquarePen, Zap } from 'lucide-react';
 import { apiFetch } from '../../../../api/client';
 import { patchMessage, upsertMessage } from '../../../../api/works';
 import { useWorkStore } from '../../../../stores/work';
+import { useSettingsStore } from '../../../../stores/settings';
 import { buildChapterMessage } from '../../../../hooks/generation-flow';
 import { chapterTitle } from '../../../../lib/chapter-title';
 import { isTruncatedText } from '../../../../lib/truncation';
@@ -55,6 +56,9 @@ export function TextPane({
   const otherStreaming = gen.streaming && gen.streamingWorkId !== null && gen.streamingWorkId !== work.id;
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
+  /** 💭 思考模式快捷开关（生成速度/质量权衡——高频操作直达，与「我的」页同一状态源） */
+  const thinkingOn = useSettingsStore((s) => s.llmPrefs.thinking !== false);
+  const setThinking = useSettingsStore((s) => s.setLlmPrefs);
   /** 📑 章节目录抽屉（左下角悬浮入口，写完一章后不必滚回顶部切章） */
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** 当前章是否未写完：入库时的版本级确定性标记（含句号边界截断，激活版本切换后不再提示）∨ 启发式兜底 */
@@ -345,8 +349,21 @@ export function TextPane({
         </>
       )}
 
-      {/* 批量生成：⚡连写（写到目标章数）/ 📖按大纲（有大纲时） */}
-      <div className="mx-4 mb-2 flex gap-2">
+      {/* 批量生成：⚡连写（写到目标章数）/ 📖按大纲（有大纲时）+ 💭思考快捷开关（提速高频操作直达） */}
+      <div className="mx-4 mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setThinking({ thinking: !thinkingOn })}
+          data-testid="thinking-quick-toggle"
+          title="深度思考：质量高但慢约一半；关闭提速"
+          className={`flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-[11px] ${
+            thinkingOn
+              ? 'border-[hsl(var(--accent))]/50 bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
+              : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+          }`}
+        >
+          💭{thinkingOn ? '思考:开' : '思考:关'}
+        </button>
         <button
           type="button"
           onClick={() => void gen.runBatch(work, directive.trim() || '自由发挥第一章').then(() => setDirective(''))}

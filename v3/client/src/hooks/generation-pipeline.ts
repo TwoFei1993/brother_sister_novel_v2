@@ -193,7 +193,7 @@ export async function scanAndAssemble(
     macroEnv: env,
   });
   // 预算默认拉满（M3 百万级上下文；过小预算会截掉前文致续写脱节，用户显式设置仍优先）
-  const maxContext = prefs.maxContext ?? 1000000;
+  const maxContext = prefs.maxContext ?? 65536; // 与 DEFAULT_PREFS 同步（1M 旧默认=不裁剪，prefill 拖慢生成）
   const maxTokens = prefs.maxTokens ?? 8192;
   const budget = Math.max(0, maxContext - maxTokens);
 

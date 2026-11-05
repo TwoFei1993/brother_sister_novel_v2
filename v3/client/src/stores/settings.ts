@@ -44,11 +44,14 @@ export interface ConfigDto {
   [key: string]: unknown;
 }
 
-/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json）；预算默认拉满 1M；模型 M3.1-Flash（2026-10 实测 /models 列表在册，anthropic 端点可用） */
+/** 默认生成通道：MiniMax（Claude 兼容端点，密钥与地址配置在服务端 secrets.json）；模型 M3.1-Flash（2026-10 实测 /models 列表在册，anthropic 端点可用）。
+ *  maxContext 默认 64k（生成提速主开关）：实测 12 章书全量上下文 132k token 时上游 prefill 耗时与
+ *  输出同量级（单章 140s+）——64k 下历史自动裁剪，裁掉部分由滚动摘要/章节骨架/相关性召回兜底
+ *  （三者正是为此设计的长程记忆机制）；桌面「模型与预算」面板可改，更大值供长篇连贯性优先场景 */
 const DEFAULT_PREFS: LlmPrefs = {
   source: 'claude',
   model: 'MiniMax-M3.1-Flash',
-  maxContext: 1000000,
+  maxContext: 65536,
   maxTokens: 8192,
   temperature: 0.8,
 };
@@ -82,7 +85,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'v3-llm-prefs',
-      version: 3,
+      version: 4,
       migrate: (persisted: unknown, version: number): PersistedSettings => {
         const prev =
           typeof persisted === 'object' && persisted !== null
@@ -90,10 +93,13 @@ export const useSettingsStore = create<SettingsState>()(
             : {};
         // 0→1 丢弃旧偏好换新默认通道；1→2 新增 uiTheme；2→3 为缺失的预算字段补默认值
         // （保留用户已显式设置的字段，仅补缺——修复旧浏览器预算过小导致续写截断前文）
+        // 3→4 生成提速：maxContext 旧默认 1M（等于不裁剪，实测 132k 上下文 prefill 拖慢单章生成）
+        // 升级为 64k——仅当用户从未主动修改（仍等于旧默认值）时替换，显式设置过的其他值一律保留
         const llmPrefs =
           version < 1
             ? { ...DEFAULT_PREFS }
             : { ...DEFAULT_PREFS, ...(prev.llmPrefs ?? {}), model: prev.llmPrefs?.model ?? DEFAULT_PREFS.model };
+        if (llmPrefs.maxContext === 1000000) llmPrefs.maxContext = DEFAULT_PREFS.maxContext;
         return { llmPrefs, uiTheme: null };
       },
       storage: createJSONStorage(() => localStorage),
