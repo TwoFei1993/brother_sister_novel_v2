@@ -9,6 +9,7 @@ import { Router } from 'express';
 
 import { authRequired } from '../../middleware/auth';
 import { zodBody } from '../../middleware/validate';
+import { mountDuanjuProject } from '../duanju/project';
 import { commentsRouter } from './comments';
 import { messagesRouter } from './messages';
 import {
@@ -37,3 +38,6 @@ worksRouter.use('/works/:id/messages', messagesRouter);
 
 // comments 子路由（安卓 app 划线评论）：全量读 + 幂等 upsert + 删除，见 comments.ts
 worksRouter.use('/works/:id/comments', commentsRouter);
+
+// duanju 子路由（短剧模式）：project.json 读写 + 乐观锁，见 duanju/project.ts
+mountDuanjuProject(worksRouter);

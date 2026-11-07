@@ -1,0 +1,217 @@
+/**
+ * 短剧模式数据模型（共识 D1-D10 / 实施计划 T1.1）
+ *
+ * Work.mode='duanju' 时，全部短剧状态存于 data/works/<id>/duanju/project.json，
+ * 与小说章节消息流完全隔离（D2）。生图产物（images/videos）为 server 转存后的
+ * 相对路径（duanju/images/xx.png）；MiniMax 原始 URL 仅 24h 有效，不可持久引用。
+ */
+import { z } from 'zod';
+
+// ---------- 基础件 ----------
+
+const idSchema = z.string().min(1);
+/** 实体时间戳（ms）；下游 builtFrom 快照与之比对推导 stale */
+const tsSchema = z.number().int().nonnegative();
+/** 转存图片记录：path 相对 work 目录（duanju/images/xx.png）；originUrl 仅诊断用（24h 失效） */
+export const StoredImageSchema = z.strictObject({
+  id: idSchema,
+  path: z.string().min(1),
+  prompt: z.string(),
+  createdAt: tsSchema,
+  originUrl: z.string().optional(),
+});
+export type StoredImage = z.infer<typeof StoredImageSchema>;
+
+// ---------- 剧本（D5：多来源 + 拆解审核卡） ----------
+
+export const DuanjuScriptSchema = z.strictObject({
+  /** 剧本来源：ai=工作台 AI 对话 / pasted=粘贴 / manual=手写 */
+  source: z.enum(['ai', 'pasted', 'manual']),
+  text: z.string(),
+  /** 定稿确认门：确认后才解锁角色/场景/分镜 tab */
+  confirmed: z.boolean(),
+  updatedAt: tsSchema,
+});
+export type DuanjuScript = z.infer<typeof DuanjuScriptSchema>;
+
+/** 违审替换建议（资料第 7 课）：高风险表达 → 中性可视化描述 */
+export const RiskReplacementSchema = z.strictObject({
+  id: idSchema,
+  original: z.string(),
+  replacement: z.string(),
+  /** 作者处置：pending 未决 / accepted 已采纳（改剧本时替换）/ dismissed 驳回 */
+  status: z.enum(['pending', 'accepted', 'dismissed']).optional(),
+});
+export type RiskReplacement = z.infer<typeof RiskReplacementSchema>;
+
+/** 拆解审核卡（资料第 2 课）：逐项可编辑，confirmed 全 true 才算审完 */
+export const ReviewCardsSchema = z.strictObject({
+  summary: z.string(),
+  /** 事件链：一行一事件 */
+  eventChain: z.array(z.string()),
+  conflict: z.string(),
+  characterRelations: z.string(),
+  /** 情绪点 */
+  emotionPoints: z.array(z.string()),
+  /** 可视化动作（心理描写 → 可见动作） */
+  visualActions: z.array(z.string()),
+  riskReplacements: z.array(RiskReplacementSchema),
+  /** 各卡确认态（共识：逐项人工确认） */
+  confirmed: z.record(z.string(), z.boolean()).optional(),
+  updatedAt: tsSchema.optional(),
+});
+export type ReviewCards = z.infer<typeof ReviewCardsSchema>;
+
+export const EMPTY_REVIEW_CARDS: ReviewCards = {
+  summary: '',
+  eventChain: [],
+  conflict: '',
+  characterRelations: '',
+  emotionPoints: [],
+  visualActions: [],
+  riskReplacements: [],
+  confirmed: {},
+};
+
+// ---------- 角色 / 场景（D6-D7） ----------
+
+export const DuanjuCharacterSchema = z.strictObject({
+  id: idSchema,
+  name: z.string().min(1),
+  /** 身份/年龄/外观锚点（发色发型瞳色体型服装——一致性的事实源，prompt 组装必注入） */
+  profile: z.string(),
+  /** 设定图候选（可多张重roll）；主参考图从其中选定 */
+  sheetImages: z.array(StoredImageSchema),
+  /** 主参考图 id：生四宫格时由 server 读该图转 Data URL 作 subject_reference（spike S8 定案） */
+  refImageId: idSchema.nullable().optional(),
+  updatedAt: tsSchema,
+});
+export type DuanjuCharacter = z.infer<typeof DuanjuCharacterSchema>;
+
+export const DuanjuSceneSchema = z.strictObject({
+  id: idSchema,
+  name: z.string().min(1),
+  /** 空间结构/光影基调/关键道具/色彩（资料第 4 课） */
+  spec: z.string(),
+  images: z.array(StoredImageSchema),
+  updatedAt: tsSchema,
+});
+export type DuanjuScene = z.infer<typeof DuanjuSceneSchema>;
+
+// ---------- 集 / 镜头（D7 四宫格 = 每镜头一张 2×2 整图） ----------
+
+export const DuanjuEpisodeSchema = z.strictObject({
+  id: idSchema,
+  /** 集号（从 1 起） */
+  index: z.number().int().positive(),
+  title: z.string(),
+  synopsis: z.string(),
+});
+export type DuanjuEpisode = z.infer<typeof DuanjuEpisodeSchema>;
+
+/** 生成依据快照：与 script/characters/scenes 的 updatedAt 比对推导 stale（纯函数，客户端实现） */
+export const BuiltFromSchema = z.strictObject({
+  scriptAt: tsSchema.optional(),
+  /** characterId → 该角色 refImage 当时所指 sheetImage 的 id */
+  refImageIds: z.record(z.string(), z.string()).optional(),
+  /** shot 组装时参与注入的场景 id 列表（场景 spec 变更比对范围） */
+  sceneIds: z.array(z.string()).optional(),
+});
+export type BuiltFrom = z.infer<typeof BuiltFromSchema>;
+
+export const DuanjuShotSchema = z.strictObject({
+  id: idSchema,
+  episodeId: idSchema,
+  /** 镜头号（集内从 1 起） */
+  index: z.number().int().positive(),
+  /** 景别（远景/全景/中景/近景/特写） */
+  shotSize: z.string(),
+  /** 运镜（固定/推/拉/摇/移/跟） */
+  cameraMove: z.string(),
+  /** 动作起点 → 终点（资料第 5 课：动作起终点是钉点） */
+  actionStart: z.string(),
+  actionEnd: z.string(),
+  /** 人物站位 */
+  staging: z.string(),
+  dialog: z.string(),
+  /** 声音要求（环境音/动作声/对白声；默认无 BGM） */
+  sound: z.string(),
+  /** 四宫格生成 prompt（组装器产出后可手改；重roll 用它） */
+  gridPrompt: z.string(),
+  /** 四宫格整图（D7：一张 2×2；每格一个核心动作） */
+  gridImage: StoredImageSchema.optional(),
+  /** 成品视频（即梦生成后上传归档，D10） */
+  finalVideo: z
+    .strictObject({ path: z.string(), uploadedAt: tsSchema })
+    .optional(),
+  /** 本镜头出场角色 id */
+  characterIds: z.array(z.string()).default([]),
+  /** 本镜头场景 id */
+  sceneId: idSchema.nullable().optional(),
+  builtFrom: BuiltFromSchema.optional(),
+  updatedAt: tsSchema,
+});
+export type DuanjuShot = z.infer<typeof DuanjuShotSchema>;
+
+// ---------- 项目根（project.json 全量） ----------
+
+/** 新建短剧的可选项（createWork 入参；服务端原子初始化 project.json） */
+export const DuanjuInitSchema = z.strictObject({
+  /** 目标集数（默认 12，共识「六、默认值」） */
+  targetEpisodes: z.number().int().positive().max(200).default(12),
+  /** 画风（默认 动漫风；全局可改） */
+  style: z.string().min(1).default('动漫风'),
+  /** 主角设定自由文本（人数/身份/关系/外形；题材中立 D9） */
+  protagonists: z.string().default(''),
+});
+export type DuanjuInit = z.infer<typeof DuanjuInitSchema>;
+
+export const DuanjuProjectSchema = z.strictObject({
+  /** 乐观版本号：每次 PATCH +1，不匹配返回 409（与 work.json 同语义、独立计数） */
+  revision: z.number().int().positive(),
+  script: DuanjuScriptSchema,
+  reviewCards: ReviewCardsSchema,
+  style: z.string().min(1),
+  targetEpisodes: z.number().int().positive(),
+  protagonists: z.string(),
+  characters: z.array(DuanjuCharacterSchema),
+  scenes: z.array(DuanjuSceneSchema),
+  episodes: z.array(DuanjuEpisodeSchema),
+  shots: z.array(DuanjuShotSchema),
+  createdAt: tsSchema,
+  updatedAt: tsSchema,
+});
+export type DuanjuProject = z.infer<typeof DuanjuProjectSchema>;
+
+/** 新建作品的初始 project（server createWork duanju 分支使用） */
+export function newDuanjuProject(init: DuanjuInit, now: number): DuanjuProject {
+  return {
+    revision: 1,
+    script: { source: 'manual', text: '', confirmed: false, updatedAt: now },
+    reviewCards: EMPTY_REVIEW_CARDS,
+    style: init.style,
+    targetEpisodes: init.targetEpisodes,
+    protagonists: init.protagonists,
+    characters: [],
+    scenes: [],
+    episodes: [],
+    shots: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** PATCH 白名单：客户端可改字段（revision 服务端管理） */
+export const DuanjuPatchSchema = z.strictObject({
+  revision: z.number().int().positive(),
+  script: DuanjuScriptSchema.optional(),
+  reviewCards: ReviewCardsSchema.optional(),
+  style: z.string().min(1).optional(),
+  targetEpisodes: z.number().int().positive().max(200).optional(),
+  protagonists: z.string().optional(),
+  characters: z.array(DuanjuCharacterSchema).optional(),
+  scenes: z.array(DuanjuSceneSchema).optional(),
+  episodes: z.array(DuanjuEpisodeSchema).optional(),
+  shots: z.array(DuanjuShotSchema).optional(),
+});
+export type DuanjuPatch = z.infer<typeof DuanjuPatchSchema>;

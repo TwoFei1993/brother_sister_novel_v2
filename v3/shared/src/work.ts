@@ -196,7 +196,8 @@ export const defaultNovelSettings: NovelSettings = {
 };
 
 // ---------- 作品 ----------
-export const WorkModeSchema = z.enum(['novel', 'chat']);
+/** duanju=短剧（共识 D2：第三种作品模式，创建后锁定；状态存 duanju/project.json，与消息流隔离） */
+export const WorkModeSchema = z.enum(['novel', 'chat', 'duanju']);
 export type WorkMode = z.infer<typeof WorkModeSchema>;
 
 export const ViewPreferenceSchema = z.enum(['a', 'b', 'c']);

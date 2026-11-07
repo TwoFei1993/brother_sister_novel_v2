@@ -66,4 +66,5 @@ export function genreLabel(genre: string): string {
 export const MODE_LABELS: ReadonlyMap<string, string> = new Map([
   ['novel', '互动小说'],
   ['chat', '对话写作'],
+  ['duanju', '短剧'],
 ]);

@@ -44,11 +44,18 @@ const GENRES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'hunhe', label: '混合' },
 ];
 
+const DUANJU_STYLES = ['动漫风', '3D 卡通', '写实', '国漫', '水墨'] as const;
+
 function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [genre, setGenre] = useState('xuanhuan');
-  /** 手写模式：创建后直达正文，自己写/粘贴，再用 AI 润色 */
+  /** 模式：novel 默认 / duanju 短剧（创建后锁定，共识 D2） */
+  const [mode, setMode] = useState<'novel' | 'duanju'>('novel');
+  const [targetEpisodes, setTargetEpisodes] = useState(12);
+  const [style, setStyle] = useState<string>(DUANJU_STYLES[0]);
+  const [protagonists, setProtagonists] = useState('');
+  /** 手写模式：创建后直达正文，自己写/粘贴，再用 AI 润色（novel 专属） */
   const [handwrite, setHandwrite] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -57,8 +64,12 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
     if (!t || busy) return;
     setBusy(true);
     try {
-      const work = await createWork({ title: t, mode: 'novel', genre });
-      if (handwrite) navigate(`/m/work/${work.id}`);
+      const work = await createWork(
+        mode === 'duanju'
+          ? { title: t, mode, genre, duanju: { targetEpisodes, style, protagonists: protagonists.trim() } }
+          : { title: t, mode, genre },
+      );
+      if (mode === 'novel' && handwrite) navigate(`/m/work/${work.id}`);
       else onCreated(work.id);
     } catch {
       alert('创建失败，请重试');
@@ -70,7 +81,7 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   return (
     <div className="m-fade fixed inset-0 z-50 flex items-end bg-black/50 sm:items-center sm:justify-center" onClick={onClose}>
       <div
-        className="m-sheet w-full rounded-t-2xl bg-[hsl(var(--surface))] p-4 sm:max-w-sm sm:rounded-2xl"
+        className="m-sheet safe-bottom max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-[hsl(var(--surface))] p-4 sm:max-w-sm sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-3 text-base font-semibold">新建作品</h2>
@@ -78,9 +89,29 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
           data-testid="new-work-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="书名"
+          placeholder={mode === 'duanju' ? '短剧名' : '书名'}
           className="mb-3 h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
         />
+        {/* 模式二选（novel 默认；chat 模式走桌面端创建） */}
+        <div className="mb-3 flex gap-2" role="radiogroup" aria-label="模式">
+          {([['novel', '📖 小说'], ['duanju', '🎬 短剧']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={mode === value}
+              data-testid={`new-work-mode-${value}`}
+              onClick={() => setMode(value)}
+              className={`h-10 flex-1 rounded-lg border text-sm ${
+                mode === value
+                  ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
+                  : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="mb-3 flex flex-wrap gap-2">
           {GENRES.map((g) => (
             <button
@@ -97,10 +128,51 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
             </button>
           ))}
         </div>
-        <label className="mb-4 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-handwrite">
-          <input type="checkbox" checked={handwrite} onChange={(e) => setHandwrite(e.target.checked)} />
-          ✍️ 从手写开始（自己写/粘贴正文，再用 AI 润色）
-        </label>
+        {mode === 'duanju' ? (
+          <div className="mb-4">
+            <div className="mb-2 flex flex-wrap gap-2" aria-label="画风">
+              {DUANJU_STYLES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStyle(s)}
+                  className={`h-8 rounded-full border px-3 text-xs ${
+                    style === s
+                      ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
+                      : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="mb-2 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]">
+              目标集数
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={targetEpisodes}
+                onChange={(e) => setTargetEpisodes(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
+                className="h-9 w-20 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-center text-sm outline-none focus:border-[hsl(var(--accent))]"
+              />
+              集
+            </div>
+            <textarea
+              value={protagonists}
+              onChange={(e) => setProtagonists(e.target.value)}
+              placeholder="主角设定：人数/身份/关系/外形（可留空后补）"
+              rows={2}
+              maxLength={2000}
+              className="w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+            />
+          </div>
+        ) : (
+          <label className="mb-4 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-handwrite">
+            <input type="checkbox" checked={handwrite} onChange={(e) => setHandwrite(e.target.checked)} />
+            ✍️ 从手写开始（自己写/粘贴正文，再用 AI 润色）
+          </label>
+        )}
         <button
           type="button"
           data-testid="new-work-submit"
@@ -242,6 +314,7 @@ export default function MobileBookshelf() {
       `${w.stats?.chapterCount ?? 0} 章`,
       ...((w.stats?.publishedChapterCount ?? 0) > 0 ? [`已上架 ${w.stats?.publishedChapterCount} 章`] : []),
       ...(w.mode === 'chat' ? ['对话'] : []),
+      ...(w.mode === 'duanju' ? ['🎬 短剧'] : []),
     ];
     if (managing) {
       return (

@@ -12,6 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { BookOpen, List, MessageSquare, Settings, Wrench } from 'lucide-react';
 
 import { updateWork } from '../api/works';
+import DuanjuWorkbench from '../features/duanju/DuanjuWorkbench';
 import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDrawer';
 import { useTtsStore } from '../stores/tts';
 import WorkSettingsSheet from '../features/workbench/WorkSettingsSheet';
@@ -113,6 +114,11 @@ export default function WorkPage() {
 
   const iconBtn =
     'flex h-10 min-w-10 items-center justify-center rounded-lg text-sm transition-colors hover:bg-[hsl(var(--surface))]';
+
+  // 短剧模式：整页委托 DuanjuWorkbench（自带顶栏 tab：剧本/角色/场景/分镜/出图导出，D3/D4）
+  if (!loading && !loadError && work?.mode === 'duanju' && id) {
+    return <DuanjuWorkbench workId={id} title={work.title} onBack={() => navigate('/')} />;
+  }
 
   return (
     <div className="flex h-screen flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]">

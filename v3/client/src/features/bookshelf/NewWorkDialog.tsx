@@ -29,22 +29,32 @@ interface NewWorkDialogProps {
 const MODE_CHOICES: ReadonlyArray<{ value: WorkMode; label: string; hint: string }> = [
   { value: 'novel', label: '互动小说', hint: '指令驱动 · 章节续写' },
   { value: 'chat', label: '对话写作', hint: '酒馆式角色扮演' },
+  { value: 'duanju', label: '短剧', hint: '剧本 · 分镜 · 出图' },
 ];
+
+/** 短剧画风选项（共识「六、默认值」：默认动漫风，创建后可改） */
+const STYLE_OPTIONS = ['动漫风', '3D 卡通', '写实', '国漫', '水墨'] as const;
+const DEFAULT_TARGET_EPISODES = 12;
 
 export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<WorkMode>('novel');
   const [genre, setGenre] = useState<string>(GENRE_OPTIONS[0].value);
+  // 短剧专属字段（共识 D2/D9：目标集数/画风/主角自由设定）
+  const [targetEpisodes, setTargetEpisodes] = useState(DEFAULT_TARGET_EPISODES);
+  const [style, setStyle] = useState<string>(STYLE_OPTIONS[0]);
+  const [protagonists, setProtagonists] = useState('');
   const [bindings, setBindings] = useState<Bindings>(EMPTY_BINDINGS);
   const [options, setOptions] = useState<BindingOptions>(EMPTY_OPTIONS);
   const [optionsFailed, setOptionsFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 资产选项并行拉取；单类失败降级为空列表（不阻塞建作品）
+  // 资产选项并行拉取；单类失败降级为空列表（不阻塞建作品）——短剧模式不消费绑定，跳过拉取
   useEffect(() => {
     let alive = true;
+    if (mode === 'duanju') return undefined;
     Promise.all([listCharacters(), listWorldbooks(), listPresets()])
       .then(([characters, worldbooks, presets]) => {
         if (!alive) return;
@@ -56,7 +66,7 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [mode]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -65,14 +75,30 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
     setSubmitting(true);
     setError(null);
     try {
-      const work = await createWork({
-        title: trimmed,
-        mode,
-        genre,
-        characterIds: bindings.characterIds,
-        worldbookIds: bindings.worldbookIds,
-        presetId: bindings.presetId,
-      });
+      const work = await createWork(
+        mode === 'duanju'
+          ? {
+              title: trimmed,
+              mode,
+              genre,
+              duanju: { targetEpisodes, style, protagonists: protagonists.trim() },
+            }
+          : {
+              title: trimmed,
+              mode,
+              genre,
+              characterIds: bindings.characterIds,
+              worldbookIds: bindings.worldbookIds,
+              presetId: bindings.presetId,
+            },
+      );
+      if (mode !== 'duanju') {
+        // 绑定的无归属素材补写归属（生成卡默认有归属；已归属其他书的不动）——后台执行不阻塞跳转
+        void attributeAssets(work.id, {
+          characterIds: bindings.characterIds,
+          worldbookIds: bindings.worldbookIds,
+        });
+      }
       // 绑定的无归属素材补写归属（生成卡默认有归属；已归属其他书的不动）——后台执行不阻塞跳转
       void attributeAssets(work.id, { characterIds: bindings.characterIds, worldbookIds: bindings.worldbookIds });
       navigate(`/work/${work.id}`);
@@ -120,10 +146,10 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
             模式（创建后不可切换）
             <FieldHint
               tapToExpand
-              text="互动小说：你下达剧情指令，AI 按章续写，适合小说创作；对话写作：酒馆式角色扮演，以角色口吻逐条对话。"
+              text="互动小说：你下达剧情指令，AI 按章续写，适合小说创作；对话写作：酒馆式角色扮演，以角色口吻逐条对话；短剧：剧本拆解→角色/场景→分镜四宫格出图→导出即梦生视频。"
             />
           </span>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {MODE_CHOICES.map((choice) => (
               <button
                 key={choice.value}
@@ -156,14 +182,58 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
           </select>
         </label>
 
-        {/* 绑定选择（均可留空）——UI 已抽至 BindingSelector */}
-        <BindingSelector
-          bindings={bindings}
-          options={options}
-          optionsFailed={optionsFailed}
-          onChange={setBindings}
-          selectClass={selectClass}
-        />
+        {mode === 'duanju' && (
+          <>
+            {/* 短剧专属字段（共识 D2/D9） */}
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">目标集数</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={targetEpisodes}
+                  onChange={(e) => setTargetEpisodes(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
+                  className={selectClass}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">画风</span>
+                <select value={style} onChange={(e) => setStyle(e.target.value)} className={selectClass}>
+                  {STYLE_OPTIONS.map((s) => (
+                    <option key={s} value={s} className={OPTION_CLS}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="mb-4 block">
+              <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">
+                主角设定（人数 / 身份 / 关系 / 外形，可留空后补）
+              </span>
+              <textarea
+                value={protagonists}
+                onChange={(e) => setProtagonists(e.target.value)}
+                placeholder="例：兄妹两人。哥哥 22 岁冷面剑客黑短发，妹妹 16 岁天才机械师金双马尾……"
+                rows={3}
+                maxLength={2000}
+                className="w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+              />
+            </label>
+          </>
+        )}
+
+        {/* 绑定选择（均可留空；短剧不消费绑定，隐藏）——UI 已抽至 BindingSelector */}
+        {mode !== 'duanju' && (
+          <BindingSelector
+            bindings={bindings}
+            options={options}
+            optionsFailed={optionsFailed}
+            onChange={setBindings}
+            selectClass={selectClass}
+          />
+        )}
 
         {error && (
           <p role="alert" className="mb-3 text-sm text-[hsl(var(--danger))]">

@@ -9,6 +9,7 @@ export * from './community';
 export * from './assets/origin';
 export * from './assets/faction';
 export * from './work';
+export * from './duanju';
 export * from './card';
 export * from './worldbook';
 export * from './preset';

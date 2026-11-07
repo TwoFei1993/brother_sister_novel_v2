@@ -33,6 +33,8 @@ export interface CreateWorkInput {
   presetId?: string;
   /** 完整设置对象（如向导「创建作品并导入大纲」携带 chapterOutlines/pastedOutline）；缺省走 defaultNovelSettings */
   settings?: Work['settings'];
+  /** 短剧模式可选项（mode='duanju' 时生效；server 同事务初始化 project.json） */
+  duanju?: { targetEpisodes?: number; style?: string; protagonists?: string };
 }
 
 /** 改名入参：revision 取自最新全量 Work（409 冲突时调用方提示刷新） */

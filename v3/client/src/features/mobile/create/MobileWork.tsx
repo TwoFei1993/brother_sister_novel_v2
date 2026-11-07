@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { patchMessage } from '../../../api/works';
+import DuanjuWorkbench from '../../duanju/DuanjuWorkbench';
 import { useGenerate } from '../../../hooks/useGenerate';
 import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
@@ -66,6 +67,11 @@ export default function MobileWork() {
   const done = (msg: Message | null): void => {
     if (msg) upsertLocal(msg);
   };
+
+  // 短剧模式：整页委托 DuanjuWorkbench（响应式同款，D4 三端一套代码）
+  if (!loading && !loadError && work?.mode === 'duanju' && id) {
+    return <DuanjuWorkbench workId={id} title={work.title} onBack={() => navigate('/m/create')} />;
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="mobile-work">
