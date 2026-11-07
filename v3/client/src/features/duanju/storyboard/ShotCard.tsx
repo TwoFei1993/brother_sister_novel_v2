@@ -6,11 +6,11 @@
  * - gridPrompt 可编辑（组装器产出后手改）→「生成/重roll四宫格」（修镜头=编辑后整张重roll）
  * - 即梦四件套：复制视频提示词 / 下载四宫格 / 打开即梦（新开页）
  */
-import { useState } from 'react';
-import { Download, ExternalLink, ImagePlus, RefreshCw } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Download, ExternalLink, ImagePlus, RefreshCw, Upload } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
-import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
+import { generateDuanjuImage, uploadDuanjuVideo, duanjuFileUrl } from '../../../api/duanju';
 import { buildVideoPrompt } from '../lib/prompts-storyboard';
 import { isShotStale } from '../lib/stale';
 import type { DuanjuShot } from '@shared/duanju';
@@ -27,6 +27,8 @@ export default function ShotCard({ workId, shot }: Props) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   if (!project) return null;
   const stale = isShotStale(shot, project);
@@ -71,6 +73,23 @@ export default function ShotCard({ workId, shot }: Props) {
     a.href = duanjuFileUrl(workId, shot.gridImage!.path);
     a.download = `S${String(shot.index).padStart(2, '0')}.png`;
     a.click();
+  }
+
+  /** 成品视频回传（D10）：即梦生成后上传归档，卡内播放 */
+  async function onVideoPicked(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 同文件可重复选
+    if (!file || uploading) return;
+    setUploading(true);
+    setError(null);
+    try {
+      await uploadDuanjuVideo(workId, shot.id, file);
+      await useDuanjuStore.getState().load(workId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传失败，请重试');
+    } finally {
+      setUploading(false);
+    }
   }
 
   const inputCls =
@@ -147,7 +166,28 @@ export default function ShotCard({ workId, shot }: Props) {
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               打开即梦
             </a>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="col-span-2 flex h-9 items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] disabled:opacity-40"
+              data-testid="shot-upload-video"
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden />
+              {uploading ? '上传中…' : shot.finalVideo ? '替换成品视频' : '上传即梦成品视频'}
+            </button>
+            <input ref={fileRef} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={(e) => void onVideoPicked(e)} />
           </div>
+          {shot.finalVideo && (
+            <video
+              src={duanjuFileUrl(workId, shot.finalVideo.path)}
+              controls
+              playsInline
+              preload="metadata"
+              className="mt-2 w-full rounded-lg border border-[hsl(var(--border-soft))]"
+              data-testid="shot-final-video"
+            />
+          )}
         </div>
 
         {/* 字段区 */}

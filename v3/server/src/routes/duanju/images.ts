@@ -178,23 +178,27 @@ export const serveDuanjuFile: RequestHandler = async (req, res, next) => {
     assertSafeId(id);
     const name = req.params.name;
     if (!FILE_RE.test(name)) throw new HttpError(404, '文件不存在');
-    const file = resolve(join(worksDir(), id, 'duanju', 'images'), name);
-    // resolve 后必须仍落在 images 目录内（防 ../ 穿越的第二道保险）
-    if (!file.startsWith(join(worksDir(), id, 'duanju', 'images'))) throw new HttpError(404, '文件不存在');
+    // 按扩展名路由子目录（图片→images；视频→videos，T4.1）
+    const ext = name.split('.').pop() ?? '';
+    const sub = ext === 'mp4' || ext === 'webm' ? 'videos' : 'images';
+    const baseDir = join(worksDir(), id, 'duanju', sub);
+    const file = resolve(baseDir, name);
+    // resolve 后必须仍落在该子目录内（防 ../ 穿越的第二道保险）
+    if (!file.startsWith(baseDir)) throw new HttpError(404, '文件不存在');
     const info = await stat(file).catch(() => null);
     if (!info?.isFile()) throw new HttpError(404, '文件不存在');
-    const ext = name.split('.').pop() ?? 'png';
     res.setHeader('Content-Type', MIME[ext] ?? 'application/octet-stream');
     res.setHeader('Content-Length', String(info.size));
-    // 视频播放需要 Range（206）；图片直接 200 全量
+    // 视频播放需要 Range（206 分段）；图片直接 200 全量
     const range = req.headers.range;
     if (range && ext === 'mp4') {
       const m = range.match(/bytes=(\d+)-(\d*)/);
       if (m) {
         const start = Number(m[1]);
-        const end = m[2] ? Number(m[2]) : info.size - 1;
+        const end = Math.min(m[2] ? Number(m[2]) : info.size - 1, info.size - 1);
         res.status(206);
         res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`);
+        res.setHeader('Content-Length', String(end - start + 1));
         res.setHeader('Accept-Ranges', 'bytes');
         createReadStream(file, { start, end }).pipe(res);
         return;

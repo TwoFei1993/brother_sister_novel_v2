@@ -12,6 +12,7 @@ import { zodBody } from '../../middleware/validate';
 import { mountDuanjuProject } from '../duanju/project';
 import { mountDuanjuImages } from '../duanju/images';
 import { mountDuanjuExport } from '../duanju/export';
+import { mountDuanjuVideos } from '../duanju/videos';
 import { commentsRouter } from './comments';
 import { messagesRouter } from './messages';
 import {
@@ -47,3 +48,5 @@ mountDuanjuProject(worksRouter);
 mountDuanjuImages(worksRouter);
 // duanju 整集导出 zip（镜头表 md + 四宫格），见 duanju/export.ts
 mountDuanjuExport(worksRouter);
+// duanju 成品视频回传（multer mp4/webm → shot.finalVideo），见 duanju/videos.ts
+mountDuanjuVideos(worksRouter);

@@ -54,3 +54,20 @@ export function duanjuFileUrl(workId: string, path: string): string {
   const name = path.split('/').pop() ?? '';
   return `/api/works/${workId}/duanju/files/${name}`;
 }
+
+// ---------- 成品视频回传（Phase 4，共识 D10） ----------
+
+export async function uploadDuanjuVideo(
+  workId: string,
+  shotId: string,
+  file: File,
+): Promise<DuanjuProject> {
+  const form = new FormData();
+  form.append('shotId', shotId);
+  form.append('file', file);
+  const r = await apiFetch<{ project: DuanjuProject }>(`/api/works/${workId}/duanju/videos`, {
+    method: 'POST',
+    body: form,
+  });
+  return r.project;
+}
