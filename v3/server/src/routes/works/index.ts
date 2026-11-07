@@ -10,6 +10,7 @@ import { Router } from 'express';
 import { authRequired } from '../../middleware/auth';
 import { zodBody } from '../../middleware/validate';
 import { mountDuanjuProject } from '../duanju/project';
+import { mountDuanjuImages } from '../duanju/images';
 import { commentsRouter } from './comments';
 import { messagesRouter } from './messages';
 import {
@@ -41,3 +42,5 @@ worksRouter.use('/works/:id/comments', commentsRouter);
 
 // duanju 子路由（短剧模式）：project.json 读写 + 乐观锁，见 duanju/project.ts
 mountDuanjuProject(worksRouter);
+// duanju 生图（POST 生成+转存 / GET 产物流），见 duanju/images.ts
+mountDuanjuImages(worksRouter);

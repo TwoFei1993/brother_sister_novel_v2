@@ -77,7 +77,8 @@ export const EMPTY_REVIEW_CARDS: ReviewCards = {
 
 export const DuanjuCharacterSchema = z.strictObject({
   id: idSchema,
-  name: z.string().min(1),
+  /** 允许空名草稿（生图门禁在客户端校验必填） */
+  name: z.string(),
   /** 身份/年龄/外观锚点（发色发型瞳色体型服装——一致性的事实源，prompt 组装必注入） */
   profile: z.string(),
   /** 设定图候选（可多张重roll）；主参考图从其中选定 */
@@ -90,7 +91,8 @@ export type DuanjuCharacter = z.infer<typeof DuanjuCharacterSchema>;
 
 export const DuanjuSceneSchema = z.strictObject({
   id: idSchema,
-  name: z.string().min(1),
+  /** 允许空名草稿（生图门禁在客户端校验必填） */
+  name: z.string(),
   /** 空间结构/光影基调/关键道具/色彩（资料第 4 课） */
   spec: z.string(),
   images: z.array(StoredImageSchema),
