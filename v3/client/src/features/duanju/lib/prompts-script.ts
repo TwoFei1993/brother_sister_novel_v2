@@ -75,18 +75,27 @@ export interface BreakdownResult {
  * 拆解产出的集列表与现有 episodes 按 index 合并：已存在的集**保留原 id**
  * （深度测试抓出：全量重建新 id 会让旧集的 shots 成孤儿——数据留存但 UI 永不显示）；
  * 新 index 才新建 id。
+ * 防丢数据：旧集中**挂有镜头**的（用户手动建过镜头），即使模型本次未提及也追加保留。
  */
 export function mergeEpisodes(
   existing: ReadonlyArray<{ id: string; index: number; title: string; synopsis: string }>,
   parsed: ReadonlyArray<{ index: number; title: string; synopsis: string }>,
+  shotsWithEp: ReadonlyArray<{ episodeId: string }> = [],
 ): Array<{ id: string; index: number; title: string; synopsis: string }> {
   const now = Date.now();
-  return parsed.map((e) => {
+  const merged = parsed.map((e) => {
     const found = existing.find((x) => x.index === e.index);
     return found
       ? { ...found, title: e.title, synopsis: e.synopsis }
       : { id: `ep-${now}-${e.index}`, index: e.index, title: e.title, synopsis: e.synopsis };
   });
+  const mergedIds = new Set(merged.map((e) => e.id));
+  for (const ep of existing) {
+    if (mergedIds.has(ep.id)) continue;
+    const hasShots = shotsWithEp.some((s) => s.episodeId === ep.id);
+    if (hasShots) merged.push(ep); // 用户投过镜头的集不因模型未提及而丢
+  }
+  return merged;
 }
 
 export function buildBreakdownMessages(scriptText: string, targetEpisodes: number): GenerateMessage[] {

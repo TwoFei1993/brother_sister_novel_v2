@@ -196,3 +196,22 @@ describe('mergeEpisodes（拆解重跑防孤儿，深度测试 D-2 回归）', (
     if (parsed) expect(mergeEpisodes(existing, parsed.episodes)[0].id).toBe('ep-old-1');
   });
 });
+
+describe('mergeEpisodes 防丢数据（R3 加固）', () => {
+  const existing = [
+    { id: 'ep-1', index: 1, title: '一', synopsis: '' },
+    { id: 'ep-2', index: 2, title: '待定', synopsis: '' },
+    { id: 'ep-3', index: 3, title: '待定', synopsis: '' },
+  ];
+  const shots = [{ episodeId: 'ep-3' }]; // 用户给第 3 集手动加过镜头
+
+  it('模型只回 1 集时：挂有镜头的旧集仍保留，空待定集才丢弃', () => {
+    const merged = mergeEpisodes(existing, [{ index: 1, title: '新一', synopsis: 'g' }], shots);
+    expect(merged.map((e) => e.id)).toEqual(['ep-1', 'ep-3']);
+  });
+
+  it('不传 shots（旧签名兼容）：行为同前——只保留 parsed 覆盖的集', () => {
+    const merged = mergeEpisodes(existing, [{ index: 1, title: 'a', synopsis: '' }]);
+    expect(merged).toHaveLength(1);
+  });
+});

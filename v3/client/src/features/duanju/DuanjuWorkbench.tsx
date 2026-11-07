@@ -30,7 +30,7 @@ interface Props {
 }
 
 export default function DuanjuWorkbench({ workId, title, onBack }: Props) {
-  const { project, loading, loadError, load } = useDuanjuStore();
+  const { project, loading, loadError, load, conflict, clearConflict } = useDuanjuStore();
   const [tab, setTab] = useState<TabId>('script');
 
   useEffect(() => {
@@ -47,6 +47,26 @@ export default function DuanjuWorkbench({ workId, title, onBack }: Props) {
       className="flex min-h-screen flex-col bg-[hsl(var(--bg))] text-[hsl(var(--fg))]"
       data-testid="duanju-workbench"
     >
+      {/* 全局保存冲突条（深度测试 R3-5：角色/场景/分镜 tab 的保存失败原先无任何提示） */}
+      {conflict && (
+        <div
+          className="flex items-center gap-2 bg-[hsl(var(--danger))]/10 px-3 py-2 text-xs text-[hsl(var(--danger))]"
+          role="alert"
+          data-testid="duanju-conflict-bar"
+        >
+          <span className="flex-1">保存失败：内容已在别处被修改（或网络异常），请刷新后重试</span>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              clearConflict();
+              void load(workId);
+            }}
+          >
+            刷新
+          </button>
+        </div>
+      )}
       <header className="safe-top sticky top-0 z-20 flex flex-col gap-1 border-b border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-2 py-2 sm:px-4">
         <div className="flex items-center gap-2">
           <button

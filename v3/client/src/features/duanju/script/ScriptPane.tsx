@@ -22,7 +22,7 @@ const SRC_LABELS: Record<DuanjuScript['source'], string> = {
 };
 
 export default function ScriptPane({ workId }: { workId: string }) {
-  const { project, patch, saving, conflict, clearConflict, load } = useDuanjuStore();
+  const { project, patch, saving } = useDuanjuStore();
   const [text, setText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [source, setSource] = useState<DuanjuScript['source']>('manual');
@@ -84,7 +84,7 @@ export default function ScriptPane({ workId }: { workId: string }) {
       // 拆解结果写入 reviewCards + episodes，待人工逐项确认。
       // episodes 按 index 合并保留原 id（防孤儿 shots，深度测试抓出——见 mergeEpisodes 注释）
       const now = Date.now();
-      const mergedEpisodes = mergeEpisodes(project.episodes, parsed.episodes);
+      const mergedEpisodes = mergeEpisodes(project.episodes, parsed.episodes, project.shots);
       await patch(workId, {
         reviewCards: {
           summary: parsed.summary,
@@ -117,24 +117,6 @@ export default function ScriptPane({ workId }: { workId: string }) {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-4" data-testid="duanju-script">
-      {conflict && (
-        <div
-          className="flex items-center gap-2 rounded-lg border border-[hsl(var(--danger))]/40 bg-[hsl(var(--danger))]/10 px-3 py-2 text-xs text-[hsl(var(--danger))]"
-          role="alert"
-        >
-          <span className="flex-1">保存失败：内容可能在别处被修改，请刷新后重试</span>
-          <button
-            type="button"
-            className="underline"
-            onClick={() => {
-              clearConflict();
-              void load(workId);
-            }}
-          >
-            刷新
-          </button>
-        </div>
-      )}
 
       {/* 来源与操作 */}
       <div className="flex flex-wrap items-center gap-2">
