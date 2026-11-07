@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
-import { buildBreakdownMessages, parseBreakdown } from '../lib/prompts-script';
+import { buildBreakdownMessages, parseBreakdown, mergeEpisodes } from '../lib/prompts-script';
 import { generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import ScriptGenerateForm from './ScriptGenerateForm';
@@ -81,7 +81,10 @@ export default function ScriptPane({ workId }: { workId: string }) {
         setBreakdownError('拆解结果解析失败（模型未返回合法 JSON），请重试');
         return;
       }
-      // 拆解结果写入 reviewCards + episodes，待人工逐项确认
+      // 拆解结果写入 reviewCards + episodes，待人工逐项确认。
+      // episodes 按 index 合并保留原 id（防孤儿 shots，深度测试抓出——见 mergeEpisodes 注释）
+      const now = Date.now();
+      const mergedEpisodes = mergeEpisodes(project.episodes, parsed.episodes);
       await patch(workId, {
         reviewCards: {
           summary: parsed.summary,
@@ -91,19 +94,14 @@ export default function ScriptPane({ workId }: { workId: string }) {
           emotionPoints: parsed.emotionPoints,
           visualActions: parsed.visualActions,
           riskReplacements: parsed.riskReplacements.map((r, i) => ({
-            id: `risk-${Date.now()}-${i}`,
+            id: `risk-${now}-${i}`,
             original: r.original,
             replacement: r.replacement,
           })),
           confirmed: {},
-          updatedAt: Date.now(),
+          updatedAt: now,
         },
-        episodes: parsed.episodes.map((e) => ({
-          id: `ep-${Date.now()}-${e.index}`,
-          index: e.index,
-          title: e.title,
-          synopsis: e.synopsis,
-        })),
+        episodes: mergedEpisodes,
       });
     } catch (err) {
       setBreakdownError(err instanceof Error ? err.message : '拆解失败，请重试');

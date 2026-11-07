@@ -71,6 +71,24 @@ export interface BreakdownResult {
   episodes: { index: number; title: string; synopsis: string }[];
 }
 
+/**
+ * 拆解产出的集列表与现有 episodes 按 index 合并：已存在的集**保留原 id**
+ * （深度测试抓出：全量重建新 id 会让旧集的 shots 成孤儿——数据留存但 UI 永不显示）；
+ * 新 index 才新建 id。
+ */
+export function mergeEpisodes(
+  existing: ReadonlyArray<{ id: string; index: number; title: string; synopsis: string }>,
+  parsed: ReadonlyArray<{ index: number; title: string; synopsis: string }>,
+): Array<{ id: string; index: number; title: string; synopsis: string }> {
+  const now = Date.now();
+  return parsed.map((e) => {
+    const found = existing.find((x) => x.index === e.index);
+    return found
+      ? { ...found, title: e.title, synopsis: e.synopsis }
+      : { id: `ep-${now}-${e.index}`, index: e.index, title: e.title, synopsis: e.synopsis };
+  });
+}
+
 export function buildBreakdownMessages(scriptText: string, targetEpisodes: number): GenerateMessage[] {
   return [
     { role: 'system', content: BREAKDOWN_SYSTEM },

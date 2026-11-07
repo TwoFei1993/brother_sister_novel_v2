@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { isShotStale, storyboardHealth } from '../stale';
 import { buildGridPrompt, buildVideoPrompt, parseStoryboard } from '../prompts-storyboard';
+import { mergeEpisodes, parseBreakdown } from '../prompts-script';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
 
 const NOW = 1700000000000;
@@ -163,5 +164,35 @@ describe('parseStoryboard', () => {
     const shots = parseStoryboard(raw, 'ep1', makeProject());
     expect(shots[0].characterIds).toEqual([]);
     expect(parseStoryboard('不是JSON', 'ep1', makeProject())).toEqual([]);
+  });
+});
+
+describe('mergeEpisodes（拆解重跑防孤儿，深度测试 D-2 回归）', () => {
+  const existing = [
+    { id: 'ep-old-1', index: 1, title: '旧标题', synopsis: '旧梗概' },
+    { id: 'ep-old-2', index: 2, title: '第二集', synopsis: '' },
+  ];
+
+  it('同 index 保留原 id（旧集 shots 不成孤儿），标题/梗概刷新', () => {
+    const merged = mergeEpisodes(existing, [
+      { index: 1, title: '新标题', synopsis: '新梗概' },
+    ]);
+    expect(merged[0].id).toBe('ep-old-1');
+    expect(merged[0].title).toBe('新标题');
+    expect(merged[0].synopsis).toBe('新梗概');
+  });
+
+  it('新 index 生成新 id；未覆盖的旧集保留在数组外由调用方决定', () => {
+    const merged = mergeEpisodes(existing, [
+      { index: 1, title: 'A', synopsis: '' },
+      { index: 3, title: 'C', synopsis: '' },
+    ]);
+    expect(merged.map((e) => e.id)).toEqual(['ep-old-1', expect.stringMatching(/^ep-\d+-3$/)]);
+  });
+
+  it('parseBreakdown 输出可直接喂 mergeEpisodes', () => {
+    const parsed = parseBreakdown('{"summary":"s","episodes":[{"index":1,"title":"t","synopsis":"g"}]}');
+    expect(parsed).not.toBeNull();
+    if (parsed) expect(mergeEpisodes(existing, parsed.episodes)[0].id).toBe('ep-old-1');
   });
 });
