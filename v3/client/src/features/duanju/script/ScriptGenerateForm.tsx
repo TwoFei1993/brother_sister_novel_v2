@@ -52,7 +52,10 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
             protagonists: project.protagonists,
             targetEpisodes: project.targetEpisodes,
           }),
-          thinking: prefs.thinking !== false,
+          // 剧本生成显式关思考 + 预算给足（整体测试实测：M3.1 流式缺省 4096 被端点侧思考吃光→text 空；
+          // 与 generateTextOnce 的 32000 下限同哲学，非流式同款已验证）
+          thinking: false,
+          maxTokens: 32000,
         }),
         {
           onChunk: (t) => {
@@ -61,7 +64,8 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
           },
           onDone: () => {
             done = true;
-            onGenerated(acc);
+            if (acc.trim()) onGenerated(acc);
+            else setError('模型无文本输出（思考流吃掉了输出），请重试');
           },
           onError: (e) => setError(e.message || '生成失败'),
         },

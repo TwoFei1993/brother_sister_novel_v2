@@ -70,7 +70,10 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
           : { title: t, mode, genre },
       );
       if (mode === 'novel' && handwrite) navigate(`/m/work/${work.id}`);
-      else onCreated(work.id);
+      else {
+        onClose(); // 创建成功即收起弹窗（整体测试实测：残留弹窗挡住书架）
+        onCreated(work.id);
+      }
     } catch {
       alert('创建失败，请重试');
     } finally {
