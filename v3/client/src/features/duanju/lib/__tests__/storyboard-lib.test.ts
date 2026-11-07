@@ -1,0 +1,167 @@
+/**
+ * 分镜库单测（实施计划 T3.x）：stale 推导 + 四宫格/视频提示词组装 + 拆镜头解析
+ */
+import { describe, expect, it } from 'vitest';
+
+import { isShotStale, storyboardHealth } from '../stale';
+import { buildGridPrompt, buildVideoPrompt, parseStoryboard } from '../prompts-storyboard';
+import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
+
+const NOW = 1700000000000;
+
+const char: DuanjuCharacter = {
+  id: 'c1',
+  name: '小满',
+  profile: '蓝发双马尾红瞳',
+  sheetImages: [],
+  refImageId: null,
+  updatedAt: 100,
+};
+const scene: DuanjuScene = {
+  id: 's1',
+  name: '荒原',
+  spec: '紫色草丛双月',
+  images: [],
+  updatedAt: 100,
+};
+
+function makeProject(overrides: Partial<DuanjuProject> = {}): DuanjuProject {
+  return {
+    revision: 1,
+    script: { source: 'manual', text: '剧本', confirmed: true, updatedAt: 100 },
+    reviewCards: {
+      summary: '', eventChain: [], conflict: '', characterRelations: '',
+      emotionPoints: [], visualActions: [], riskReplacements: [],
+    },
+    style: '动漫风',
+    targetEpisodes: 12,
+    protagonists: '',
+    characters: [char],
+    scenes: [scene],
+    episodes: [{ id: 'ep1', index: 1, title: '第一集', synopsis: '' }],
+    shots: [],
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function makeShot(overrides: Partial<DuanjuShot> = {}): DuanjuShot {
+  return {
+    id: 'sh1',
+    episodeId: 'ep1',
+    index: 1,
+    shotSize: '中景',
+    cameraMove: '推',
+    actionStart: '起身',
+    actionEnd: '奔跑',
+    staging: '画面中央',
+    dialog: '快跑！',
+    sound: '风声',
+    gridPrompt: '',
+    characterIds: ['c1'],
+    sceneId: 's1',
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+describe('isShotStale', () => {
+  it('无图不算 stale；有图且快照一致 → 不 stale', () => {
+    const shot = makeShot();
+    expect(isShotStale(shot, makeProject())).toBe(false);
+    const withImg = makeShot({
+      gridImage: { id: 'i', path: 'duanju/images/a.png', prompt: 'p', createdAt: 1 },
+      builtFrom: { scriptAt: 100, charAt: { c1: 100 }, sceneAt: { s1: 100 } },
+    });
+    expect(isShotStale(withImg, makeProject())).toBe(false);
+  });
+
+  it('剧本 updatedAt 变 → stale', () => {
+    const withImg = makeShot({
+      gridImage: { id: 'i', path: 'p', prompt: 'p', createdAt: 1 },
+      builtFrom: { scriptAt: 100 },
+    });
+    const project = makeProject();
+    project.script.updatedAt = 999;
+    expect(isShotStale(withImg, project)).toBe(true);
+  });
+
+  it('出场角色 updatedAt 变 / 角色被删 → stale', () => {
+    const withImg = makeShot({
+      gridImage: { id: 'i', path: 'p', prompt: 'p', createdAt: 1 },
+      builtFrom: { charAt: { c1: 100 } },
+    });
+    const changed = makeProject();
+    changed.characters[0].updatedAt = 999;
+    expect(isShotStale(withImg, changed)).toBe(true);
+
+    const deleted = makeProject();
+    deleted.characters = [];
+    expect(isShotStale(withImg, deleted)).toBe(true);
+  });
+
+  it('场景 updatedAt 变 / 场景被删 → stale', () => {
+    const withImg = makeShot({
+      gridImage: { id: 'i', path: 'p', prompt: 'p', createdAt: 1 },
+      builtFrom: { sceneAt: { s1: 100 } },
+    });
+    const changed = makeProject();
+    changed.scenes[0].updatedAt = 999;
+    expect(isShotStale(withImg, changed)).toBe(true);
+  });
+
+  it('storyboardHealth 聚合', () => {
+    const shotA = makeShot({
+      id: 'a',
+      gridImage: { id: 'i', path: 'p', prompt: 'p', createdAt: 1 },
+      builtFrom: { scriptAt: 100 },
+    });
+    const shotB = makeShot({ id: 'b', index: 2 });
+    const project = makeProject({ shots: [shotA, shotB] });
+    expect(storyboardHealth(project, 'ep1')).toEqual({ stale: 0, withImage: 1, total: 2 });
+    project.script.updatedAt = 999;
+    expect(storyboardHealth(project, 'ep1').stale).toBe(1);
+  });
+});
+
+describe('buildGridPrompt / buildVideoPrompt', () => {
+  it('四宫格：画风前缀 + 人物锚点 + 场景 + 四格描述', () => {
+    const project = makeProject();
+    const shot = makeShot();
+    const prompt = buildGridPrompt(shot, ['格1', '格2', '格3', '格4'], project);
+    expect(prompt).toContain('四宫格分镜图');
+    expect(prompt).toContain('小满（蓝发双马尾红瞳）');
+    expect(prompt).toContain('荒原');
+    expect(prompt).toContain('第1格：格1');
+    expect(prompt).toContain('第4格：格4');
+    expect(prompt).toContain('中景');
+  });
+
+  it('视频提示词：衔接动作 + 声音 + 画风', () => {
+    const prompt = buildVideoPrompt(makeShot(), makeProject());
+    expect(prompt).toContain('从「起身」到「奔跑」');
+    expect(prompt).toContain('对白：「快跑！」');
+    expect(prompt).toContain('声音：风声');
+    expect(prompt).toContain('动漫风');
+  });
+});
+
+describe('parseStoryboard', () => {
+  it('合法 JSON（含围栏）→ 镜头列表 + 角色/场景名映射 id + gridPrompt 组装', () => {
+    const raw = '```json\n[{"shotSize":"近景","cameraMove":"固定","actionStart":"低头","actionEnd":"抬头","staging":"左侧","dialog":"嗯","sound":"雨声","gridParts":["低头","抬头","握拳","起身"],"characters":["小满"],"scene":"荒原"}]\n```';
+    const project = makeProject();
+    const shots = parseStoryboard(raw, 'ep1', project);
+    expect(shots).toHaveLength(1);
+    expect(shots[0].characterIds).toEqual(['c1']);
+    expect(shots[0].sceneId).toBe('s1');
+    expect(shots[0].gridPrompt).toContain('第1格：低头');
+  });
+
+  it('未知角色名 → 忽略；非法输入 → 空数组', () => {
+    const raw = '[{"shotSize":"远景","characters":["路人甲"],"gridParts":["a"]}]';
+    const shots = parseStoryboard(raw, 'ep1', makeProject());
+    expect(shots[0].characterIds).toEqual([]);
+    expect(parseStoryboard('不是JSON', 'ep1', makeProject())).toEqual([]);
+  });
+});

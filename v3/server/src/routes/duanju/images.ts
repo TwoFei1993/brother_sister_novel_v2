@@ -28,7 +28,7 @@ import { workImagesDir } from '../../services/image';
 // ---------- POST：生成并转存 ----------
 
 const genSchema = z.strictObject({
-  kind: z.enum(['character', 'scene']),
+  kind: z.enum(['character', 'scene', 'shot']),
   refId: z.string().min(1),
   prompt: z.string().min(1).max(1500),
   aspectRatio: z.string().optional(),
@@ -48,10 +48,10 @@ async function resolveRefPath(id: string, refId: string, refImageId: string): Pr
   return null;
 }
 
-/** 持锁追加图片并 bump 实体 updatedAt；返回更新后的 project（条目级 404） */
+/** 持锁落图：character/scene 追加 + bump updatedAt；shot 替换 gridImage + 写 BuiltFrom 快照（stale 事实源） */
 async function attachImage(
   id: string,
-  kind: 'character' | 'scene',
+  kind: 'character' | 'scene' | 'shot',
   refId: string,
   image: StoredImage,
 ): Promise<DuanjuProject> {
@@ -65,14 +65,31 @@ async function attachImage(
       char.sheetImages.push(image);
       if (!char.refImageId) char.refImageId = image.id; // 首图自动设为主参考图
       char.updatedAt = now;
-    } else {
+    } else if (kind === 'scene') {
       const scene = project.scenes.find((s) => s.id === refId);
       if (!scene) throw new HttpError(404, '场景不存在');
       scene.images.push(image);
       scene.updatedAt = now;
+    } else {
+      const shot = project.shots.find((s) => s.id === refId);
+      if (!shot) throw new HttpError(404, '镜头不存在');
+      shot.gridImage = image;
+      // BuiltFrom 快照：以「本次生成所依据的上游态」为准（当前 project 内的真实时点）
+      const charAt: Record<string, number> = {};
+      for (const cid of shot.characterIds) {
+        const c = project.characters.find((x) => x.id === cid);
+        if (c) charAt[cid] = c.updatedAt;
+      }
+      const sceneAt: Record<string, number> = {};
+      if (shot.sceneId) {
+        const s = project.scenes.find((x) => x.id === shot.sceneId);
+        if (s) sceneAt[s.id] = s.updatedAt;
+      }
+      shot.builtFrom = { scriptAt: project.script.updatedAt, charAt, sceneAt };
+      shot.updatedAt = now;
     }
     project.updatedAt = now;
-    // revision 只在 project PATCH 语义里 +1；这里同步 +1 保证客户端拿最新态
+    // 与 project PATCH 语义同步 +1，保证客户端拿最新态
     project.revision += 1;
     await writeJsonAtomic(duanjuFile(id), project);
     return project;
@@ -86,19 +103,34 @@ export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
     const input = req.body as z.infer<typeof genSchema>;
     // ① 确认 project 与目标实体存在（无锁快读）
     const pre = await readDuanjuProject(id);
+    const entity404 =
+      input.kind === 'character'
+        ? '角色不存在'
+        : input.kind === 'scene'
+          ? '场景不存在'
+          : '镜头不存在';
     const exists =
       input.kind === 'character'
         ? pre.characters.some((c) => c.id === input.refId)
-        : pre.scenes.some((s) => s.id === input.refId);
-    if (!exists) throw new HttpError(404, input.kind === 'character' ? '角色不存在' : '场景不存在');
-    // ② 参考图解析（角色主参考图 / 显式 refImageId）
+        : input.kind === 'scene'
+          ? pre.scenes.some((s) => s.id === input.refId)
+          : pre.shots.some((s) => s.id === input.refId);
+    if (!exists) throw new HttpError(404, entity404);
+    // ② 参考图解析：character=显式 refImageId 或主参考图；shot=出场首角色的主参考图（多角色余下靠文字锚点）
     let subjectRefPath: string | undefined;
-    if (input.kind === 'character' && input.refImageId) {
-      subjectRefPath = (await resolveRefPath(id, input.refId, input.refImageId)) ?? undefined;
-    } else if (input.kind === 'character') {
+    if (input.kind === 'character') {
       const char = pre.characters.find((c) => c.id === input.refId);
-      const refId = char?.refImageId ?? null;
-      if (refId) subjectRefPath = (await resolveRefPath(id, input.refId, refId)) ?? undefined;
+      const wantRef = input.refImageId ?? char?.refImageId ?? null;
+      if (wantRef) subjectRefPath = (await resolveRefPath(id, input.refId, wantRef)) ?? undefined;
+    } else if (input.kind === 'shot') {
+      const shot = pre.shots.find((s) => s.id === input.refId);
+      const firstChar = shot?.characterIds
+        .map((cid) => pre.characters.find((c) => c.id === cid))
+        .find((c) => c?.refImageId);
+      if (firstChar?.refImageId) {
+        subjectRefPath =
+          (await resolveRefPath(id, firstChar.id, firstChar.refImageId)) ?? undefined;
+      }
     }
     // ③ 慢操作：上游生成 + 转存（无锁，15-30s）
     const [url] = await callImageGeneration({

@@ -11,6 +11,7 @@ import { authRequired } from '../../middleware/auth';
 import { zodBody } from '../../middleware/validate';
 import { mountDuanjuProject } from '../duanju/project';
 import { mountDuanjuImages } from '../duanju/images';
+import { mountDuanjuExport } from '../duanju/export';
 import { commentsRouter } from './comments';
 import { messagesRouter } from './messages';
 import {
@@ -44,3 +45,5 @@ worksRouter.use('/works/:id/comments', commentsRouter);
 mountDuanjuProject(worksRouter);
 // duanju 生图（POST 生成+转存 / GET 产物流），见 duanju/images.ts
 mountDuanjuImages(worksRouter);
+// duanju 整集导出 zip（镜头表 md + 四宫格），见 duanju/export.ts
+mountDuanjuExport(worksRouter);

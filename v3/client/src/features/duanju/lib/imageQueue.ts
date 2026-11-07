@@ -18,6 +18,8 @@ export type TaskStatus = 'pending' | 'running' | 'done' | 'fail' | 'aborted';
 
 export interface TaskState {
   status: TaskStatus;
+  /** 展示名（如「镜头 3」），enqueue 时登记 */
+  label: string;
   image?: StoredImage;
   error?: string;
 }
@@ -53,7 +55,7 @@ export class ImageQueue {
     for (const item of items) {
       const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       this.tasks.push({ id, ...item });
-      this.states.set(id, { status: 'pending' });
+      this.states.set(id, { status: 'pending', label: item.label });
     }
     this.notify();
     void this.pump(workId);
@@ -63,7 +65,7 @@ export class ImageQueue {
   abort(): void {
     this.aborted = true;
     for (const [id, state] of this.states) {
-      if (state.status === 'pending') this.states.set(id, { status: 'aborted' });
+      if (state.status === 'pending') this.states.set(id, { ...state, status: 'aborted' });
     }
     this.tasks = [];
     this.notify();
@@ -78,7 +80,7 @@ export class ImageQueue {
       const task = this.tasks.shift();
       if (!task) break;
       this.running += 1;
-      this.states.set(task.id, { status: 'running' });
+      this.states.set(task.id, { ...this.states.get(task.id), status: 'running', label: task.label });
       this.notify();
       void this.execute(workId, task);
     }
@@ -87,12 +89,12 @@ export class ImageQueue {
   private async execute(workId: string, task: QueueTask): Promise<void> {
     try {
       const { image, project } = await generateDuanjuImage(workId, task.input);
-      this.states.set(task.id, { status: 'done', image });
+      this.states.set(task.id, { ...this.states.get(task.id), status: 'done', image, label: task.label });
       this.onProject?.(project);
       this.notify(project);
     } catch (err) {
       const message = err instanceof Error ? err.message : '生成失败';
-      this.states.set(task.id, { status: 'fail', error: message });
+      this.states.set(task.id, { ...this.states.get(task.id), status: 'fail', error: message, label: task.label });
       this.notify();
     } finally {
       this.running -= 1;

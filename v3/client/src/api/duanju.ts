@@ -30,7 +30,7 @@ export async function patchDuanju(
 // ---------- 生图（Phase 2，共识 D1/D6） ----------
 
 export interface GenerateImageInput {
-  kind: 'character' | 'scene';
+  kind: 'character' | 'scene' | 'shot';
   refId: string;
   prompt: string;
   aspectRatio?: string;
