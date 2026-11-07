@@ -62,6 +62,13 @@ export default function ScriptPane({ workId }: { workId: string }) {
     setBreakingDown(true);
     setBreakdownError(null);
     try {
+      // 深度测试实测：拆解基于编辑中文本而违审替换作用于已保存文本——未保存就拆解会让采纳静默失效。
+      // 拆解前先把编辑中的剧本落库（dirty 时），保证剧本/审核卡/替换三者一致，也防编辑丢失。
+      if (dirty) {
+        await patch(workId, {
+          script: { source, text, confirmed, updatedAt: Date.now() },
+        });
+      }
       const prefs = useSettingsStore.getState().llmPrefs;
       const raw = await generateTextOnce({
         source: prefs.source,
