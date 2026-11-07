@@ -72,7 +72,9 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
         controller.signal,
       );
     } catch (err) {
-      if (!done) {
+      // 用户主动停止（原生 AbortError）：静默——不算错误（R4-3 实测抓出英文技术文案外泄）
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
+      if (!done && !isAbort) {
         setError(err instanceof Error ? err.message : '生成失败，请重试');
       }
     } finally {
