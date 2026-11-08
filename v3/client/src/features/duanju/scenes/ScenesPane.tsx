@@ -65,7 +65,7 @@ export default function ScenesPane({ workId }: { workId: string }) {
     'w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none focus:border-[hsl(var(--accent))]';
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-4" data-testid="duanju-scenes">
+    <div className="mx-auto w-full max-w-3xl lg:max-w-5xl px-4 py-4" data-testid="duanju-scenes">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -133,7 +133,7 @@ export default function ScenesPane({ workId }: { workId: string }) {
               aria-label="场景描述"
             />
             {scene.images.length > 0 && (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {scene.images.map((img) => (
                   <img
                     key={img.id}

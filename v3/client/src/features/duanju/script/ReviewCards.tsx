@@ -114,7 +114,7 @@ export default function ReviewCards({ workId }: { workId: string }) {
         </span>
       </header>
 
-      <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
+      <div className="grid gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
         {TEXT_CARDS.map((c) => (
           <div key={c.key} className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">

@@ -96,7 +96,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-4" data-testid="duanju-storyboard">
+    <div className="mx-auto w-full max-w-4xl lg:max-w-6xl px-4 py-4" data-testid="duanju-storyboard">
       {/* 集选择 + 操作 */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <select

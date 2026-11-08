@@ -108,7 +108,7 @@ export default function CharacterCard({ workId, character }: Props) {
 
       {/* 设定图区 */}
       {character.sheetImages.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3" data-testid="char-sheets">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="char-sheets">
           {character.sheetImages.map((img) => {
             const isRef = character.refImageId === img.id;
             return (

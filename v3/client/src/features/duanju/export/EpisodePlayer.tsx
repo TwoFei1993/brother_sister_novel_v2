@@ -30,7 +30,7 @@ export default function EpisodePlayer({ workId, shots, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90" onClick={onClose}>
       <div
-        className="flex max-h-[92vh] w-full max-w-lg flex-col gap-3 px-4"
+        className="flex max-h-[92vh] w-full max-w-lg flex-col gap-3 px-4 md:max-w-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="整集连播"

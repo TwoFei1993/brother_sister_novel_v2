@@ -99,7 +99,7 @@ export default function ShotCard({ workId, shot }: Props) {
     <div className="rounded-xl border border-[hsl(var(--border-soft))] p-4" data-testid="duanju-shot-card">
       <div className="flex flex-col gap-4 sm:flex-row">
         {/* 四宫格区 */}
-        <div className="w-full shrink-0 sm:w-56">
+        <div className="w-full shrink-0 sm:w-56 md:w-64">
           <div className="relative overflow-hidden rounded-lg border border-[hsl(var(--border-soft))]">
             {shot.gridImage ? (
               <img

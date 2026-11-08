@@ -116,7 +116,7 @@ export default function ScriptPane({ workId }: { workId: string }) {
     source !== project.script.source;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-4" data-testid="duanju-script">
+    <div className="mx-auto flex w-full max-w-3xl lg:max-w-5xl flex-col gap-4 px-4 py-4" data-testid="duanju-script">
 
       {/* 来源与操作 */}
       <div className="flex flex-wrap items-center gap-2">

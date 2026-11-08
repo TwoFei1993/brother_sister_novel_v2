@@ -83,7 +83,7 @@ export default function CharactersPane({ workId }: { workId: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-4" data-testid="duanju-characters">
+    <div className="mx-auto w-full max-w-3xl lg:max-w-5xl px-4 py-4" data-testid="duanju-characters">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
