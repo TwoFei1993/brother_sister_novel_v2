@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { buildVideoPrompt } from '../lib/prompts-storyboard';
+import AssetGallery from './AssetGallery';
 import EpisodePlayer from './EpisodePlayer';
 
 export default function ExportPane({ workId }: { workId: string }) {
@@ -79,6 +80,9 @@ export default function ExportPane({ workId }: { workId: string }) {
           </button>
         </div>
       )}
+
+      {/* 素材总览：项目全部生成素材统一浏览（大图/播放/下载） */}
+      <AssetGallery workId={workId} project={project} />
 
       {/* 提示词速览（复制备用） */}
       {shots.length > 0 && (
