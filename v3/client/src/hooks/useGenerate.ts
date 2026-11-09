@@ -27,6 +27,7 @@ import {
   buildContinueDirective,
   calcOutputBudget,
   historyBeforeTarget,
+  isReplayedContinuation,
   looksTruncated,
   nextChapterIndex,
   swipeLimitError,
@@ -223,8 +224,20 @@ export function useGenerate(): UseGenerateResult {
     for (let rounds = 0; rounds < MAX_TRUNCATE_ROUNDS && msg; rounds += 1) {
       const finish = useGenerationStore.getState().finishReason;
       if (!looksTruncated(finish, msg.content, targetWords)) break;
+      const prev = msg;
       const partial = msg.content;
-      msg = await run(work, ctxMessages, buildContinueDirective(partial), runOpts(partial));
+      const next = await run(work, ctxMessages, buildContinueDirective(partial), runOpts(partial));
+      // 重放保护：上游把已有内容从头复述（短流×字数兜底误判组合）→ 整体回滚本轮并停止——
+      // content 之外 chapter.title/directive 也一并还原（续写轮 finalize 会把指令文本污染进
+      // title 的回退路径），同 id 幂等覆盖回写
+      if (next && isReplayedContinuation(partial, next.content)) {
+        const rolled = { ...next, content: partial, directive: prev.directive };
+        if (prev.chapter) rolled.chapter = { ...prev.chapter };
+        await persistMessage(work.id, rolled);
+        msg = rolled;
+        break;
+      }
+      msg = next;
     }
     return msg;
   };

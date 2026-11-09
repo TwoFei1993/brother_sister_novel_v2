@@ -16,6 +16,7 @@ import {
   swipeLimitError,
   toGenerationError,
   calcOutputBudget,
+  isReplayedContinuation,
   looksTruncated,
 } from '../generation-flow';
 
@@ -261,5 +262,29 @@ describe('looksTruncated（截断判据——含句号边界盲区的字数兜�
 
   it('finish 缺失 + 启发式命中（无句末标点）→ 截断', () => {
     expect(looksTruncated(null, '雨夜的码头一片死寂，他攥紧手里的信跳上船头，头也不回地跳进了舱里', 3000)).toBe(true);
+  });
+});
+
+describe('isReplayedContinuation（续写重放保护——e2e 抓出的短流循环膨胀）', () => {
+  const full = '# 第1章 试炼之门\n\n晨光刺破云层，少年在废墟之上睁开双眼。远处石门的裂缝中渗出幽蓝光芒。妹妹攥住他的衣角低声说着什么，他握紧断剑向前迈步。风停了，世界安静得只剩两个人的心跳，而石门后的呼吸声越来越近。'.repeat(2);
+
+  it('新增为空/微增 → 判重放（空转轮）', () => {
+    expect(isReplayedContinuation(full, full)).toBe(true);
+    expect(isReplayedContinuation(full, full + '嗯')).toBe(true);
+  });
+
+  it('新增尾部大段复述原文（mock 全文重放形态）→ 判重放', () => {
+    expect(isReplayedContinuation(full, full + full)).toBe(true);
+  });
+
+  it('合法短补全（如 26 字收尾段）不误伤——e2e 修复时曾因 40 字空转阈值误伤 length 补完', () => {
+    const half = '清晨的阳光洒进窗台，主角推开房门走了出去，看到街上人来人往一切如常，他松了口气转身回了屋。';
+    const patch = '第1章正文，足够长的一段叙述，含对话与场景，自然收束。';
+    expect(isReplayedContinuation(half, half + patch)).toBe(false);
+  });
+
+  it('真正的续写（新增为未见过的情节）→ 不判重放', () => {
+    const cont = full + '翌日清晨，两人穿过石门来到地底长廊，火把的光晕里浮出无数壁画，讲述着千年前的封印之战。';
+    expect(isReplayedContinuation(full, cont)).toBe(false);
   });
 });

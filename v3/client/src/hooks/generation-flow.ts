@@ -92,6 +92,19 @@ export function looksTruncated(finish: string | null, content: string, targetWor
   return typeof content === 'string' && content.length > 0 && content.length < targetWords * 0.7;
 }
 
+/**
+ * 续写轮重放检测（e2e 深度测试抓出）：looksTruncated 的字数兜底对「上游每轮从头重放全文」的
+ * 短输出流会误判截断并循环 MAX_TRUNCATE_ROUNDS 轮——每轮 content = partial + 全文重放，
+ * 内容重复膨胀多倍入库（mock 流实测 6 遍重复）。判据：新增片段无实质增长，或新增尾部
+ * 大段文字在已有内容中出现（复述而非续写）。
+ */
+export function isReplayedContinuation(partial: string, next: string): boolean {
+  const added = next.length > partial.length ? next.slice(partial.length) : '';
+  if (added.trim().length < 8) return true; // 空转轮（微增≈无产出；阈值压到 8 字防误伤合法短补全）
+  const probe = added.trim().slice(-60); // 新增尾段探针：复述而非续写的决定性形态
+  return partial.includes(probe);
+}
+
 export function buildContinueDirective(partial: string): string {
   const tail = partial.trimEnd().slice(-CONTINUE_TAIL_CHARS);
   return `接着写完这一章，从下面已写内容的结尾自然续写，保持行文连贯，不要重复已有文字：\n\n…${tail}`;

@@ -41,17 +41,25 @@ test.describe.serial('登录', () => {
     await page.locator('input[type="password"]').fill(PASSWORD);
     await page.getByRole('button', { name: '进入书房' }).click();
 
-    await expect(page).toHaveURL(/\/$/);
+    // 登录成功固定落地移动创作书架（LoginPage 对齐后的现行行为；e2e 旧断言 / 已过时断裂）
+    await expect(page).toHaveURL(/\/m\/create$/);
+    await expect(page.getByRole('heading', { name: '创作' })).toBeVisible();
+
+    // 桌面路径可达性（守卫对桌面 UA 不重定向）：后续主流程在桌面书架走
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '我的书架' })).toBeVisible();
     await expect(page.getByText('书架空空如也')).toBeVisible();
 
     // 预置 LLM 偏好（zustand persist 格式）：useGenerate 对空 model 直接报
     // 「请先在设置页选择模型」，故主流程前先把 openai 通道模型写入 localStorage，
     // 随下方 storageState 一并带给后续上下文（mock-llm 不校验模型名）。
+    // version 必须 ≥ 当前 settings store 版本（4）：旧版本号会触发 migrate 0→1
+    // 「丢弃旧偏好换新默认通道」——曾经 version:0 预置被静默重置为 claude/MiniMax，
+    // 生成请求 502 LLM_NOKEY（mock 上游永远收不到），e2e 断供多日未被发现。
     await page.evaluate(() => {
       localStorage.setItem(
         'v3-llm-prefs',
-        JSON.stringify({ state: { llmPrefs: { source: 'openai', model: 'mock-model' } }, version: 0 }),
+        JSON.stringify({ state: { llmPrefs: { source: 'openai', model: 'mock-model' } }, version: 4 }),
       );
     });
 
@@ -84,8 +92,8 @@ test.describe.serial('主流程', () => {
     await page.getByTestId('directive-input').fill('开篇');
     await generateAndWait(page);
 
-    // B 视图（缺省）：章标题由 mock 首行 `# 第N章 …` 后处理入库，正文非空
-    await expect(page.getByRole('heading', { name: /第1章/ })).toBeVisible();
+    // B 视图（缺省）：章标题渲染纯 title（「第N章」前缀由入库剥离——新语义，章号不入 heading）
+    await expect(page.getByRole('heading', { name: '试炼之门' })).toBeVisible();
     const reading = page.getByTestId('reading-scroll');
     await expect(reading).toContainText('晨光刺破云层');
     expect((await reading.innerText()).length).toBeGreaterThan(30);
@@ -109,7 +117,7 @@ test.describe.serial('主流程', () => {
 
     await page.getByTestId('view-tab-a').click();
     await expect(page.getByTestId('chapter-bubble').first()).toBeVisible();
-    await expect(page.getByTestId('chapter-title').first()).toHaveText(/第\d+章/);
+    await expect(page.getByTestId('chapter-title').first()).toHaveText('试炼之门');
 
     await page.getByTestId('view-tab-c').click();
     await expect(page.getByTestId('workbench-view')).toBeVisible();
