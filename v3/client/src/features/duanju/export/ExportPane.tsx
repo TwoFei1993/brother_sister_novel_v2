@@ -7,9 +7,10 @@
 import { useMemo, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
-import { buildVideoPrompt } from '../lib/prompts-storyboard';
+import { buildVideoPrompt } from '../lib/prompts/prompts-storyboard';
 import AssetGallery from './AssetGallery';
 import EpisodePlayer from './EpisodePlayer';
+import SpendCard from './SpendCard';
 
 export default function ExportPane({ workId }: { workId: string }) {
   const { project } = useDuanjuStore();
@@ -29,7 +30,7 @@ export default function ExportPane({ workId }: { workId: string }) {
   );
 
   if (!project) return null;
-  const withImage = shots.filter((s) => s.gridImage).length;
+  const withImage = shots.filter((s) => (s.frames?.length ?? 0) > 0 || s.gridImage).length;
   const withVideo = shots.filter((s) => s.finalVideo).length;
 
   return (
@@ -52,6 +53,9 @@ export default function ExportPane({ workId }: { workId: string }) {
         </span>
       </div>
 
+      {/* 成本仪表盘（生图花费可见化） */}
+      <SpendCard />
+
       {episode && (
         <div className="space-y-3">
           <a
@@ -63,10 +67,10 @@ export default function ExportPane({ workId }: { workId: string }) {
               if (withImage === 0) e.preventDefault();
             }}
           >
-            📦 下载整集导出包（{withImage} 张四宫格 + 镜头表）
+            📦 下载整集导出包（{withImage} 个镜头的分镜图 + 镜头表）
           </a>
           <p className="text-xs leading-5 text-[hsl(var(--fg-muted))]">
-            解压后按 E-S 编号顺序在即梦做图生视频（每行提示词已写进镜头表）；
+            解压后按 E-S(-F) 编号顺序在即梦做图生视频（每行提示词已写进镜头表）；
             成品视频回 App 分镜 tab 对应镜头卡上传归档。
           </p>
           <button

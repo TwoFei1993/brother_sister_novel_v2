@@ -4,8 +4,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { isShotStale, storyboardHealth } from '../stale';
-import { buildGridPrompt, buildVideoPrompt, parseStoryboard } from '../prompts-storyboard';
-import { mergeEpisodes, parseBreakdown } from '../prompts-script';
+import { buildFramePrompt, buildGridPrompt, buildVideoPrompt, parseStoryboard } from '../prompts/prompts-storyboard';
+import { mergeEpisodes, parseBreakdown } from '../prompts/prompts-script';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
 
 const NOW = 1700000000000;
@@ -41,6 +41,7 @@ function makeProject(overrides: Partial<DuanjuProject> = {}): DuanjuProject {
     scenes: [scene],
     episodes: [{ id: 'ep1', index: 1, title: '第一集', synopsis: '' }],
     shots: [],
+    spendLog: [],
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -59,7 +60,9 @@ function makeShot(overrides: Partial<DuanjuShot> = {}): DuanjuShot {
     staging: '画面中央',
     dialog: '快跑！',
     sound: '风声',
+    gridParts: [],
     gridPrompt: '',
+    frames: [],
     characterIds: ['c1'],
     sceneId: 's1',
     updatedAt: NOW,
@@ -124,6 +127,19 @@ describe('isShotStale', () => {
     project.script.updatedAt = 999;
     expect(storyboardHealth(project, 'ep1').stale).toBe(1);
   });
+
+  it('分帧镜头（无 gridImage）同样参与 stale 推导与 withImage 统计', () => {
+    const frameImg = { id: 'f', path: 'p', prompt: '', createdAt: 1 };
+    const framed = makeShot({
+      frames: [{ index: 1, image: frameImg, rolls: 0 }],
+      builtFrom: { scriptAt: 100 },
+    });
+    const project = makeProject({ shots: [framed] });
+    expect(isShotStale(framed, project)).toBe(false); // 快照一致
+    expect(storyboardHealth(project, 'ep1').withImage).toBe(1);
+    project.script.updatedAt = 999;
+    expect(isShotStale(framed, project)).toBe(true); // 上游变 → 待刷新
+  });
 });
 
 describe('buildGridPrompt / buildVideoPrompt', () => {
@@ -148,8 +164,28 @@ describe('buildGridPrompt / buildVideoPrompt', () => {
   });
 });
 
+describe('buildFramePrompt（分帧，成本优化 A 项）', () => {
+  it('单帧：帧序号 + 该帧描述 + 人物锚点 + 一致性要求', () => {
+    const project = makeProject();
+    const shot = makeShot({ gridParts: ['低头', '抬头', '握拳', '起身'] });
+    const p2 = buildFramePrompt(shot, 2, project);
+    expect(p2).toContain('第 2/4 帧');
+    expect(p2).toContain('画面内容：抬头');
+    expect(p2).toContain('小满（蓝发双马尾红瞳）');
+    expect(p2).toContain('完全一致');
+    expect(p2).toContain('荒原');
+    expect(p2).not.toContain('握拳'); // 不串其他帧
+  });
+
+  it('gridParts 为空 → 默认四段兜底；无人物 → 纯场景帧', () => {
+    const p = buildFramePrompt(makeShot({ gridParts: [], characterIds: [] }), 3, makeProject());
+    expect(p).toContain('高潮瞬间');
+    expect(p).toContain('【无人物】');
+  });
+});
+
 describe('parseStoryboard', () => {
-  it('合法 JSON（含围栏）→ 镜头列表 + 角色/场景名映射 id + gridPrompt 组装', () => {
+  it('合法 JSON（含围栏）→ 镜头列表 + 角色/场景名映射 id + gridPrompt 组装 + gridParts 数据化', () => {
     const raw = '```json\n[{"shotSize":"近景","cameraMove":"固定","actionStart":"低头","actionEnd":"抬头","staging":"左侧","dialog":"嗯","sound":"雨声","gridParts":["低头","抬头","握拳","起身"],"characters":["小满"],"scene":"荒原"}]\n```';
     const project = makeProject();
     const shots = parseStoryboard(raw, 'ep1', project);
@@ -157,6 +193,8 @@ describe('parseStoryboard', () => {
     expect(shots[0].characterIds).toEqual(['c1']);
     expect(shots[0].sceneId).toBe('s1');
     expect(shots[0].gridPrompt).toContain('第1格：低头');
+    expect(shots[0].gridParts).toEqual(['低头', '抬头', '握拳', '起身']);
+    expect(shots[0].frames).toEqual([]);
   });
 
   it('未知角色名 → 忽略；非法输入 → 空数组', () => {

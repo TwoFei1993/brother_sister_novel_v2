@@ -13,7 +13,7 @@ import { generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import CharacterCard from './CharacterCard';
 import { ImageQueue } from '../lib/imageQueue';
-import { characterSheetPrompt } from '../lib/prompts-image';
+import { characterSheetPrompt } from '../lib/prompts/prompts-image';
 import { ImagePlus } from 'lucide-react';
 import { buildCharacterExtractMessages, parseCharacterExtract } from '../lib/characterExtract';
 import type { DuanjuCharacter } from '@shared/duanju';

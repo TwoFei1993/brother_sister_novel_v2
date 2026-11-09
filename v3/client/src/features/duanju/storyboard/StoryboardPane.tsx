@@ -11,7 +11,7 @@ import { Plus, WandSparkles } from 'lucide-react';
 import { useDuanjuStore } from '../store';
 import { buildGenerateBody, generateStream } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
-import { buildStoryboardMessages, parseStoryboard } from '../lib/prompts-storyboard';
+import { buildStoryboardMessages, parseStoryboard } from '../lib/prompts/prompts-storyboard';
 import { storyboardHealth } from '../lib/stale';
 import ShotCard from './ShotCard';
 import BatchBar from './BatchBar';
@@ -55,7 +55,9 @@ export default function StoryboardPane({ workId }: { workId: string }) {
       staging: '',
       dialog: '',
       sound: '',
+      gridParts: [],
       gridPrompt: '',
+      frames: [],
       characterIds: [],
       sceneId: null,
       updatedAt: Date.now(),

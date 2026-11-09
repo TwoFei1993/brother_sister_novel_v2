@@ -6,10 +6,10 @@
  * - buildGridPrompt：四宫格生图 prompt 组装器（外观锚点∪场景∪画风∪四格）
  * - buildVideoPrompt：即梦视频提示词（独立画板/衔接/站位/景别/声音）
  */
-import type { GenerateMessage } from '../../../api/llm';
+import type { GenerateMessage } from '../../../../api/llm';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
 import { stylePrefix } from './prompts-image';
-import { extractJsonArray } from './json-extract';
+import { extractJsonArray } from '../json-extract';
 
 // ---------- AI 拆镜头 ----------
 
@@ -89,13 +89,15 @@ export function parseStoryboard(
         staging: str(x.staging),
         dialog: str(x.dialog),
         sound: str(x.sound),
+        gridParts: parts,
         gridPrompt: '',
+        frames: [],
         characterIds,
         sceneId: scene?.id ?? null,
         updatedAt: base,
       };
     })
-    .map((shot) => ({ ...shot, gridPrompt: buildGridPrompt(shot, findParts(arr, shot), project) }));
+    .map((shot) => ({ ...shot, gridPrompt: buildGridPrompt(shot, shot.gridParts, project) }));
 }
 
 /** AI 输出的四格描述按 index 对应（parse 内部用） */
@@ -132,6 +134,32 @@ export function buildGridPrompt(shot: DuanjuShot, gridParts: string[], project: 
     .join('\n');
 }
 
+// ---------- 分帧 prompt（成本优化：单帧生成/重roll，修一格只花 1 张钱） ----------
+
+const DEFAULT_PARTS = ['起手动作', '动作进行', '高潮瞬间', '收势定格'];
+
+/** 单帧生图 prompt：画风 + 人物锚点 + 场景 + 该帧画面描述（数据源 shot.gridParts，可编辑） */
+export function buildFramePrompt(shot: DuanjuShot, frameIndex: number, project: DuanjuProject): string {
+  const chars = shot.characterIds
+    .map((cid) => project.characters.find((c) => c.id === cid))
+    .filter((c): c is DuanjuCharacter => !!c);
+  const scene = shot.sceneId ? project.scenes.find((s) => s.id === shot.sceneId) : undefined;
+  const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
+  const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
+  return [
+    `${stylePrefix(project.style)}，单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
+    chars.length > 0
+      ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
+      : '【无人物】纯场景帧',
+    scene ? `【场景】${scene.name}（${scene.spec}）` : '',
+    `【镜头】景别：${shot.shotSize}；站位：${shot.staging}`,
+    `画面内容：${desc}`,
+    '要求：只画这一个动作瞬间，画面干净，构图横平竖直，无文字水印',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 // ---------- 即梦视频提示词（D8：镜头卡一键复制） ----------
 
 export function buildVideoPrompt(shot: DuanjuShot, project: DuanjuProject): string {
@@ -141,7 +169,7 @@ export function buildVideoPrompt(shot: DuanjuShot, project: DuanjuProject): stri
     .map((c) => c.name);
   const scene = shot.sceneId ? project.scenes.find((s) => s.id === shot.sceneId) : undefined;
   return [
-    `以四宫格参考图依次生成视频（图生视频，画板顺序即时间顺序）`,
+    `以分镜参考图按顺序生成视频（图生视频，画板/图片顺序即时间顺序）`,
     `人物：${chars.join('、') || '（按图）'}；场景：${scene?.name ?? '按图'}`,
     `景别：${shot.shotSize}；运镜：${shot.cameraMove}；站位：${shot.staging}`,
     `动作：从「${shot.actionStart}」到「${shot.actionEnd}」，动作自然衔接`,

@@ -1,14 +1,18 @@
 /**
- * 整集批量出图（共识 D6：预估确认 + 排队 + 逐镜头状态；烧钱操作不自动跑）
+ * 整集批量出图（共识 D6 → 成本优化：帧级任务）
  *
- * 两段式：①确认弹窗（张数=待生成镜头数，每张约 0.2 元提示）②执行面板
- * （ImageQueue 并发 2；单镜头失败不阻塞；可中止未开始任务）。
+ * 两段式：①确认弹窗（帧数=待补帧总数，每张约 0.2 元；说明分帧修补只花 1/4）
+ * ②执行面板（ImageQueue 并发 2；单帧失败不阻塞；可中止未开始任务）。
+ * 待生成口径：分帧镜头补缺帧；旧整图镜头（有 gridImage 无 frames）跳过；
+ * 空镜头（无任何图）按 4 帧全生成。
  */
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
+import { useSettingsStore } from '../../../stores/settings';
 import { ImageQueue, type TaskState } from '../lib/imageQueue';
+import { buildFrameTasks } from '../lib/cost/frameGrid';
 import type { DuanjuShot } from '@shared/duanju';
 
 interface Props {
@@ -19,7 +23,7 @@ interface Props {
 }
 
 export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props) {
-  const load = useDuanjuStore((s) => s.load);
+  const { project, load } = useDuanjuStore();
   const [queue] = useState(() => new ImageQueue());
   const [phase, setPhase] = useState<'confirm' | 'run'>('confirm');
   const [states, setStates] = useState(new Map<string, TaskState>());
@@ -30,16 +34,14 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const pendingShots = shots.filter((s) => !s.gridImage && s.gridPrompt.trim());
+  /** 帧级任务清单：镜头 × 缺失帧（旧整图完成态跳过） */
+  const tasks = project ? buildFrameTasks(shots, project) : [];
 
   function start(): void {
     setPhase('run');
     queue.enqueue(
       workId,
-      pendingShots.map((s) => ({
-        input: { kind: 'shot' as const, refId: s.id, prompt: s.gridPrompt, aspectRatio: '1:1' },
-        label: `镜头 ${s.index}`,
-      })),
+      buildFrameTasks(shots, project!, useSettingsStore.getState().llmPrefs.imageProvider),
     );
   }
 
@@ -57,7 +59,7 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
         aria-label="整集批量出图"
       >
         <div className="flex items-center justify-between border-b border-[hsl(var(--border-soft))] px-4 py-3">
-          <h3 className="text-sm font-semibold">⚡ {episodeTitle} 批量出图</h3>
+          <h3 className="text-sm font-semibold">⚡ {episodeTitle} 批量出图（分帧）</h3>
           <button
             type="button"
             onClick={finished || phase === 'confirm' ? onClose : () => queue.abort()}
@@ -71,15 +73,19 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
         {phase === 'confirm' ? (
           <div className="flex-1 space-y-3 px-4 py-4 text-sm">
             <p>
-              将生成 <strong className="text-[hsl(var(--accent))]">{pendingShots.length}</strong> 张四宫格
-              <span className="text-xs text-[hsl(var(--fg-muted))]">（每张约 0.2 元 · 15-30 秒，并发 2 逐张排队）</span>
+              将生成 <strong className="text-[hsl(var(--accent))]">{tasks.length}</strong> 帧
+              <span className="text-xs text-[hsl(var(--fg-muted))]">
+                （每张约 0.2 元 · 15-30 秒，并发 2 排队；约 {(tasks.length * 0.2).toFixed(0)} 元）
+              </span>
             </p>
-            <p className="text-xs text-[hsl(var(--fg-muted))]">
-              已有图或无 prompt 的镜头跳过；生成中可随时中止未开始的任务；单张失败不阻塞后续。
+            <p className="text-xs leading-5 text-[hsl(var(--fg-muted))]">
+              分帧模式：某帧不满意只重roll 该帧（1/4 成本），其余帧保留。
+              已出图镜头跳过；生成中可中止；单帧失败不阻塞后续。
             </p>
-            {shots.some((s) => !s.gridPrompt.trim()) && (
-              <p className="text-xs text-[hsl(var(--danger))]">
-                有 {shots.filter((s) => !s.gridPrompt.trim()).length} 个镜头缺 prompt（跳过）——可先「AI 拆镜头」补齐。
+            {shots.some((s) => s.gridImage && (s.frames?.length ?? 0) === 0) && (
+              <p className="text-xs text-[hsl(var(--fg-muted))]">
+                有 {shots.filter((s) => s.gridImage && (s.frames?.length ?? 0) === 0).length}{' '}
+                个旧整图镜头跳过（如需分帧，到镜头卡点「补帧」）。
               </p>
             )}
             <div className="flex gap-3 pt-2">
@@ -89,11 +95,11 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
               <button
                 type="button"
                 onClick={start}
-                disabled={pendingShots.length === 0}
+                disabled={tasks.length === 0}
                 className="h-11 flex-1 rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
                 data-testid="batch-confirm"
               >
-                确认生成 {pendingShots.length} 张
+                确认生成 {tasks.length} 帧
               </button>
             </div>
           </div>

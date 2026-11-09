@@ -11,7 +11,7 @@ import { ImageIcon, Star, Trash2 } from 'lucide-react';
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
-import { characterSheetPrompt } from '../lib/prompts-image';
+import { characterSheetPrompt } from '../lib/prompts/prompts-image';
 import type { DuanjuCharacter } from '@shared/duanju';
 
 interface Props {

@@ -19,7 +19,7 @@ import { HttpError, zodBody } from '../../middleware/validate';
 import { withWorkLock } from '../../middleware/writer';
 import { readJson, writeJsonAtomic } from '../../storage/store';
 import { randomUUID } from 'node:crypto';
-import type { DuanjuProject, StoredImage } from '@shared/duanju';
+import type { DuanjuProject, SpendEntry, StoredImage } from '@shared/duanju';
 import { assertSafeId, worksDir, wrap } from '../works/works';
 import { duanjuFile, readDuanjuProject } from './project';
 import { ImageError, callImageGeneration, downloadAndStore } from '../../services/image';
@@ -28,7 +28,7 @@ import { workImagesDir } from '../../services/image';
 // ---------- POST：生成并转存 ----------
 
 const genSchema = z.strictObject({
-  kind: z.enum(['character', 'scene', 'shot']),
+  kind: z.enum(['character', 'scene', 'shot', 'frame']),
   refId: z.string().min(1),
   prompt: z.string().min(1).max(1500),
   aspectRatio: z.string().optional(),
@@ -36,6 +36,8 @@ const genSchema = z.strictObject({
   provider: z.enum(['minimax', 'zhipu']).optional(),
   /** 参考图（角色 sheetImage id）：生成时保持人物一致 */
   refImageId: z.string().min(1).optional(),
+  /** 分帧号（kind='frame' 必填 1-4） */
+  frameIndex: z.number().int().min(1).max(4).optional(),
 });
 
 /** 无锁读 project 解析参考图绝对路径（不存在返回 null） */
@@ -50,12 +52,34 @@ async function resolveRefPath(id: string, refId: string, refImageId: string): Pr
   return null;
 }
 
-/** 持锁落图：character/scene 追加 + bump updatedAt；shot 替换 gridImage + 写 BuiltFrom 快照（stale 事实源） */
+/** BuiltFrom 快照：以「本次生成所依据的上游态」为准（shot 整图与 frame 共用） */
+function snapshotBuiltFrom(project: DuanjuProject, shot: import('@shared/duanju').DuanjuShot): void {
+  const charAt: Record<string, number> = {};
+  for (const cid of shot.characterIds) {
+    const c = project.characters.find((x) => x.id === cid);
+    if (c) charAt[cid] = c.updatedAt;
+  }
+  const sceneAt: Record<string, number> = {};
+  if (shot.sceneId) {
+    const s = project.scenes.find((x) => x.id === shot.sceneId);
+    if (s) sceneAt[s.id] = s.updatedAt;
+  }
+  shot.builtFrom = { scriptAt: project.script.updatedAt, charAt, sceneAt };
+}
+
+/** spendLog 追加 + cap（成本仪表盘事实源） */
+function appendSpend(project: DuanjuProject, kind: SpendEntry['kind'], refId: string, note?: string): void {
+  const entry: SpendEntry = { ts: Date.now(), kind, refId, ...(note ? { note } : {}) };
+  project.spendLog = [...(project.spendLog ?? []), entry].slice(-5000);
+}
+
+/** 持锁落图：character/scene 追加；shot 替换 gridImage（旧模式）；frame 挂/换帧 + rolls+1 */
 async function attachImage(
   id: string,
-  kind: 'character' | 'scene' | 'shot',
+  kind: 'character' | 'scene' | 'shot' | 'frame',
   refId: string,
   image: StoredImage,
+  frameIndex?: number,
 ): Promise<DuanjuProject> {
   return withWorkLock(id, async () => {
     const project = await readJson<DuanjuProject>(duanjuFile(id));
@@ -75,21 +99,21 @@ async function attachImage(
     } else {
       const shot = project.shots.find((s) => s.id === refId);
       if (!shot) throw new HttpError(404, '镜头不存在');
-      shot.gridImage = image;
-      // BuiltFrom 快照：以「本次生成所依据的上游态」为准（当前 project 内的真实时点）
-      const charAt: Record<string, number> = {};
-      for (const cid of shot.characterIds) {
-        const c = project.characters.find((x) => x.id === cid);
-        if (c) charAt[cid] = c.updatedAt;
+      if (kind === 'frame') {
+        if (!frameIndex) throw new HttpError(400, 'frameIndex 缺失');
+        const frames = shot.frames ?? [];
+        const prev = frames.find((f) => f.index === frameIndex);
+        shot.frames = [
+          ...frames.filter((f) => f.index !== frameIndex),
+          { index: frameIndex, image, rolls: (prev?.rolls ?? -1) + 1 },
+        ].sort((a, b) => a.index - b.index);
+      } else {
+        shot.gridImage = image; // 旧整图模式（兼容保留）
       }
-      const sceneAt: Record<string, number> = {};
-      if (shot.sceneId) {
-        const s = project.scenes.find((x) => x.id === shot.sceneId);
-        if (s) sceneAt[s.id] = s.updatedAt;
-      }
-      shot.builtFrom = { scriptAt: project.script.updatedAt, charAt, sceneAt };
+      snapshotBuiltFrom(project, shot);
       shot.updatedAt = now;
     }
+    appendSpend(project, kind, refId, frameIndex ? `frame-${frameIndex}` : undefined);
     project.updatedAt = now;
     // 与 project PATCH 语义同步 +1，保证客户端拿最新态
     project.revision += 1;
@@ -103,6 +127,7 @@ export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
   try {
     assertSafeId(id);
     const input = req.body as z.infer<typeof genSchema>;
+    if (input.kind === 'frame' && !input.frameIndex) throw new HttpError(400, 'frameIndex 缺失');
     // ① 确认 project 与目标实体存在（无锁快读）
     const pre = await readDuanjuProject(id);
     const entity404 =
@@ -118,13 +143,13 @@ export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
           ? pre.scenes.some((s) => s.id === input.refId)
           : pre.shots.some((s) => s.id === input.refId);
     if (!exists) throw new HttpError(404, entity404);
-    // ② 参考图解析：character=显式 refImageId 或主参考图；shot=出场首角色的主参考图（多角色余下靠文字锚点）
+    // ② 参考图解析：character=显式 refImageId 或主参考图；shot/frame=出场首角色的主参考图（多角色余下靠文字锚点）
     let subjectRefPath: string | undefined;
     if (input.kind === 'character') {
       const char = pre.characters.find((c) => c.id === input.refId);
       const wantRef = input.refImageId ?? char?.refImageId ?? null;
       if (wantRef) subjectRefPath = (await resolveRefPath(id, input.refId, wantRef)) ?? undefined;
-    } else if (input.kind === 'shot') {
+    } else if (input.kind === 'shot' || input.kind === 'frame') {
       const shot = pre.shots.find((s) => s.id === input.refId);
       const firstChar = shot?.characterIds
         .map((cid) => pre.characters.find((c) => c.id === cid))
@@ -150,7 +175,7 @@ export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
       createdAt: Date.now(),
       originUrl: stored.originUrl,
     };
-    const project = await attachImage(id, input.kind, input.refId, image);
+    const project = await attachImage(id, input.kind, input.refId, image, input.frameIndex);
     res.json({ image, project });
   } catch (err) {
     if (err instanceof ImageError) {

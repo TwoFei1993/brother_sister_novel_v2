@@ -9,7 +9,7 @@ import { X } from 'lucide-react';
 
 import { buildGenerateBody, generateStream } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
-import { buildScriptGenMessages } from '../lib/prompts-script';
+import { buildScriptGenMessages } from '../lib/prompts/prompts-script';
 import type { DuanjuProject } from '@shared/duanju';
 
 interface Props {

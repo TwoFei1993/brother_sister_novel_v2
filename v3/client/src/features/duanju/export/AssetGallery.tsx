@@ -46,6 +46,9 @@ export default function AssetGallery({ workId, project }: Props) {
       }
     }
     for (const s of project.shots) {
+      for (const f of s.frames ?? []) {
+        out.push({ id: f.image.id, kind: 'grid', label: `S${String(s.index).padStart(2, '0')} · F${f.index} 帧`, path: f.image.path });
+      }
       if (s.gridImage) {
         out.push({ id: s.gridImage.id, kind: 'grid', label: `S${String(s.index).padStart(2, '0')} · 四宫格`, path: s.gridImage.path });
       }
@@ -76,7 +79,7 @@ export default function AssetGallery({ workId, project }: Props) {
       <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
         🖼️ 素材总览
         <span className="text-xs font-normal text-[hsl(var(--fg-muted))]">
-          共 {assets.length} 项 · 角色 {counts.character} / 场景 {counts.scene} / 四宫格 {counts.grid} / 成品 {counts.video}
+          共 {assets.length} 项 · 角色 {counts.character} / 场景 {counts.scene} / 分镜帧 {counts.grid} / 成品 {counts.video}
         </span>
       </h3>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">

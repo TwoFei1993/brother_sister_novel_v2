@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
-import { buildBreakdownMessages, parseBreakdown, mergeEpisodes } from '../lib/prompts-script';
+import { buildBreakdownMessages, parseBreakdown, mergeEpisodes } from '../lib/prompts/prompts-script';
 import { buildGenerateBody, generateStream, generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import ScriptGenerateForm from './ScriptGenerateForm';

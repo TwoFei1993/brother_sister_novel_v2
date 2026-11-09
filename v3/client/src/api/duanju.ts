@@ -30,7 +30,7 @@ export async function patchDuanju(
 // ---------- 生图（Phase 2，共识 D1/D6） ----------
 
 export interface GenerateImageInput {
-  kind: 'character' | 'scene' | 'shot';
+  kind: 'character' | 'scene' | 'shot' | 'frame';
   refId: string;
   prompt: string;
   aspectRatio?: string;
@@ -38,6 +38,8 @@ export interface GenerateImageInput {
   refImageId?: string;
   /** 生图通道（zhipu=GLM-Image 文字渲染强；缺省按用户设置或 minimax） */
   provider?: 'minimax' | 'zhipu';
+  /** 分帧号（kind='frame' 必填 1-4） */
+  frameIndex?: number;
 }
 
 export async function generateDuanjuImage(

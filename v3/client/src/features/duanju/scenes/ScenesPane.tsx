@@ -8,7 +8,7 @@ import { Plus, Trash2, ImageIcon, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
-import { sceneImagePrompt } from '../lib/prompts-image';
+import { sceneImagePrompt } from '../lib/prompts/prompts-image';
 import { buildSceneExtractMessages, parseSceneExtract } from '../lib/sceneExtract';
 import { generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';

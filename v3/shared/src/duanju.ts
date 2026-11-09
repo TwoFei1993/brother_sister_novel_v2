@@ -100,7 +100,17 @@ export const DuanjuSceneSchema = z.strictObject({
 });
 export type DuanjuScene = z.infer<typeof DuanjuSceneSchema>;
 
-// ---------- 集 / 镜头（D7 四宫格 = 每镜头一张 2×2 整图） ----------
+/** 生图记账（成本仪表盘事实源）：server 持锁追加，PATCH 白名单不含（客户端只读） */
+export const SpendEntrySchema = z.strictObject({
+  ts: tsSchema,
+  kind: z.enum(['character', 'scene', 'shot', 'frame']),
+  refId: idSchema,
+  /** 附加定位（frame 为 frame-N；shot 整图旧模式无） */
+  note: z.string().optional(),
+});
+export type SpendEntry = z.infer<typeof SpendEntrySchema>;
+
+// ---------- 集 / 镜头（成本优化：分帧模式，gridImage 兼容旧整图） ----------
 
 export const DuanjuEpisodeSchema = z.strictObject({
   id: idSchema,
@@ -121,6 +131,14 @@ export const BuiltFromSchema = z.strictObject({
 });
 export type BuiltFrom = z.infer<typeof BuiltFromSchema>;
 
+/** 分帧产物：index 1-4 对应 gridParts 顺位；rolls = 该帧累计重roll 次数（成本统计） */
+export const ShotFrameSchema = z.strictObject({
+  index: z.number().int().min(1).max(4),
+  image: StoredImageSchema,
+  rolls: z.number().int().nonnegative().default(0),
+});
+export type ShotFrame = z.infer<typeof ShotFrameSchema>;
+
 export const DuanjuShotSchema = z.strictObject({
   id: idSchema,
   episodeId: idSchema,
@@ -138,9 +156,13 @@ export const DuanjuShotSchema = z.strictObject({
   dialog: z.string(),
   /** 声音要求（环境音/动作声/对白声；默认无 BGM） */
   sound: z.string(),
-  /** 四宫格生成 prompt（组装器产出后可手改；重roll 用它） */
+  /** 四格画面描述（分帧 prompt 的数据源；AI 拆镜头写入，可编辑改写后重roll） */
+  gridParts: z.array(z.string()).max(4).default([]),
+  /** 旧整图 prompt（兼容 D7 时期数据；新流程走 gridParts + buildFramePrompt） */
   gridPrompt: z.string(),
-  /** 四宫格整图（D7：一张 2×2；每格一个核心动作） */
+  /** 分帧产物（成本优化核心：单帧重roll 只花 1 张钱） */
+  frames: z.array(ShotFrameSchema).default([]),
+  /** 四宫格整图（D7 旧模式产物；保留展示兼容，新生成不再写入） */
   gridImage: StoredImageSchema.optional(),
   /** 成品视频（即梦生成后上传归档，D10） */
   finalVideo: z
@@ -180,6 +202,8 @@ export const DuanjuProjectSchema = z.strictObject({
   scenes: z.array(DuanjuSceneSchema),
   episodes: z.array(DuanjuEpisodeSchema),
   shots: z.array(DuanjuShotSchema),
+  /** 生图记账（server 追加，cap 5000；旧数据无此字段 → 代码侧 ?? [] 防御） */
+  spendLog: z.array(SpendEntrySchema).default([]),
   createdAt: tsSchema,
   updatedAt: tsSchema,
 });
@@ -198,6 +222,7 @@ export function newDuanjuProject(init: DuanjuInit, now: number): DuanjuProject {
     scenes: [],
     episodes: [],
     shots: [],
+    spendLog: [],
     createdAt: now,
     updatedAt: now,
   };

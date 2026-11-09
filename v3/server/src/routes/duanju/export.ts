@@ -57,10 +57,18 @@ export const exportDuanjuEpisode: RequestHandler = async (req, res, next) => {
     archive.pipe(res);
     archive.append(md, { name: `E${episode.index}-镜头表.md` });
     for (const shot of shots) {
-      if (!shot.gridImage) continue;
-      const file = join(worksDir(), id, shot.gridImage.path);
-      if (existsSync(file)) {
-        archive.append(createReadStream(file), { name: `E${episode.index}-S${String(shot.index).padStart(2, '0')}.png` });
+      const base = `E${episode.index}-S${String(shot.index).padStart(2, '0')}`;
+      const frames = shot.frames ?? [];
+      if (frames.length > 0) {
+        // 分帧模式：逐帧导出（F1-F4 与即梦画板顺序对应）
+        for (const f of frames) {
+          const file = join(worksDir(), id, f.image.path);
+          if (existsSync(file)) archive.append(createReadStream(file), { name: `${base}-F${f.index}.png` });
+        }
+      } else if (shot.gridImage) {
+        // 旧整图模式（兼容）
+        const file = join(worksDir(), id, shot.gridImage.path);
+        if (existsSync(file)) archive.append(createReadStream(file), { name: `${base}.png` });
       }
     }
     await archive.finalize();
@@ -76,7 +84,7 @@ function videoPromptOf(shot: DuanjuShot, project: DuanjuProject): string {
     .filter((n): n is string => !!n);
   const scene = project.scenes.find((s) => s.id === shot.sceneId)?.name;
   return [
-    '以四宫格参考图依次生成视频（图生视频，画板顺序即时间顺序）',
+    '以分镜参考图按顺序生成视频（图生视频，画板/图片顺序即时间顺序）',
     `人物：${chars.join('、') || '（按图）'}；场景：${scene ?? '按图'}`,
     `景别：${shot.shotSize}；运镜：${shot.cameraMove}；站位：${shot.staging}`,
     `动作：从「${shot.actionStart}」到「${shot.actionEnd}」，动作自然衔接`,
@@ -98,7 +106,7 @@ function buildMarkdown(project: DuanjuProject, title: string, index: number, sho
   for (const shot of shots) lines.push(`| ${shotRow(shot, videoPromptOf(shot, project))} |`);
   lines.push('', '## 即梦操作步骤', '');
   lines.push('1. 打开即梦（jimeng.jianying.com）→ 图片生视频');
-  lines.push('2. 上传本包 E-S 编号的四宫格图，粘贴对应行提示词');
+  lines.push('2. 上传本包 E-S 编号的分镜图（分帧镜头为 F1-F4 顺序），粘贴对应行提示词');
   lines.push('3. 生成后导出视频，回 App 镜头卡「上传成品」归档');
   return lines.join('\n');
 }

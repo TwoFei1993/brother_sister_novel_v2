@@ -5,8 +5,8 @@
  * - buildBreakdownMessages：剧本 → 结构化拆解 JSON（审核卡数据源 + 违审替换建议）
  * - parseBreakdown：模型输出 → BreakdownResult（容错：剥围栏/截大括号/字段过滤）
  */
-import type { GenerateMessage } from '../../../api/llm';
-import { extractJsonObject } from './json-extract';
+import type { GenerateMessage } from '../../../../api/llm';
+import { extractJsonObject } from '../json-extract';
 
 /** 剧本生成系统词：竖屏短剧规格（资料第 1-2 课的形态要求） */
 const SCRIPT_SYSTEM = `你是资深竖屏短剧编剧。你写的剧本符合以下规格：

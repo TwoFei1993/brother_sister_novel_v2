@@ -1,13 +1,14 @@
 /**
  * stale 推导（共识 D3：依赖提醒）：shot.builtFrom 快照 vs 上游当前 updatedAt
  *
- * 纯函数：gridImage 存在且任一上游（剧本/出场角色/场景）已变更 → 待刷新。
+ * 纯函数：镜头有图（frames 或旧 gridImage）且任一上游（剧本/出场角色/场景）已变更 → 待刷新。
  * 「烧钱操作不自动跑」——stale 只标记，重生成一律手动。
  */
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
 
 export function isShotStale(shot: DuanjuShot, project: DuanjuProject): boolean {
-  if (!shot.gridImage || !shot.builtFrom) return false;
+  const hasImage = !!shot.gridImage || (shot.frames?.length ?? 0) > 0;
+  if (!hasImage || !shot.builtFrom) return false;
   const bf = shot.builtFrom;
   if (bf.scriptAt !== undefined && bf.scriptAt !== project.script.updatedAt) return true;
   for (const cid of shot.characterIds) {
@@ -33,7 +34,7 @@ export function storyboardHealth(project: DuanjuProject, episodeId: string): { s
   const shots = project.shots.filter((s) => s.episodeId === episodeId);
   return {
     stale: shots.filter((s) => isShotStale(s, project)).length,
-    withImage: shots.filter((s) => s.gridImage).length,
+    withImage: shots.filter((s) => (s.frames?.length ?? 0) > 0 || !!s.gridImage).length,
     total: shots.length,
   };
 }
