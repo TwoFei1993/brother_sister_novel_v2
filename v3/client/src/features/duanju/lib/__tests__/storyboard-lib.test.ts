@@ -298,3 +298,38 @@ describe('批1 深度验证：json-extract 每功能 3 例（goal）', () => {
     expect(r.episodes[0].title).toBe('t');
   });
 });
+
+describe('批验证：durationSec + 剧本导出时间轴（用户反馈 #3）', () => {
+  it('例1：AI 拆镜头输出 durationSec → Shot 字段落库', () => {
+    const raw = '[{"shotSize":"中景","durationSec":7,"actionStart":"a","actionEnd":"b","gridParts":["x"]},{"shotSize":"全景","durationSec":12,"actionStart":"c","actionEnd":"d","gridParts":["y"]}]';
+    const shots = parseStoryboard(raw, 'ep1', makeProject());
+    expect(shots[0].durationSec).toBe(7);
+    expect(shots[1].durationSec).toBe(12);
+  });
+
+  it('例2：durationSec 非法（0/超 120/缺省）→ undefined 走默认 8 秒', () => {
+    const raw = '[{"shotSize":"a","durationSec":0,"gridParts":[]},{"shotSize":"b","durationSec":999,"gridParts":[]},{"shotSize":"c","gridParts":[]}]';
+    const shots = parseStoryboard(raw, 'ep1', makeProject());
+    expect(shots[0].durationSec).toBeUndefined();
+    expect(shots[1].durationSec).toBeUndefined();
+  });
+
+  it('例3：剧本 TXT 导出含秒级时间轴（0:00-0:08 形式）+ md 含时间码列', async () => {
+    const { buildTimeline } = await import('../exportScript');
+    const s1 = makeShot({ id: 'a', index: 1, durationSec: 8 });
+    const s2 = makeShot({ id: 'b', index: 2, durationSec: 12 });
+    const tl = buildTimeline([s1, s2]);
+    expect(tl[0]).toMatchObject({ start: 0, end: 8 });
+    expect(tl[1]).toMatchObject({ start: 8, end: 20 });
+    // md 含时间码列（buildScriptMd 经动态 import 避免循环依赖）
+    const { buildScriptMd, buildScriptTxt } = await import('../exportScript');
+    const project = makeProject({ shots: [s1, s2] });
+    const md = buildScriptMd(project, project.episodes[0], [s1, s2]);
+    expect(md).toContain('| 0:00-0:08 |');
+    expect(md).toContain('| 0:08-0:20 |');
+    expect(md).toContain('预估时长 0:20');
+    const txt = buildScriptTxt(project, project.episodes[0], [s1, s2]);
+    expect(txt).toContain('0:00 - 0:08');
+    expect(txt).toContain('预估时长 0:20');
+  });
+});

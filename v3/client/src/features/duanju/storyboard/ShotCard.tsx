@@ -150,6 +150,17 @@ export default function ShotCard({ workId, shot }: Props) {
               aria-label="运镜"
               className="h-8 w-20 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-center outline-none"
             />
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={shot.durationSec ?? 8}
+              onChange={(e) => void save({ durationSec: Math.max(1, Math.min(120, Number(e.target.value) || 8)) })}
+              aria-label="时长秒"
+              title="预估时长（秒）——剧本导出时间轴依据"
+              className="h-8 w-16 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-center outline-none"
+            />
+            <span className="text-[11px] text-[hsl(var(--fg-muted))]">秒</span>
             {/* 出场角色多选 */}
             <select
               multiple={false}

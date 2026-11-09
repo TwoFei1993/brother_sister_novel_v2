@@ -5,12 +5,12 @@
  * - 「生成设定图」：MiniMax image-01（正面全身·无动作；server 持参考图逻辑）
  * - 主参考图：生四宫格时保持人物一致（Data URL，spike S8）；首图自动设为主参考
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ImageIcon, Star, Trash2 } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
-import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
+import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl } from '../../../api/duanju';
 import { characterSheetPrompt } from '../lib/prompts/prompts-image';
 import type { DuanjuCharacter } from '@shared/duanju';
 
@@ -22,6 +22,7 @@ interface Props {
 export default function CharacterCard({ workId, character }: Props) {
   const { project, patch, saving } = useDuanjuStore();
   const [generating, setGenerating] = useState(false);
+  const sheetFileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!project) return null;
@@ -53,6 +54,23 @@ export default function CharacterCard({ workId, character }: Props) {
       await useDuanjuStore.getState().load(workId);
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  /** 外部生图回流（豆包/即梦免费生成后上传，记入设定图候选） */
+  async function onSheetPicked(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      await uploadDuanjuImageFile(workId, 'character', character.id, file);
+      await useDuanjuStore.getState().load(workId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传失败，请重试');
     } finally {
       setGenerating(false);
     }
@@ -114,6 +132,23 @@ export default function CharacterCard({ workId, character }: Props) {
       )}
 
       {/* 设定图区 */}
+      <input
+        ref={sheetFileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(e) => void onSheetPicked(e)}
+      />
+      <button
+        type="button"
+        onClick={() => sheetFileRef.current?.click()}
+        disabled={generating}
+        className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] disabled:opacity-40"
+        data-testid="char-upload-sheet"
+      >
+        ⬆ 上传外部生图（豆包/即梦免费生成后回流，自动计入设定图候选）
+      </button>
+
       {character.sheetImages.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="char-sheets">
           {character.sheetImages.map((img) => {

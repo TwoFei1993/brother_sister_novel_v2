@@ -17,10 +17,10 @@ const STORYBOARD_SYSTEM = `你是短剧分镜师。把给定某集剧本拆成�
 只输出 JSON 数组，不要 markdown 代码块、不要解释。每项：
 {"shotSize":"景别(远景/全景/中景/近景/特写)","cameraMove":"运镜(固定/推/拉/摇/移/跟)",
  "actionStart":"动作起点","actionEnd":"动作终点","staging":"人物站位",
- "dialog":"台词(无则空串)","sound":"声音要求(环境音/动作声/对白声)",
+ "dialog":"台词(无则空串)","durationSec": 预估时长秒(4-15整数),"sound":"声音要求(环境音/动作声/对白声)",
  "gridParts":["第1格画面","第2格画面","第3格画面","第4格画面"],
  "characters":["出场角色名(须来自角色清单)"],"scene":"场景名(须来自场景清单,可空)"}
-要求：gridParts 四格各画一个连续动作瞬间（每格只放一个核心动作，动作与情绪是钉点）；
+要求：durationSec 按镜头节奏估（总和无须精确等于集时长）；gridParts 四格各画一个连续动作瞬间（每格只放一个核心动作，动作与情绪是钉点）；
 一集 6-12 镜头；动作起终点可视化。`;
 
 export function buildStoryboardMessages(
@@ -43,6 +43,7 @@ export function buildStoryboardMessages(
 interface RawShot {
   shotSize?: unknown;
   cameraMove?: unknown;
+  durationSec?: unknown;
   actionStart?: unknown;
   actionEnd?: unknown;
   staging?: unknown;
@@ -84,6 +85,7 @@ export function parseStoryboard(
         index: i + 1,
         shotSize: str(x.shotSize) || '中景',
         cameraMove: str(x.cameraMove) || '固定',
+        durationSec: typeof x.durationSec === 'number' && x.durationSec >= 1 && x.durationSec <= 120 ? Math.round(x.durationSec) : undefined,
         actionStart: str(x.actionStart),
         actionEnd: str(x.actionEnd),
         staging: str(x.staging),

@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { buildVideoPrompt } from '../lib/prompts/prompts-storyboard';
+import { buildScriptMd, buildScriptTxt, downloadText } from '../lib/exportScript';
 import AssetGallery from './AssetGallery';
 import EpisodePlayer from './EpisodePlayer';
 import SpendCard from './SpendCard';
@@ -69,6 +70,33 @@ export default function ExportPane({ workId }: { workId: string }) {
           >
             📦 下载整集导出包（{withImage} 个镜头的分镜图 + 镜头表）
           </a>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                downloadText(`E${episode.index}-${episode.title}.md`, buildScriptMd(project, episode, shots))
+              }
+              disabled={shots.length === 0}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border-soft))] text-xs disabled:opacity-40"
+              data-testid="export-script-md"
+            >
+              📝 下载剧本（Markdown）
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                downloadText(`E${episode.index}-${episode.title}.txt`, buildScriptTxt(project, episode, shots))
+              }
+              disabled={shots.length === 0}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border-soft))] text-xs disabled:opacity-40"
+              data-testid="export-script-txt"
+            >
+              📄 下载剧本（TXT）
+            </button>
+          </div>
+          <p className="text-xs text-[hsl(var(--fg-muted))]">
+            剧本含秒级时间轴（每镜头起止时间码，可在分镜 tab 调整每镜时长）——对应即梦生成视频的时长节奏。
+          </p>
           <p className="text-xs leading-5 text-[hsl(var(--fg-muted))]">
             解压后按 E-S(-F) 编号顺序在即梦做图生视频（每行提示词已写进镜头表）；
             成品视频回 App 分镜 tab 对应镜头卡上传归档。

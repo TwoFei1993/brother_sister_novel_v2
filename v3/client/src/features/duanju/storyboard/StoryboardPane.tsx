@@ -57,6 +57,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
       sound: '',
       gridParts: [],
       gridPrompt: '',
+      durationSec: 8,
       frames: [],
       characterIds: [],
       sceneId: null,

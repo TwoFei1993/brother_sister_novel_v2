@@ -160,6 +160,8 @@ export const DuanjuShotSchema = z.strictObject({
   gridParts: z.array(z.string()).max(4).default([]),
   /** 旧整图 prompt（兼容 D7 时期数据；新流程走 gridParts + buildFramePrompt） */
   gridPrompt: z.string(),
+  /** 预估时长秒（AI 拆镜头输出或手填；剧本导出时间轴 = 前序镜头累加） */
+  durationSec: z.number().int().positive().max(120).optional(),
   /** 分帧产物（成本优化核心：单帧重roll 只花 1 张钱） */
   frames: z.array(ShotFrameSchema).default([]),
   /** 四宫格整图（D7 旧模式产物；保留展示兼容，新生成不再写入） */

@@ -75,3 +75,21 @@ export async function uploadDuanjuVideo(
   });
   return r.project;
 }
+
+/** 外部生图回流（豆包/即梦 web 免费生成后上传归档为设定图/场景图） */
+export async function uploadDuanjuImageFile(
+  workId: string,
+  kind: 'character' | 'scene',
+  refId: string,
+  file: File,
+): Promise<DuanjuProject> {
+  const form = new FormData();
+  form.append('kind', kind);
+  form.append('refId', refId);
+  form.append('file', file);
+  const r = await apiFetch<{ project: DuanjuProject }>(`/api/works/${workId}/duanju/images/upload`, {
+    method: 'POST',
+    body: form,
+  });
+  return r.project;
+}

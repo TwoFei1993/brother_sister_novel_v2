@@ -15,6 +15,8 @@ import { join, resolve } from 'node:path';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 
+import multer from 'multer';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { HttpError, zodBody } from '../../middleware/validate';
 import { withWorkLock } from '../../middleware/writer';
 import { readJson, writeJsonAtomic } from '../../storage/store';
@@ -238,7 +240,51 @@ export const serveDuanjuFile: RequestHandler = async (req, res, next) => {
   }
 };
 
+// ---------- POST：外部生图回流（豆包/即梦 web 免费生成后上传归档） ----------
+
+const uploadImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+const IMAGE_MIME: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+};
+
+export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    assertSafeId(id);
+    const file = req.file;
+    const kind = String(req.body?.kind ?? '') as 'character' | 'scene';
+    const refId = String(req.body?.refId ?? '');
+    if (!file) throw new HttpError(400, '请上传图片文件（multipart 字段 file + kind + refId）');
+    const ext = IMAGE_MIME[file.mimetype];
+    if (!ext) throw new HttpError(400, `不支持的图片类型 ${file.mimetype}（支持 png/jpg/webp）`);
+    if (file.size < 1024) throw new HttpError(400, '图片内容异常（过小）');
+    if (kind !== 'character' && kind !== 'scene') throw new HttpError(400, 'kind 须为 character 或 scene');
+
+    const dir = workImagesDir(id);
+    await mkdir(dir, { recursive: true });
+    const name = `${randomUUID()}${ext}`;
+    await writeFile(join(dir, name), file.buffer);
+    const image: StoredImage = {
+      id: `img-${randomUUID().slice(0, 8)}`,
+      path: `duanju/images/${name}`,
+      prompt: '(外部生图上传)',
+      createdAt: Date.now(),
+    };
+    const project = await attachImage(id, kind, refId, image);
+    res.status(201).json({ image, project });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export function mountDuanjuImages(router: import('express').Router): void {
   router.post('/works/:id/duanju/images', zodBody(genSchema), wrap(generateDuanjuImage));
+  router.post('/works/:id/duanju/images/upload', uploadImage.single('file'), wrap(uploadDuanjuImage));
   router.get('/works/:id/duanju/files/:name', wrap(serveDuanjuFile));
 }
