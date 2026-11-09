@@ -156,3 +156,64 @@ describe('zhipu GLM-Image 通道（生图升级轮）', () => {
     expect(body.aspect_ratio).toBe('3:4');
   });
 });
+
+
+describe('seedream 通道（火山方舟，质量升级轮）', () => {
+  it('provider=seedream：端点/模型/size/watermark + 参考图 image 字段', async () => {
+    await writeFile(
+      join(root, 'secrets.json'),
+      JSON.stringify({ claude: { apiKey: 'sk-test' }, ark: { apiKey: 'ark-test' } }),
+      'utf8',
+    );
+    const refFile = join(root, 'ref.png');
+    await writeFile(refFile, Buffer.from('fakepng'));
+    const fn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ url: 'https://ark.example.com/a.png' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fn);
+    const urls = await callImageGeneration({
+      prompt: '四宫格分镜',
+      aspectRatio: '1:1',
+      subjectRefPath: refFile,
+      provider: 'seedream',
+    });
+    expect(urls).toEqual(['https://ark.example.com/a.png']);
+    const [url, init] = fn.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('ark.cn-beijing.volces.com');
+    const body = JSON.parse(init.body as string);
+    expect(body.model).toBe('doubao-seedream-5-0-flash');
+    expect(body.size).toBe('2048x2048');
+    expect(body.watermark).toBe(false);
+    expect(String(body.image)).toMatch(/^data:image\/png;base64,/); // 参考图输入免费
+    expect(body.subject_reference).toBeUndefined();
+  });
+
+  it('provider=seedream 无 ark 密钥 → IMG_AUTH（提示切换通道）', async () => {
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'k' } }), 'utf8');
+    await expect(callImageGeneration({ prompt: 'p', provider: 'seedream' })).rejects.toMatchObject({
+      code: 'IMG_AUTH',
+    });
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' } }), 'utf8');
+  });
+
+  it('seedream prompt 上限 2000（比 minimax 1500 宽松）', async () => {
+    await writeFile(
+      join(root, 'secrets.json'),
+      JSON.stringify({ claude: { apiKey: 'sk' }, ark: { apiKey: 'ark' } }),
+      'utf8',
+    );
+    const fn = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ base_resp: { status_code: 0 }, data: [{ url: 'https://x/a.png' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fn);
+    await callImageGeneration({ prompt: 'x'.repeat(2500), provider: 'seedream' });
+    const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.prompt.length).toBe(2000);
+  });
+});

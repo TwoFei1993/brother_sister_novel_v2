@@ -33,7 +33,7 @@ const genSchema = z.strictObject({
   prompt: z.string().min(1).max(1500),
   aspectRatio: z.string().optional(),
   /** 生图通道（client 按用户设置透传；缺省 minimax） */
-  provider: z.enum(['minimax', 'zhipu']).optional(),
+  provider: z.enum(['minimax', 'zhipu', 'seedream']).optional(),
   /** 参考图（角色 sheetImage id）：生成时保持人物一致 */
   refImageId: z.string().min(1).optional(),
   /** 分帧号（kind='frame' 必填 1-4） */

@@ -4,26 +4,34 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
-import { getSecretsMask, putZhipuKey } from './api';
+import { getSecretsMask, putArkKey, putZhipuKey } from './api';
 import { useSettingsStore } from '../../stores/settings';
 
-const PROVIDERS: ReadonlyArray<{ id: 'minimax' | 'zhipu'; label: string; desc: string }> = [
-  { id: 'zhipu', label: 'GLM-Image（智谱）', desc: '推荐：中文文字渲染与多格一致性突出，0.1 元/次，需智谱密钥（bigmodel.cn）' },
-  { id: 'minimax', label: 'MiniMax image-01', desc: '当前默认通道；文字渲染与复杂版式较弱，用已配置的 MiniMax 密钥' },
+const PROVIDERS: ReadonlyArray<{ id: 'minimax' | 'zhipu' | 'seedream'; label: string; desc: string }> = [
+  { id: 'seedream', label: 'Seedream 5.0 Flash（火山方舟）★推荐', desc: '即梦同源 SOTA：动漫质量/文字/人物一致性全面领先，0.12 元/张且参考图输入免费（console.volcengine.com 方舟 API Key）' },
+  { id: 'zhipu', label: 'GLM-Image（智谱）', desc: '中文文字渲染与多格一致性突出，0.1 元/次，需智谱密钥（bigmodel.cn）' },
+  { id: 'minimax', label: 'MiniMax image-01', desc: '用已配置的 MiniMax 密钥（plan 内免费额度）；文字渲染与复杂版式较弱' },
 ];
 
 export default function ImageProviderPanel() {
   const imageProvider = useSettingsStore((s) => s.llmPrefs.imageProvider ?? 'minimax');
   const setLlmPrefs = useSettingsStore((s) => s.setLlmPrefs);
   const [maskZhipu, setMaskZhipu] = useState<boolean | null>(null);
+  const [maskArk, setMaskArk] = useState<boolean | null>(null);
   const [keyInput, setKeyInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     getSecretsMask()
-      .then((m) => setMaskZhipu(Boolean((m as { zhipu?: boolean }).zhipu)))
-      .catch(() => setMaskZhipu(null));
+      .then((m) => {
+        setMaskZhipu(Boolean((m as { zhipu?: boolean }).zhipu));
+        setMaskArk(Boolean((m as { ark?: boolean }).ark));
+      })
+      .catch(() => {
+        setMaskZhipu(null);
+        setMaskArk(null);
+      });
   }, []);
 
   useEffect(() => {
@@ -36,8 +44,13 @@ export default function ImageProviderPanel() {
     setSaving(true);
     setMsg(null);
     try {
-      await putZhipuKey(k);
-      setMsg('✅ 智谱密钥已保存');
+      if (imageProvider === 'seedream') {
+        await putArkKey(k);
+        setMsg('✅ 火山方舟密钥已保存');
+      } else {
+        await putZhipuKey(k);
+        setMsg('✅ 智谱密钥已保存');
+      }
       setKeyInput('');
       refresh();
     } catch (err) {
@@ -75,19 +88,20 @@ export default function ImageProviderPanel() {
         ))}
       </div>
 
-      {imageProvider === 'zhipu' && (
+      {(imageProvider === 'zhipu' || imageProvider === 'seedream') && (
         <div className="mt-3 rounded-lg border border-[hsl(var(--border-soft))] p-3">
           <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]">
-            智谱密钥：{maskZhipu === true ? '✅ 已配置' : maskZhipu === false ? '未配置（bigmodel.cn 注册获取）' : '…'}
+            {imageProvider === 'zhipu' ? '智谱密钥：' : '火山方舟 API Key：'}
+            {(imageProvider === 'zhipu' ? maskZhipu : maskArk) === true ? '✅ 已配置' : '未配置'}
           </p>
           <div className="flex gap-2">
             <input
               type="password"
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
-              placeholder={maskZhipu ? '已配置——输入新密钥可覆盖' : '粘贴智谱 API Key…'}
+              placeholder={maskZhipu || maskArk ? '已配置——输入新密钥可覆盖' : imageProvider === 'zhipu' ? '粘贴智谱 API Key…' : '粘贴火山方舟 API Key…'}
               className="h-10 min-w-0 flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
-              aria-label="智谱 API Key"
+              aria-label="生图 API Key"
             />
             <button
               type="button"

@@ -37,12 +37,26 @@ export class ImageError extends Error {
 
 const ENDPOINT_MINIMAX = 'https://api.minimaxi.com/v1/image_generation';
 const ENDPOINT_ZHIPU = 'https://open.bigmodel.cn/api/paas/v4/images/generations';
+const ENDPOINT_ARK = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
 
-/** 生图通道：image-01 中文文字渲染/复杂版式弱；GLM-Image 专治文字与多格一致性且 0.1 元/次 */
-export type ImageProvider = 'minimax' | 'zhipu';
+/** 生图通道：image-01 中文文字渲染/复杂版式弱；GLM-Image 文字强；Seedream（即梦同源）5.0-flash 质量顶级 0.12 元/张参考图免费 */
+export type ImageProvider = 'minimax' | 'zhipu' | 'seedream';
 
-/** provider → 尺寸参数形态差异（minimax 用 aspect_ratio；zhipu 用 size） */
+/** provider → 尺寸参数形态差异（minimax 用 aspect_ratio；zhipu/seedream 用 size） */
 function ratioFor(provider: ImageProvider, ratio: string): Record<string, unknown> {
+  if (provider === 'seedream') {
+    // 火山 Seedream size 像素串（32 倍数）
+    const sizeMap: Record<string, string> = {
+      '1:1': '2048x2048',
+      '3:4': '1536x2048',
+      '4:3': '2048x1536',
+      '16:9': '2560x1440',
+      '9:16': '1440x2560',
+      '2:3': '1360x2040',
+      '3:2': '2040x1360',
+    };
+    return { size: sizeMap[ratio] ?? '1536x2048' };
+  }
   if (provider === 'zhipu') {
     const sizeMap: Record<string, string> = {
       '1:1': '1024x1024',
@@ -64,11 +78,14 @@ const RATIOS = new Set(['1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16', '21:9
 interface SecretsLite {
   claude?: { apiKey?: string };
   zhipu?: { apiKey?: string };
+  ark?: { apiKey?: string };
 }
 
 async function imageKey(provider: ImageProvider): Promise<string> {
   const s = await readJson<SecretsLite>(join(dataDir(), 'secrets.json'));
-  return (provider === 'zhipu' ? s?.zhipu?.apiKey : s?.claude?.apiKey) ?? '';
+  if (provider === 'zhipu') return s?.zhipu?.apiKey ?? '';
+  if (provider === 'seedream') return s?.ark?.apiKey ?? '';
+  return s?.claude?.apiKey ?? '';
 }
 
 export interface GenerateImageInput {
@@ -103,35 +120,43 @@ export async function callImageGeneration(input: GenerateImageInput): Promise<st
   if (!key) {
     throw new ImageError(
       'IMG_AUTH',
-      provider === 'zhipu'
-        ? '服务端未配置智谱密钥（生图通道=GLM-Image）——请在设置页填写或切换回 MiniMax'
-        : '服务端未配置 MiniMax 密钥',
+      `服务端未配置${provider === 'seedream' ? '火山方舟' : provider === 'zhipu' ? '智谱' : 'MiniMax'}密钥（生图通道=${
+        provider === 'seedream' ? 'Seedream' : provider === 'zhipu' ? 'GLM-Image' : 'MiniMax'
+      }）——请在设置页填写或切换其他通道`,
     );
   }
   const aspectRatio = input.aspectRatio && RATIOS.has(input.aspectRatio) ? input.aspectRatio : '3:4';
 
   // minimax：参考图 → Data URL（spike S8 唯一生效传法）；zhipu：无参考图参数，一致性靠 prompt
   let subjectRef: Array<{ type: 'character'; image_file: string }> | undefined;
-  if (provider === 'minimax' && input.subjectRefPath) {
+  let seedreamImage: string | undefined;
+  if (input.subjectRefPath) {
     const buf = await readFile(input.subjectRefPath);
     const mime = input.subjectRefPath.toLowerCase().endsWith('.jpg') || input.subjectRefPath.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
-    subjectRef = [{ type: 'character', image_file: `data:${mime};base64,${buf.toString('base64')}` }];
+    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+    // minimax：subject_reference（spike S8 唯一生效传法）；seedream：image 参考图输入免费
+    subjectRef = [{ type: 'character', image_file: dataUrl }];
+    seedreamImage = dataUrl;
   }
 
-  const prompt = provider === 'zhipu' ? input.prompt.slice(0, 1000) : input.prompt.slice(0, 1500); // 各自官方上限
+  const prompt = provider === 'zhipu' ? input.prompt.slice(0, 1000) : provider === 'seedream' ? input.prompt.slice(0, 2000) : input.prompt.slice(0, 1500);
   const body: Record<string, unknown> = {
-    model: provider === 'zhipu' ? 'glm-image' : 'image-01',
+    model: provider === 'zhipu' ? 'glm-image' : provider === 'seedream' ? 'doubao-seedream-5-0-flash' : 'image-01',
     prompt,
     ...ratioFor(provider, aspectRatio),
     ...(provider === 'minimax'
       ? { response_format: 'url' as const, n: 1, ...(subjectRef ? { subject_reference: subjectRef } : {}) }
+      : {}),
+    ...(provider === 'seedream'
+      ? { response_format: 'url' as const, watermark: false, ...(seedreamImage ? { image: seedreamImage } : {}) }
       : {}),
   };
 
   let lastErr: ImageError | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const res = await fetch(provider === 'zhipu' ? ENDPOINT_ZHIPU : ENDPOINT_MINIMAX, {
+      const endpoint = provider === 'zhipu' ? ENDPOINT_ZHIPU : provider === 'seedream' ? ENDPOINT_ARK : ENDPOINT_MINIMAX;
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -141,14 +166,15 @@ export async function callImageGeneration(input: GenerateImageInput): Promise<st
         data?: Array<{ url?: string }>;
         error?: { message?: string };
       };
-      if (provider === 'zhipu') {
-        // 智谱形态：{ data: [{url}] }；错误 { error: { message } }
+      if (provider === 'zhipu' || provider === 'seedream') {
+        // 智谱/火山同形态：{ data: [{url}] }；错误 { error: { message } }；url 24h 有效（转存）
         if (!res.ok || json.error) {
           const msg = json.error?.message ?? `HTTP ${res.status}`;
-          throw new ImageError(res.status === 401 ? 'IMG_AUTH' : 'IMG_UPSTREAM', `智谱生图错误：${msg}`);
+          const vendor = provider === 'zhipu' ? '智谱' : 'Seedream';
+          throw new ImageError(res.status === 401 ? 'IMG_AUTH' : 'IMG_UPSTREAM', `${vendor}生图错误：${msg}`);
         }
         const urls = (json.data ?? []).map((d) => d.url ?? '').filter(Boolean);
-        if (urls.length === 0) throw new ImageError('IMG_UPSTREAM', '智谱上游未返回图片');
+        if (urls.length === 0) throw new ImageError('IMG_UPSTREAM', '上游未返回图片');
         return urls;
       }
       const base = json.base_resp?.status_code ?? -1;

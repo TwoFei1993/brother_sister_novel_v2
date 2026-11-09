@@ -47,3 +47,11 @@ export function putZhipuKey(apiKey: string): Promise<{ ok: true }> {
     body: JSON.stringify({ apiKey }),
   });
 }
+
+/** PUT /api/secrets/ark：仅写生图通道（Seedream/火山方舟）密钥——server 读-合-写 */
+export function putArkKey(apiKey: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/secrets/ark', {
+    method: 'PUT',
+    body: JSON.stringify({ apiKey }),
+  });
+}

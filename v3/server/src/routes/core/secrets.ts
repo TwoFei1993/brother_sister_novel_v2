@@ -40,12 +40,18 @@ export const secretsSchema = z.object({
       apiKey: z.string().min(1, 'apiKey 不能为空'),
     })
     .optional(),
+  /** 生图通道（Seedream 5.0 flash，火山方舟 ark） */
+  ark: z
+    .object({
+      apiKey: z.string().min(1, 'apiKey 不能为空'),
+    })
+    .optional(),
 });
 
 export type Secrets = z.infer<typeof secretsSchema>;
 
 /** 掩码形态：通道是否已配置密钥（health 与 GET 共用同一判定） */
-export type SecretsMask = { openai: boolean; gemini: boolean; claude: boolean; zhipu: boolean };
+export type SecretsMask = { openai: boolean; gemini: boolean; claude: boolean; zhipu: boolean; ark: boolean };
 
 function secretsFile(): string {
   return join(dataDir(), 'secrets.json');
@@ -59,6 +65,7 @@ export async function readSecretsMask(): Promise<SecretsMask> {
     gemini: Boolean(secrets?.gemini?.apiKey),
     claude: Boolean(secrets?.claude?.apiKey),
     zhipu: Boolean(secrets?.zhipu?.apiKey),
+    ark: Boolean(secrets?.ark?.apiKey),
   };
 }
 
@@ -82,6 +89,20 @@ secretsRouter.put(
     await writeJsonAtomic(secretsFile(), {
       ...cur,
       zhipu: { apiKey: (req.body as { apiKey: string }).apiKey },
+    });
+    res.json({ ok: true });
+  },
+);
+
+/** PUT /secrets/ark：仅写生图通道（Seedream/火山方舟）密钥——读-合-写，不触碰对话通道 */
+secretsRouter.put(
+  '/ark',
+  zodBody(z.object({ apiKey: z.string().min(1, 'apiKey 不能为空') })),
+  async (req, res) => {
+    const cur = (await readJson<Record<string, unknown>>(secretsFile())) ?? {};
+    await writeJsonAtomic(secretsFile(), {
+      ...cur,
+      ark: { apiKey: (req.body as { apiKey: string }).apiKey },
     });
     res.json({ ok: true });
   },
