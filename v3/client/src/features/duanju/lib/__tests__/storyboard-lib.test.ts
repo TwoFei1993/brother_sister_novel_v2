@@ -231,3 +231,31 @@ describe('extractJsonArray 污染容错（反馈 #11 拆镜头失败回归）', 
     expect(shots[0].sound).toBe('无对白，只有环境音');
   });
 });
+
+describe('批1 深度验证：json-extract 每功能 3 例（goal）', () => {
+  it('例1：完整真实形态——围栏+解说+尾逗号+行内注释+嵌套 gridParts', () => {
+    const dirty = '根据剧本拆解如下：\n```json\n[\n  {"shotSize":"近景","cameraMove":"固定","actionStart":"抬头","actionEnd":"起身","staging":"左侧","dialog":"","sound":"雨声","gridParts":["抬头","起身","走位","停下",],"characters":["小满"],}, // 第一镜\n  {"shotSize":"远景","cameraMove":"推","actionStart":"开门","actionEnd":"入内","staging":"门口","dialog":"谁？","sound":"风","gridParts":["门缝","推门","入内","回身",],"characters":[],},\n]\n```\n希望符合要求。';
+    const shots = parseStoryboard(dirty, 'ep1', makeProject());
+    expect(shots).toHaveLength(2);
+    expect(shots[0].actionStart).toBe('抬头');
+    expect(shots[1].dialog).toBe('谁？');
+    expect(shots[0].gridPrompt).toContain('第4格：停下');
+  });
+
+  it('例2：单引号键值形态（Python 风格输出）', () => {
+    const dirty = "[{name: '老陈', shotSize: '中景', cameraMove: '固定', actionStart: '擦手', actionEnd: '端面', staging: '灶台', dialog: '来了', sound: '沸水声', gridParts: ['擦手','下面','浇卤','端面'], characters: ['老陈'], scene: '食堂'}]";
+    const shots = parseStoryboard(dirty, 'ep1', makeProject());
+    expect(shots.length).toBeGreaterThanOrEqual(1);
+    expect(shots[0].dialog).toBe('来了');
+    expect(shots[0].cameraMove).toBe('固定');
+  });
+
+  it('例3：审核卡对象——围栏+前后解说+嵌套数组+风险列表', () => {
+    const raw = '拆解完成。\n```json\n{"summary":"s","eventChain":["e1","e2",],"conflict":"c","characterRelations":"r","emotionPoints":["x",],"visualActions":["v"],"riskReplacements":[{"original":"o","replacement":"p",}], "episodes":[{"index":1,"title":"t","synopsis":"g",}],}\n```';
+    const r = parseBreakdown(raw);
+    expect(r).not.toBeNull();
+    expect(r.eventChain).toEqual(['e1', 'e2']);
+    expect(r.riskReplacements).toHaveLength(1);
+    expect(r.episodes[0].title).toBe('t');
+  });
+});

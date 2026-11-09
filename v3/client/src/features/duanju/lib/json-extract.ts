@@ -47,7 +47,9 @@ function repairCommon(text: string): string {
   t = t.replace(/^\s*\/\/.*$/gm, ''); // 整行 // 注释
   t = t.replace(/([{,]\s*)\/\/[^\n"]*(?=\n|$)/g, '$1'); // 行内注释（键值后）
   t = t.replace(/([\[{,]\s*)'([^']+)'(\s*:)/g, '$1"$2"$3'); // 单引号键
+  t = t.replace(/([{,]\s*)([A-Za-z_]\w*)(\s*:)/g, '$1"$2"$3'); // 无引号键（Python/JS 对象字面量风格）
   t = t.replace(/:(\s*)'([^']*)'/g, ':$1"$2"'); // 单引号值
+  t = t.replace(/'([^'\n]{1,120})'/g, '"$1"'); // 残余单引号串（数组元素等；中文文本撇号罕见可接受）
   t = t.replace(/([\[:,]\s*)(True|False|None)\b/g, '$1$2'.replace('True', 'true').replace('False', 'false').replace('None', 'null')); // Python 字面量
   t = t.replace(/([\[:,]\s*)（([^（）]*)）/g, '$1"$2"'); // 中文括号值 → 字符串
   return t;
