@@ -1,0 +1,127 @@
+/**
+ * 镜头卡工具组（frontend-design 精修拆分）：提示词复制 + 即梦/豆包跳转 + 成品上传/播放
+ *
+ * 视觉分组：主操作「复制提示词」accent 强调（用得最多）；平台跳转次级；
+ * 上传回流虚线全宽（低频）。视频播放区独立在组下。
+ */
+import { type RefObject } from 'react';
+import { ExternalLink, Upload } from 'lucide-react';
+
+import { duanjuFileUrl } from '../../../api/duanju';
+import type { DuanjuShot } from '@shared/duanju';
+
+const JIMENG_URL = 'https://jimeng.jianying.com/';
+const DOUBAO_URL = 'https://www.doubao.com/chat/';
+
+interface Props {
+  workId: string;
+  shot: DuanjuShot;
+  hasImage: boolean;
+  copied: boolean;
+  uploading: boolean;
+  fileRef: RefObject<HTMLInputElement | null>;
+  onCopy: () => void;
+  onUploadVideo: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onOpenFilePicker: () => void;
+  /** 下载分镜图（四宫格整图或首帧；旧/新模式兼容） */
+  onDownloadImage: () => void;
+}
+
+const toolCls = 'flex h-8 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-[11px] text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--fg))]';
+
+export default function ShotTools({
+  workId,
+  shot,
+  hasImage,
+  copied,
+  uploading,
+  fileRef,
+  onCopy,
+  onUploadVideo,
+  onOpenFilePicker,
+  onDownloadImage,
+}: Props) {
+  const jump = (url: string) => () => {
+    onCopy();
+    window.open(url, '_blank', 'noreferrer');
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onCopy}
+        disabled={!hasImage}
+        className={`flex h-9 w-full items-center justify-center gap-1 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 ${
+          hasImage
+            ? 'bg-[hsl(var(--accent))]/15 text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/25'
+            : 'border border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+        }`}
+        data-testid="shot-copy-prompt"
+      >
+        {copied ? '✓ 提示词已复制' : '📋 复制视频提示词'}
+      </button>
+      <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+        <a
+          href={JIMENG_URL}
+          target="_blank"
+          rel="noreferrer"
+          onClick={jump(JIMENG_URL)}
+          title="提示词已复制——粘贴到即梦图生视频"
+          className={toolCls}
+        >
+          <ExternalLink className="h-3 w-3" aria-hidden />
+          即梦
+        </a>
+        <a
+          href={DOUBAO_URL}
+          target="_blank"
+          rel="noreferrer"
+          onClick={jump(DOUBAO_URL)}
+          title="提示词已复制——豆包免费生图（生成后回 App 上传回流）"
+          className={toolCls}
+          data-testid="shot-doubao"
+        >
+          <ExternalLink className="h-3 w-3" aria-hidden />
+          豆包
+        </a>
+        <button
+          type="button"
+          onClick={hasImage ? onDownloadImage : onOpenFilePicker}
+          className={toolCls}
+          title={hasImage ? '下载分镜图（喂即梦用）' : '尚无分镜图——生成后可下载'}
+        >
+          ⬇ 分镜图
+        </button>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className={`${toolCls} ${shot.finalVideo ? 'text-[hsl(var(--accent))]' : ''}`}
+          data-testid="shot-upload-video"
+          title={shot.finalVideo ? '已有成品——可替换' : '即梦生成成品后上传归档'}
+        >
+          <Upload className="h-3 w-3" aria-hidden />
+          {uploading ? '上传中…' : shot.finalVideo ? '换成品' : '传成品'}
+        </button>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        hidden
+        onChange={(e) => void onUploadVideo(e)}
+      />
+      {shot.finalVideo && (
+        <video
+          src={duanjuFileUrl(workId, shot.finalVideo.path)}
+          controls
+          playsInline
+          preload="metadata"
+          className="mt-2 aspect-video w-full rounded-lg border border-[hsl(var(--border-soft))] bg-black"
+          data-testid="shot-final-video"
+        />
+      )}
+    </div>
+  );
+}

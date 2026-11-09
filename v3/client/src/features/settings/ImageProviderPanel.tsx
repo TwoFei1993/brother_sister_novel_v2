@@ -7,10 +7,32 @@ import { useCallback, useEffect, useState } from 'react';
 import { getSecretsMask, putArkKey, putZhipuKey } from './api';
 import { useSettingsStore } from '../../stores/settings';
 
-const PROVIDERS: ReadonlyArray<{ id: 'minimax' | 'zhipu' | 'seedream'; label: string; desc: string }> = [
-  { id: 'seedream', label: 'Seedream 5.0 Flash（火山方舟）★推荐', desc: '即梦同源 SOTA：动漫质量/文字/人物一致性全面领先，0.12 元/张且参考图输入免费（console.volcengine.com 方舟 API Key）' },
-  { id: 'zhipu', label: 'GLM-Image（智谱）', desc: '中文文字渲染与多格一致性突出，0.1 元/次，需智谱密钥（bigmodel.cn）' },
-  { id: 'minimax', label: 'MiniMax image-01', desc: '用已配置的 MiniMax 密钥（plan 内免费额度）；文字渲染与复杂版式较弱' },
+const PROVIDERS: ReadonlyArray<{
+  id: 'minimax' | 'zhipu' | 'seedream';
+  label: string;
+  desc: string;
+  recommended?: boolean;
+  price?: string;
+}> = [
+  {
+    id: 'seedream',
+    label: 'Seedream 5.0 Flash（火山方舟）',
+    desc: '即梦同源 SOTA：动漫质量/文字/人物一致性全面领先；参考图输入免费（console.volcengine.com 方舟 API Key）',
+    recommended: true,
+    price: '0.12 元/张',
+  },
+  {
+    id: 'zhipu',
+    label: 'GLM-Image（智谱）',
+    desc: '中文文字渲染与多格一致性突出，需智谱密钥（bigmodel.cn）',
+    price: '0.1 元/张',
+  },
+  {
+    id: 'minimax',
+    label: 'MiniMax image-01',
+    desc: '文字渲染与复杂版式较弱；用已配置的 MiniMax 密钥（plan 内免费额度）',
+    price: 'plan 内',
+  },
 ];
 
 export default function ImageProviderPanel() {
@@ -67,25 +89,44 @@ export default function ImageProviderPanel() {
         角色/场景/四宫格出图使用的生成服务。GLM-Image 对设定图版式、中文文字与多格一致性明显更好。
       </p>
       <div className="flex flex-col gap-2">
-        {PROVIDERS.map((pr) => (
-          <label
-            key={pr.id}
-            className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors ${
-              imageProvider === pr.id ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10' : 'border-[hsl(var(--border-soft))]'
-            }`}
-          >
-            <input
-              type="radio"
-              checked={imageProvider === pr.id}
-              onChange={() => setLlmPrefs({ imageProvider: pr.id })}
-              className="mt-1"
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">{pr.label}</span>
-              <span className="block text-xs text-[hsl(var(--fg-muted))]">{pr.desc}</span>
-            </span>
-          </label>
-        ))}
+        {PROVIDERS.map((pr) => {
+          const active = imageProvider === pr.id;
+          return (
+            <label
+              key={pr.id}
+              className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
+                active
+                  ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/10'
+                  : pr.recommended
+                    ? 'border-[hsl(var(--accent))]/50'
+                    : 'border-[hsl(var(--border-soft))]'
+              }`}
+            >
+              <input
+                type="radio"
+                checked={active}
+                onChange={() => setLlmPrefs({ imageProvider: pr.id })}
+                className="mt-1"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{pr.label}</span>
+                  {pr.recommended && (
+                    <span className="rounded-full bg-[hsl(var(--accent))] px-1.5 py-0.5 text-[10px] font-medium text-[hsl(var(--accent-fg))]">
+                      推荐
+                    </span>
+                  )}
+                  {pr.price && (
+                    <span className="ml-auto shrink-0 rounded bg-[hsl(var(--bg))] px-1.5 py-0.5 text-[10px] tabular-nums text-[hsl(var(--fg-muted))]">
+                      {pr.price}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-[hsl(var(--fg-muted))]">{pr.desc}</span>
+              </span>
+            </label>
+          );
+        })}
       </div>
 
       {(imageProvider === 'zhipu' || imageProvider === 'seedream') && (

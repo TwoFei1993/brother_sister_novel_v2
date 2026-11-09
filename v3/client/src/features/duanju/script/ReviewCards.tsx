@@ -88,7 +88,7 @@ export default function ReviewCards({ workId }: { workId: string }) {
   }
 
   const inputCls =
-    'w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none focus:border-[hsl(var(--accent))]';
+    'w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-[13px] leading-6 outline-none focus:border-[hsl(var(--accent))]';
   const confirmBtn = (k: CardKey) => (
     <button
       type="button"
@@ -203,11 +203,11 @@ export default function ReviewCards({ workId }: { workId: string }) {
               </button>
             )}
           </div>
-          <ul className="space-y-2">
+          <ul className="space-y-2.5">
             {cards.riskReplacements.map((r) => (
               <li
                 key={r.id}
-                className="flex flex-col gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-3 py-2 text-xs sm:flex-row sm:items-center"
+                className="flex flex-col gap-2 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))]/60 px-3 py-2.5 text-[13px] sm:flex-row sm:items-center"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-[hsl(var(--danger))]">原文：{r.original}</p>

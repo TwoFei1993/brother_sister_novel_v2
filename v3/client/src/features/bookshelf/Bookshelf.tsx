@@ -71,7 +71,7 @@ export default function Bookshelf() {
         break;
     }
     return sorted;
-  }, [works, query, sortBy]);
+  }, [works, query, sortBy, view]);
 
   function handleUpdated(next: WorkSummary): void {
     setWorks((prev) => prev.map((w) => (w.id === next.id ? next : w)));
@@ -99,24 +99,36 @@ export default function Bookshelf() {
           <h1 className="text-2xl font-bold">我的书架</h1>
           <div className="mt-1.5 flex items-center gap-3">
             {/* 小说/短剧分离（反馈 #1） */}
-            <div className="flex rounded-lg border border-[hsl(var(--border-soft))] p-0.5" role="tablist" aria-label="书架类型">
+            <div
+              className="flex rounded-full border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-1"
+              role="tablist"
+              aria-label="书架类型"
+            >
               {([['novel', '📖 小说'], ['duanju', '🎬 短剧']] as const).map(([v, label]) => {
                 const n = works.filter((w) => (v === 'duanju' ? w.mode === 'duanju' : w.mode !== 'duanju')).length;
+                const active = view === v;
                 return (
                   <button
                     key={v}
                     type="button"
                     role="tab"
-                    aria-selected={view === v}
+                    aria-selected={active}
                     data-testid={`shelf-view-${v}`}
                     onClick={() => setView(v)}
-                    className={`h-8 rounded-md px-3 text-sm transition-colors ${
-                      view === v
-                        ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]'
+                    className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium transition-all ${
+                      active
+                        ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))] shadow-sm'
                         : 'text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]'
                     }`}
                   >
-                    {label} {n}
+                    {label}
+                    <span
+                      className={`rounded-full px-1.5 text-[11px] tabular-nums ${
+                        active ? 'bg-white/20 text-[hsl(var(--accent-fg))]' : 'bg-[hsl(var(--bg))] text-[hsl(var(--fg-muted))]'
+                      }`}
+                    >
+                      {n}
+                    </span>
                   </button>
                 );
               })}
