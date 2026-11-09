@@ -22,6 +22,7 @@ interface Props {
 }
 
 const JIMENG_URL = 'https://jimeng.jianying.com/';
+const DOUBAO_URL = 'https://www.doubao.com/chat/';
 
 export default function ShotCard({ workId, shot }: Props) {
   const { project, patch } = useDuanjuStore();
@@ -105,10 +106,24 @@ export default function ShotCard({ workId, shot }: Props) {
               href={JIMENG_URL}
               target="_blank"
               rel="noreferrer"
+              onClick={() => void copyVideoPrompt()}
+              title="已复制提示词——粘贴到即梦"
               className="flex h-9 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs"
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-              打开即梦
+              即梦
+            </a>
+            <a
+              href={DOUBAO_URL}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => void copyVideoPrompt()}
+              title="已复制提示词——粘贴到豆包免费生图（生成后回 App 上传回流）"
+              className="flex h-9 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs"
+              data-testid="shot-doubao"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              豆包
             </a>
             <button
               type="button"

@@ -139,15 +139,32 @@ export default function CharacterCard({ workId, character }: Props) {
         hidden
         onChange={(e) => void onSheetPicked(e)}
       />
-      <button
-        type="button"
-        onClick={() => sheetFileRef.current?.click()}
-        disabled={generating}
-        className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] disabled:opacity-40"
-        data-testid="char-upload-sheet"
-      >
-        ⬆ 上传外部生图（豆包/即梦免费生成后回流，自动计入设定图候选）
-      </button>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <a
+          href="https://www.doubao.com/chat/"
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(characterSheetPrompt(project?.style ?? '动漫风', character.name, character.profile))
+              .catch(() => undefined);
+          }}
+          title="已复制设定图提示词——豆包免费生图后点右侧上传回流"
+          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))]"
+          data-testid="char-doubao"
+        >
+          🫘 豆包生图（免费）
+        </a>
+        <button
+          type="button"
+          onClick={() => sheetFileRef.current?.click()}
+          disabled={generating}
+          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] disabled:opacity-40"
+          data-testid="char-upload-sheet"
+        >
+          ⬆ 上传回流
+        </button>
+      </div>
 
       {character.sheetImages.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="char-sheets">
