@@ -35,25 +35,49 @@ export class ImageError extends Error {
   }
 }
 
-const ENDPOINT = 'https://api.minimaxi.com/v1/image_generation';
+const ENDPOINT_MINIMAX = 'https://api.minimaxi.com/v1/image_generation';
+const ENDPOINT_ZHIPU = 'https://open.bigmodel.cn/api/paas/v4/images/generations';
+
+/** 生图通道：image-01 中文文字渲染/复杂版式弱；GLM-Image 专治文字与多格一致性且 0.1 元/次 */
+export type ImageProvider = 'minimax' | 'zhipu';
+
+/** provider → 尺寸参数形态差异（minimax 用 aspect_ratio；zhipu 用 size） */
+function ratioFor(provider: ImageProvider, ratio: string): Record<string, unknown> {
+  if (provider === 'zhipu') {
+    const sizeMap: Record<string, string> = {
+      '1:1': '1024x1024',
+      '3:4': '864x1152',
+      '4:3': '1152x864',
+      '16:9': '1280x720',
+      '9:16': '720x1280',
+      '2:3': '832x1248',
+      '3:2': '1248x832',
+    };
+    return { size: sizeMap[ratio] ?? '864x1152' };
+  }
+  return { aspect_ratio: ratio };
+}
 
 /** aspect_ratio 白名单（官方 OpenAPI 枚举；防透传任意值） */
 const RATIOS = new Set(['1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16', '21:9']);
 
 interface SecretsLite {
   claude?: { apiKey?: string };
+  zhipu?: { apiKey?: string };
 }
 
-async function minimaxKey(): Promise<string> {
+async function imageKey(provider: ImageProvider): Promise<string> {
   const s = await readJson<SecretsLite>(join(dataDir(), 'secrets.json'));
-  return s?.claude?.apiKey ?? '';
+  return (provider === 'zhipu' ? s?.zhipu?.apiKey : s?.claude?.apiKey) ?? '';
 }
 
 export interface GenerateImageInput {
   prompt: string;
   aspectRatio?: string;
-  /** 人物参考图绝对路径（转 DataURL 传 subject_reference；spike S8 定案） */
+  /** 人物参考图绝对路径（转 DataURL 传 subject_reference；spike S8 定案；仅 minimax 消费） */
   subjectRefPath?: string;
+  /** 生图通道（缺省 minimax 兼容旧调用方） */
+  provider?: ImageProvider;
 }
 
 interface ImageGenResponse {
@@ -72,39 +96,61 @@ function classifyBaseResp(code: number, msg: string): ImageError {
   return new ImageError('IMG_UPSTREAM', `MiniMax 生图错误：${msg || '未知'}（code ${code}）`);
 }
 
-/** 调 image_generation（网络/5xx 自动重试 3 次退避；4xx/业务码不重试） */
+/** 调生图（双通道；网络/5xx 自动重试 3 次退避；4xx/业务码不重试） */
 export async function callImageGeneration(input: GenerateImageInput): Promise<string[]> {
-  const key = await minimaxKey();
-  if (!key) throw new ImageError('IMG_AUTH', '服务端未配置 MiniMax 密钥');
+  const provider: ImageProvider = input.provider ?? 'minimax';
+  const key = await imageKey(provider);
+  if (!key) {
+    throw new ImageError(
+      'IMG_AUTH',
+      provider === 'zhipu'
+        ? '服务端未配置智谱密钥（生图通道=GLM-Image）——请在设置页填写或切换回 MiniMax'
+        : '服务端未配置 MiniMax 密钥',
+    );
+  }
   const aspectRatio = input.aspectRatio && RATIOS.has(input.aspectRatio) ? input.aspectRatio : '3:4';
 
-  // 参考图 → Data URL（spike S8：唯一生效的传法）
+  // minimax：参考图 → Data URL（spike S8 唯一生效传法）；zhipu：无参考图参数，一致性靠 prompt
   let subjectRef: Array<{ type: 'character'; image_file: string }> | undefined;
-  if (input.subjectRefPath) {
+  if (provider === 'minimax' && input.subjectRefPath) {
     const buf = await readFile(input.subjectRefPath);
     const mime = input.subjectRefPath.toLowerCase().endsWith('.jpg') || input.subjectRefPath.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
     subjectRef = [{ type: 'character', image_file: `data:${mime};base64,${buf.toString('base64')}` }];
   }
 
-  const body = {
-    model: 'image-01',
-    prompt: input.prompt.slice(0, 1500), // 官方上限
-    aspect_ratio: aspectRatio,
-    response_format: 'url' as const,
-    n: 1,
-    ...(subjectRef ? { subject_reference: subjectRef } : {}),
+  const prompt = provider === 'zhipu' ? input.prompt.slice(0, 1000) : input.prompt.slice(0, 1500); // 各自官方上限
+  const body: Record<string, unknown> = {
+    model: provider === 'zhipu' ? 'glm-image' : 'image-01',
+    prompt,
+    ...ratioFor(provider, aspectRatio),
+    ...(provider === 'minimax'
+      ? { response_format: 'url' as const, n: 1, ...(subjectRef ? { subject_reference: subjectRef } : {}) }
+      : {}),
   };
 
   let lastErr: ImageError | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch(provider === 'zhipu' ? ENDPOINT_ZHIPU : ENDPOINT_MINIMAX, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(90_000), // spike 实测单张 15-20s；90s 兜超时
+        signal: AbortSignal.timeout(120_000), // glm-image hd 约 20s；120s 兜超时
       });
-      const json = (await res.json().catch(() => ({}))) as ImageGenResponse;
+      const json = (await res.json().catch(() => ({}))) as ImageGenResponse & {
+        data?: Array<{ url?: string }>;
+        error?: { message?: string };
+      };
+      if (provider === 'zhipu') {
+        // 智谱形态：{ data: [{url}] }；错误 { error: { message } }
+        if (!res.ok || json.error) {
+          const msg = json.error?.message ?? `HTTP ${res.status}`;
+          throw new ImageError(res.status === 401 ? 'IMG_AUTH' : 'IMG_UPSTREAM', `智谱生图错误：${msg}`);
+        }
+        const urls = (json.data ?? []).map((d) => d.url ?? '').filter(Boolean);
+        if (urls.length === 0) throw new ImageError('IMG_UPSTREAM', '智谱上游未返回图片');
+        return urls;
+      }
       const base = json.base_resp?.status_code ?? -1;
       if (base !== 0) throw classifyBaseResp(base, json.base_resp?.status_msg ?? '');
       const urls = json.data?.image_urls ?? [];
@@ -114,9 +160,9 @@ export async function callImageGeneration(input: GenerateImageInput): Promise<st
       if (err instanceof ImageError) throw err; // 业务错误不重试
       lastErr =
         err instanceof Error && err.name === 'TimeoutError'
-          ? new ImageError('IMG_TIMEOUT', '生图超时（上游 90 秒无响应），请重试')
+          ? new ImageError('IMG_TIMEOUT', '生图超时（上游无响应），请重试')
           : new ImageError('IMG_NET', '生图网络错误，请稍后重试');
-      logger.warn({ attempt, err: String(err) }, 'image_generation 重试');
+      logger.warn({ attempt, provider, err: String(err) }, 'image_generation retry');
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     }
   }

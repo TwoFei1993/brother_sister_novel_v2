@@ -3,6 +3,7 @@
  *
  * secrets.json 仅服务端可读（LLM 代理调用时需要原文）；
  * 对外任何接口都不回传明文，掩码 {openai: bool, ...} 只表示"该通道是否已配置"。
+ * PUT /secrets/zhipu：生图通道（GLM-Image）专用——读-合-写，不触碰三通道对话密钥。
  */
 import { join } from 'node:path';
 import { Router } from 'express';
@@ -33,12 +34,18 @@ export const secretsSchema = z.object({
       baseUrl: z.string().url('必须是合法 URL').optional(),
     })
     .optional(),
+  /** 生图通道（GLM-Image，open.bigmodel.cn）：与对话通道独立配置 */
+  zhipu: z
+    .object({
+      apiKey: z.string().min(1, 'apiKey 不能为空'),
+    })
+    .optional(),
 });
 
 export type Secrets = z.infer<typeof secretsSchema>;
 
 /** 掩码形态：通道是否已配置密钥（health 与 GET 共用同一判定） */
-export type SecretsMask = { openai: boolean; gemini: boolean; claude: boolean };
+export type SecretsMask = { openai: boolean; gemini: boolean; claude: boolean; zhipu: boolean };
 
 function secretsFile(): string {
   return join(dataDir(), 'secrets.json');
@@ -51,6 +58,7 @@ export async function readSecretsMask(): Promise<SecretsMask> {
     openai: Boolean(secrets?.openai?.apiKey),
     gemini: Boolean(secrets?.gemini?.apiKey),
     claude: Boolean(secrets?.claude?.apiKey),
+    zhipu: Boolean(secrets?.zhipu?.apiKey),
   };
 }
 
@@ -64,3 +72,17 @@ secretsRouter.put('/', zodBody(secretsSchema), async (req, res) => {
   await writeJsonAtomic(secretsFile(), req.body as Secrets);
   res.json({ ok: true });
 });
+
+/** PUT /secrets/zhipu：仅写生图通道（GLM-Image）密钥——读-合-写，不触碰三通道对话密钥 */
+secretsRouter.put(
+  '/zhipu',
+  zodBody(z.object({ apiKey: z.string().min(1, 'apiKey 不能为空') })),
+  async (req, res) => {
+    const cur = (await readJson<Record<string, unknown>>(secretsFile())) ?? {};
+    await writeJsonAtomic(secretsFile(), {
+      ...cur,
+      zhipu: { apiKey: (req.body as { apiKey: string }).apiKey },
+    });
+    res.json({ ok: true });
+  },
+);

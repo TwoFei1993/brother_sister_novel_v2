@@ -97,7 +97,7 @@ describe('GET/PUT /api/secrets', () => {
 
     const res = await request(app).get('/api/secrets').set('Cookie', cookie);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ openai: true, gemini: true, claude: false });
+    expect(res.body).toEqual({ openai: true, gemini: true, claude: false, zhipu: false });
     expect(res.text).not.toContain('sk-plain-text-secret-001');
     expect(res.text).not.toContain('gemini-plain-text-002');
   });
@@ -116,7 +116,7 @@ describe('GET/PUT /api/secrets', () => {
     const app = createApp();
     const res = await request(app).get('/api/secrets').set('Cookie', await loginCookie(app));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ openai: false, gemini: false, claude: false });
+    expect(res.body).toEqual({ openai: false, gemini: false, claude: false, zhipu: false });
   });
 
   it('PUT 非法（apiKey 缺失）→ 400', async () => {
@@ -141,7 +141,7 @@ describe('GET /api/health（免鉴权）', () => {
     expect(res.body).toEqual({
       storage: 'ok',
       tts: 'unset',
-      llm: { openai: false, gemini: false, claude: false },
+      llm: { openai: false, gemini: false, claude: false, zhipu: false },
     });
   });
 
@@ -164,6 +164,6 @@ describe('GET /api/health（免鉴权）', () => {
       .set('Cookie', cookie)
       .send({ claude: { apiKey: 'claude-key-003' } });
     const res = await request(app).get('/api/health');
-    expect(res.body.llm).toEqual({ openai: false, gemini: false, claude: true });
+    expect(res.body.llm).toEqual({ openai: false, gemini: false, claude: true, zhipu: false });
   });
 });

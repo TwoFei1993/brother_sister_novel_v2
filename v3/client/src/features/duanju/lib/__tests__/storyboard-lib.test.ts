@@ -254,6 +254,7 @@ describe('批1 深度验证：json-extract 每功能 3 例（goal）', () => {
     const raw = '拆解完成。\n```json\n{"summary":"s","eventChain":["e1","e2",],"conflict":"c","characterRelations":"r","emotionPoints":["x",],"visualActions":["v"],"riskReplacements":[{"original":"o","replacement":"p",}], "episodes":[{"index":1,"title":"t","synopsis":"g",}],}\n```';
     const r = parseBreakdown(raw);
     expect(r).not.toBeNull();
+    if (!r) return;
     expect(r.eventChain).toEqual(['e1', 'e2']);
     expect(r.riskReplacements).toHaveLength(1);
     expect(r.episodes[0].title).toBe('t');

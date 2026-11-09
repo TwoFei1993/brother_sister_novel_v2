@@ -95,7 +95,13 @@ export default function ScenesPane({ workId }: { workId: string }) {
     setError(null);
     try {
       const prompt = sceneImagePrompt(project!.style, scene.name, scene.spec);
-      await generateDuanjuImage(workId, { kind: 'scene', refId: scene.id, prompt, aspectRatio: '16:9' });
+      await generateDuanjuImage(workId, {
+        kind: 'scene',
+        refId: scene.id,
+        prompt,
+        aspectRatio: '16:9',
+        provider: useSettingsStore.getState().llmPrefs.imageProvider,
+      });
       await useDuanjuStore.getState().load(workId);
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试');

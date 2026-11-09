@@ -113,3 +113,46 @@ describe('downloadAndStore', () => {
     );
   });
 });
+
+describe('zhipu GLM-Image 通道（生图升级轮）', () => {
+  it('provider=zhipu：端点/模型/size 形态 + data[{url}] 解析', async () => {
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' }, zhipu: { apiKey: 'zp-test' } }), 'utf8');
+    const fn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ url: 'https://cdn.zhipu.example.com/a.png' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fn);
+    const urls = await callImageGeneration({ prompt: '角色设定图', aspectRatio: '3:4', provider: 'zhipu' });
+    expect(urls).toEqual(['https://cdn.zhipu.example.com/a.png']);
+    const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.model).toBe('glm-image');
+    expect(body.size).toBe('864x1152'); // 3:4 → size 映射
+    expect(body.aspect_ratio).toBeUndefined();
+    expect(body.prompt.length).toBeLessThanOrEqual(1000); // 智谱 1000 字上限截断
+  });
+
+  it('provider=zhipu 且未配置密钥 → IMG_AUTH 人话（提示切换通道）', async () => {
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: {} }), 'utf8');
+    await expect(
+      callImageGeneration({ prompt: 'p', provider: 'zhipu' }),
+    ).rejects.toMatchObject({ code: 'IMG_AUTH' });
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' } }), 'utf8');
+  });
+
+  it('缺省 provider（旧调用方）→ 仍走 minimax 契约', async () => {
+    const fn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ base_resp: { status_code: 0 }, data: { image_urls: ['https://cdn.example.com/m.png'] } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fn);
+    const urls = await callImageGeneration({ prompt: 'p' });
+    expect(urls).toHaveLength(1);
+    const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.model).toBe('image-01');
+    expect(body.aspect_ratio).toBe('3:4');
+  });
+});

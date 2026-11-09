@@ -81,10 +81,11 @@ describe('SettingsPage', () => {
     expect(text).toContain('Google Gemini');
     expect(text).toContain('Anthropic Claude');
     expect(text).toContain('已配置'); // 仅 openai 徽标
-    expect(maskMock).toHaveBeenCalledOnce();
-    // 密码框与地址框数量 = 三通道各一（三通道均支持自定义接口地址）
+    expect(maskMock).toHaveBeenCalledTimes(2); // SecretsPanel + ImageProviderPanel（生图通道）各自拉掩码
+    // 密码框与地址框数量 = 三通道各一（生图面板智谱 key 框仅在切到 zhipu 时渲染）
     expect(container.querySelectorAll('input[type="password"]').length).toBe(3);
     expect(container.querySelectorAll('input[type="url"]').length).toBe(3);
+    expect(text).toContain('生图通道'); // ImageProviderPanel 已挂载
   });
 
   it('切到 TTS 分区：展示服务地址', async () => {

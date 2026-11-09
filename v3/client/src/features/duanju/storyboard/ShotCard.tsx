@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { Download, ExternalLink, ImagePlus, RefreshCw, Upload } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
+import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, uploadDuanjuVideo, duanjuFileUrl } from '../../../api/duanju';
 import { buildVideoPrompt } from '../lib/prompts-storyboard';
 import { isShotStale } from '../lib/stale';
@@ -47,7 +48,13 @@ export default function ShotCard({ workId, shot }: Props) {
     setGenerating(true);
     setError(null);
     try {
-      await generateDuanjuImage(workId, { kind: 'shot', refId: shot.id, prompt: shot.gridPrompt, aspectRatio: '1:1' });
+      await generateDuanjuImage(workId, {
+        kind: 'shot',
+        refId: shot.id,
+        prompt: shot.gridPrompt,
+        aspectRatio: '1:1',
+        provider: useSettingsStore.getState().llmPrefs.imageProvider,
+      });
       await useDuanjuStore.getState().load(workId);
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试');

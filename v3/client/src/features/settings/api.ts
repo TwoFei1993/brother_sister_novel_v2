@@ -39,3 +39,11 @@ export function testLlm(source: LlmSource, model?: string): Promise<LlmTestResul
 export function getHealth(): Promise<HealthDto> {
   return apiFetch<HealthDto>('/api/health');
 }
+
+/** PUT /api/secrets/zhipu：仅写生图通道（GLM-Image）密钥——server 读-合-写，不影响对话通道 */
+export function putZhipuKey(apiKey: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/secrets/zhipu', {
+    method: 'PUT',
+    body: JSON.stringify({ apiKey }),
+  });
+}

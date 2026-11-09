@@ -144,6 +144,7 @@ export default function CharactersPane({ workId }: { workId: string }) {
                     refId: c.id,
                     prompt: characterSheetPrompt(project!.style, c.name, c.profile),
                     aspectRatio: '3:4',
+                    provider: useSettingsStore.getState().llmPrefs.imageProvider,
                   },
                   label: c.name,
                 })),

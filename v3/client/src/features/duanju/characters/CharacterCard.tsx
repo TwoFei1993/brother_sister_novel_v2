@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ImageIcon, Star, Trash2 } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
+import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
 import { characterSheetPrompt } from '../lib/prompts-image';
 import type { DuanjuCharacter } from '@shared/duanju';
@@ -41,7 +42,13 @@ export default function CharacterCard({ workId, character }: Props) {
     setError(null);
     try {
       const prompt = characterSheetPrompt(project!.style, character.name, character.profile);
-      await generateDuanjuImage(workId, { kind: 'character', refId: character.id, prompt, aspectRatio: '3:4' });
+      await generateDuanjuImage(workId, {
+        kind: 'character',
+        refId: character.id,
+        prompt,
+        aspectRatio: '3:4',
+        provider: useSettingsStore.getState().llmPrefs.imageProvider,
+      });
       // server 已把 project 随响应更新——拉最新
       await useDuanjuStore.getState().load(workId);
     } catch (err) {

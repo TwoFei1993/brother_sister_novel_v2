@@ -36,6 +36,8 @@ export interface GenerateImageInput {
   aspectRatio?: string;
   /** 角色参考图 id（保持人物一致；缺省用角色当前主参考图） */
   refImageId?: string;
+  /** 生图通道（zhipu=GLM-Image 文字渲染强；缺省按用户设置或 minimax） */
+  provider?: 'minimax' | 'zhipu';
 }
 
 export async function generateDuanjuImage(

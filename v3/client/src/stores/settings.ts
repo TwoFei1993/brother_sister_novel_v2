@@ -29,6 +29,8 @@ export interface LlmPrefs {
   repetitionPenalty?: number;
   /** 润色模型（可选）：正文生成后用该模型二次润色（同通道）；留空关闭 */
   polishModel?: string;
+  /** 生图通道（反馈：image-01 文字渲染/复杂版式弱）：zhipu=GLM-Image（推荐，0.1元/次）缺省 minimax */
+  imageProvider?: 'minimax' | 'zhipu';
 }
 
 /**
