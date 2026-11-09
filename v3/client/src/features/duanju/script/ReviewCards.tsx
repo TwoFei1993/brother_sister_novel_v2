@@ -109,10 +109,39 @@ export default function ReviewCards({ workId }: { workId: string }) {
     <section className="rounded-xl border border-[hsl(var(--border-soft))]" data-testid="duanju-review-cards">
       <header className="flex items-center justify-between border-b border-[hsl(var(--border-soft))] px-4 py-3">
         <h3 className="text-sm font-semibold">拆解审核卡</h3>
-        <span className="text-xs text-[hsl(var(--fg-muted))]">
-          {confirmedCount === ALL_KEYS.length ? '✅ 全部确认' : `已确认 ${confirmedCount}/${ALL_KEYS.length}`}
-        </span>
+        <div className="flex items-center gap-2">
+          {confirmedCount < ALL_KEYS.length && (
+            <button
+              type="button"
+              onClick={() =>
+                void save(undefined, Object.fromEntries(ALL_KEYS.map((k) => [k, true])))
+              }
+              className="h-7 rounded-full bg-[hsl(var(--accent))] px-2.5 text-[11px] font-medium text-[hsl(var(--accent-fg))]"
+              data-testid="review-confirm-all"
+            >
+              ✅ 一键全部确认
+            </button>
+          )}
+          <span className="text-xs text-[hsl(var(--fg-muted))]">
+            {confirmedCount === ALL_KEYS.length ? '✅ 全部确认' : `已确认 ${confirmedCount}/${ALL_KEYS.length}`}
+          </span>
+        </div>
       </header>
+
+      {/* 人物卡（反馈 #5）：联动角色 tab 的提取结果 */}
+      {project.characters.length > 0 && (
+        <div className="border-b border-[hsl(var(--border-soft))] px-4 py-4">
+          <h4 className="mb-2 text-xs font-medium">👥 出场人物（{project.characters.length}）——详细档案在「角色」tab 维护</h4>
+          <div className="flex flex-wrap gap-2">
+            {project.characters.map((c) => (
+              <span key={c.id} className="max-w-full rounded-lg border border-[hsl(var(--border-soft))] px-2.5 py-1.5 text-xs">
+                <span className="font-medium">{c.name || '未命名'}</span>
+                <span className="ml-1.5 text-[hsl(var(--fg-muted))]">{c.profile.slice(0, 42)}{c.profile.length > 42 ? '…' : ''}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
         {TEXT_CARDS.map((c) => (
@@ -125,9 +154,9 @@ export default function ReviewCards({ workId }: { workId: string }) {
               value={String(draft[c.key] ?? '')}
               onChange={(e) => update({ [c.key]: e.target.value } as Partial<ReviewCardsData>)}
               onBlur={() => void save()}
-              rows={c.rows}
+              rows={Math.max(c.rows, String(draft[c.key] ?? '').split('\n').length + 1)}
               placeholder={c.hint}
-              className={inputCls}
+              className={`${inputCls} min-h-24 resize-y`}
             />
           </div>
         ))}
@@ -143,9 +172,9 @@ export default function ReviewCards({ workId }: { workId: string }) {
                 value={items.join('\n')}
                 onChange={(e) => update({ [c.key]: e.target.value.split('\n') } as Partial<ReviewCardsData>)}
                 onBlur={() => void save()}
-                rows={Math.min(6, Math.max(3, items.length + 1))}
+                rows={Math.max(4, items.length + 1)}
                 placeholder={`${c.hint}（一行一项）`}
-                className={inputCls}
+                className={`${inputCls} min-h-24 resize-y`}
               />
             </div>
           );
@@ -154,7 +183,26 @@ export default function ReviewCards({ workId }: { workId: string }) {
 
       {cards.riskReplacements.length > 0 && (
         <div className="border-t border-[hsl(var(--border-soft))] px-4 py-4">
-          <h4 className="mb-2 text-xs font-medium">⚠️ 违审替换建议（采纳即改写剧本原文）</h4>
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-xs font-medium">⚠️ 违审替换建议（采纳即改写剧本原文）</h4>
+            {cards.riskReplacements.some((r) => r.status === undefined || r.status === 'pending') && (
+              <button
+                type="button"
+                onClick={() => {
+                  const pending = (draft?.riskReplacements ?? []).filter(
+                    (r) => r.status === undefined || r.status === 'pending',
+                  );
+                  void (async () => {
+                    for (const r of pending) await settleRisk(r.id, 'accepted');
+                  })();
+                }}
+                className="h-7 rounded-lg bg-[hsl(var(--accent))] px-2.5 text-[11px] font-medium text-[hsl(var(--accent-fg))]"
+                data-testid="risk-accept-all"
+              >
+                一键全部采纳
+              </button>
+            )}
+          </div>
           <ul className="space-y-2">
             {cards.riskReplacements.map((r) => (
               <li

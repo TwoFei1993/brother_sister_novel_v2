@@ -215,3 +215,19 @@ describe('mergeEpisodes 防丢数据（R3 加固）', () => {
     expect(merged).toHaveLength(1);
   });
 });
+
+describe('extractJsonArray 污染容错（反馈 #11 拆镜头失败回归）', () => {
+  it('围栏+尾逗号+行内注释+嵌套数组 → 正确解析', () => {
+    const dirty = '好的，以下是拆解结果：\n```json\n[\n  {"shotSize":"近景","gridParts":["a","b",],"characters":["小满"]}, // 第一镜\n  {"shotSize":"全景","gridParts":["c","d"],"characters":["小满","阿噗"]},\n]\n```\n以上。';
+    const shots = parseStoryboard(dirty, 'ep1', makeProject());
+    expect(shots).toHaveLength(2);
+    expect(shots[0].gridPrompt).toContain('第1格：a');
+  });
+
+  it('模型输出带解说前缀且字符串值缺引号（中文括号形态）→ 修复解析', () => {
+    const dirty = '这是结果：[{"shotSize":"中景","sound":（无对白，只有环境音）,"gridParts":["x"]}]';
+    const shots = parseStoryboard(dirty, 'ep1', makeProject());
+    expect(shots).toHaveLength(1);
+    expect(shots[0].sound).toBe('无对白，只有环境音');
+  });
+});

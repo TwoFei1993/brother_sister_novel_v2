@@ -129,11 +129,13 @@ export default function DuanjuWorkbench({ workId, title, onBack }: Props) {
         )}
         {!loading && !loadError && project && (
           <>
-            {tab === 'script' && <ScriptPane workId={workId} />}
-            {tab === 'characters' && <CharactersPane workId={workId} />}
-            {tab === 'scenes' && <ScenesPane workId={workId} />}
-            {tab === 'storyboard' && <StoryboardPane workId={workId} />}
-            {tab === 'export' && <ExportPane workId={workId} />}
+            {/* 全部 pane 常驻挂载，hidden 切换（用户反馈 #7）：AI 提取/生图进行中切 tab
+                不再卸载组件中断任务，回来还在；刷新安全（生成产物 server 已落盘） */}
+            <div hidden={tab !== 'script'}><ScriptPane workId={workId} /></div>
+            <div hidden={tab !== 'characters'}><CharactersPane workId={workId} /></div>
+            <div hidden={tab !== 'scenes'}><ScenesPane workId={workId} /></div>
+            <div hidden={tab !== 'storyboard'}><StoryboardPane workId={workId} /></div>
+            <div hidden={tab !== 'export'}><ExportPane workId={workId} /></div>
           </>
         )}
       </main>

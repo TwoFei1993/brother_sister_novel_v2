@@ -86,7 +86,9 @@ describe('Bookshelf', () => {
     expect(text).toContain('深夜茶馆');
     expect(text).toContain('互动小说');
     expect(text).toContain('对话写作');
-    expect(text).toContain('共 2 部作品');
+    expect(text).toContain('📖 小说 2');
+    expect(text).toContain('🎬 短剧 0');
+    expect(text).toContain('共 2 部');
   });
 
   it('标题搜索过滤卡片', async () => {

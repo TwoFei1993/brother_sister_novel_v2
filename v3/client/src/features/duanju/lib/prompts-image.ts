@@ -19,16 +19,23 @@ export function stylePrefix(style: string): string {
   return STYLE_PROMPTS[style] ?? `${style}风格`;
 }
 
-/** 角色设定图 prompt（资料第 3 课：让后续镜头认出「同一个人」） */
+/**
+ * 角色设定图 prompt（反馈 #8：专业 character sheet 版式，参考用户样图）——
+ * 多套服装全身像 + 每套三视图（正/侧/背）+ 表情与细节（发型/眼/配饰）+ 色板。
+ * 竖版 2:3 承载多行版式。外观锚点全量注入保持跨图一致。
+ */
 export function characterSheetPrompt(style: string, name: string, profile: string): string {
   return [
-    stylePrefix(style),
-    '角色设定图（character sheet），单一人物',
-    `【${name}】${profile}`,
-    '构图要求：正面全身站像，中性自然站姿，双臂自然下垂，表情平静',
-    '背景纯色简洁，不要复杂动作，不要多人，画面清晰完整，人物特征鲜明可辨识',
-    '外观描述必须严格一致：发色发型、瞳色、体型、服装配饰按上述设定完整呈现',
-  ].join('，');
+    `${stylePrefix(style)}，角色设定图 character sheet 设计稿，单张图中多区块网格排版`,
+    `【角色：${name}】${profile}`,
+    '版式要求（从上到下）：',
+    '① 顶行：同一角色 2-3 套不同服装的全身站立像（如日常装/正式装/战斗装），并排展示',
+    '② 中行：每套服装对应的正面/侧面/背面三视图小图',
+    '③ 下行：表情特写（喜怒哀乐各一）、发型细节、眼睛特写、标志性配饰与道具分件',
+    '④ 底行：该角色的主色板色卡条',
+    '全程同一人物同一画风，五官/发型/体型跨区块完全一致；白底干净排版，区块间细分隔线，',
+    '区块可带小号英文标签（如 OUTFIT A / FRONT / SIDE / BACK / EXPRESSIONS / PALETTE）',
+  ].join('\n');
 }
 
 /** 场景图 prompt（资料第 4 课：画面氛围统一不乱跳） */

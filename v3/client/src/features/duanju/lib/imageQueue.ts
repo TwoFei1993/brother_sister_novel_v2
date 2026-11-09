@@ -75,6 +75,11 @@ export class ImageQueue {
     return this.running === 0;
   }
 
+  /** 当前任务状态快照（进度展示用） */
+  snapshot(): Map<string, TaskState> {
+    return new Map(this.states);
+  }
+
   private async pump(workId: string): Promise<void> {
     while (!this.aborted && this.running < CONCURRENCY) {
       const task = this.tasks.shift();

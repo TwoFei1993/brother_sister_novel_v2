@@ -265,6 +265,10 @@ function MoveSheet({
 export default function MobileBookshelf() {
   const navigate = useNavigate();
   const [works, setWorks] = useState<WorkSummary[] | null>(null);
+  /** 书架视图：小说/短剧分离（反馈 #1），localStorage 记忆 */
+  const [view, setView] = useState<'novel' | 'duanju'>(() =>
+    localStorage.getItem('v3-shelf-view') === 'duanju' ? 'duanju' : 'novel',
+  );
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsed);
   const [managing, setManaging] = useState(false);
   /** 管理模式下勾选的书 */
@@ -288,7 +292,13 @@ export default function MobileBookshelf() {
   }, []);
 
   /** 分组：tag → 组内按 updatedAt 新→旧（未分类殿后） */
-  const groups = useMemo(() => (works ? groupByTag(works) : []), [works]);
+  const groups = useMemo(
+    () =>
+      works
+        ? groupByTag(works.filter((w) => (view === 'duanju' ? w.mode === 'duanju' : w.mode !== 'duanju')))
+        : [],
+    [works, view],
+  );
   const allTags = useMemo(() => groups.map(([t]) => t).filter((t) => t !== '未分类'), [groups]);
   const uncategorized = useMemo(() => groups.find(([t]) => t === '未分类')?.[1] ?? [], [groups]);
 
@@ -361,7 +371,32 @@ export default function MobileBookshelf() {
       <header className="mb-4 flex flex-wrap items-end justify-between gap-x-2 gap-y-2">
         <div className="shrink-0">
           <p className="m-serif text-[11px] tracking-[0.5em] text-[hsl(var(--fg-muted))]">書 房</p>
-          <h1 className="m-serif mt-0.5 text-2xl font-semibold leading-tight">{activeTag ?? '创作'}</h1>
+          <h1 className="m-serif mt-0.5 text-2xl font-semibold leading-tight">
+            {activeTag ?? (view === 'duanju' ? '短剧' : '创作')}
+          </h1>
+          <div className="mt-1 flex rounded-lg border border-[hsl(var(--border-soft))] p-0.5" role="tablist" aria-label="书架类型">
+            {([['novel', '📖 小说'], ['duanju', '🎬 短剧']] as const).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                data-testid={`m-shelf-view-${v}`}
+                onClick={() => {
+                  setView(v);
+                  localStorage.setItem('v3-shelf-view', v);
+                  setActiveTag(null);
+                }}
+                className={`h-7 rounded-md px-2.5 text-xs transition-colors ${
+                  view === v
+                    ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]'
+                    : 'text-[hsl(var(--fg-muted))]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex shrink-0 gap-2">
           <Link

@@ -5,13 +5,16 @@
  * - 「✨ 从人物关系提取」：审核卡 characterRelations + 剧本 → 角色档案 JSON（generateTextOnce）
  * - 每卡见 CharacterCard：档案编辑 / 设定图生成 / 主参考图选定
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import CharacterCard from './CharacterCard';
+import { ImageQueue } from '../lib/imageQueue';
+import { characterSheetPrompt } from '../lib/prompts-image';
+import { ImagePlus } from 'lucide-react';
 import { buildCharacterExtractMessages, parseCharacterExtract } from '../lib/characterExtract';
 import type { DuanjuCharacter } from '@shared/duanju';
 
@@ -30,6 +33,9 @@ export default function CharactersPane({ workId }: { workId: string }) {
   const { project, patch } = useDuanjuStore();
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 一键全部出图（反馈 #8）：并发 2 队列，进行中切 tab 不中断（pane 常驻挂载） */
+  const [queue] = useState(() => new ImageQueue());
+  const [batching, setBatching] = useState(0); // 剩余任务数（0=空闲）
 
   if (!project) return null;
 
@@ -108,7 +114,52 @@ export default function CharactersPane({ workId }: { workId: string }) {
         <span className="text-xs text-[hsl(var(--fg-muted))]">
           {project.characters.length} 个角色 · 主参考图用于分镜人物一致性
         </span>
+        {/* 画风（反馈 #8：设定图界面可改，改后全项目生效） */}
+        <label className="flex items-center gap-1.5 text-xs text-[hsl(var(--fg-muted))]">
+          画风
+          <select
+            value={project.style}
+            onChange={(e) => void patch(workId, { style: e.target.value })}
+            className="h-9 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none"
+            data-testid="style-select"
+          >
+            {['动漫风', '3D 卡通', '写实', '国漫', '水墨'].map((st) => (
+              <option key={st} value={st}>{st}</option>
+            ))}
+          </select>
+        </label>
+        {/* 一键全部角色出图（反馈 #8） */}
+        {project.characters.some((c) => c.name.trim() && c.profile.trim()) && (
+          <button
+            type="button"
+            onClick={() => {
+              const targets = project!.characters.filter((c) => c.name.trim() && c.profile.trim());
+              queue.setOnProject(() => useDuanjuStore.getState().load(workId));
+              setBatching(targets.length);
+              queue.enqueue(
+                workId,
+                targets.map((c) => ({
+                  input: {
+                    kind: 'character' as const,
+                    refId: c.id,
+                    prompt: characterSheetPrompt(project!.style, c.name, c.profile),
+                    aspectRatio: '3:4',
+                  },
+                  label: c.name,
+                })),
+              );
+            }}
+            disabled={batching > 0}
+            className="flex h-9 items-center gap-1 rounded-lg bg-[hsl(var(--accent))] px-3 text-xs font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
+            data-testid="characters-batch-gen"
+          >
+            <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+            {batching > 0 ? `批量生成中 剩${batching}…` : '⚡ 一键全部出设定图'}
+          </button>
+        )}
       </div>
+
+      {batching > 0 && <QueueProgress queue={queue} onIdle={() => setBatching(0)} />}
 
       {error && (
         <p className="mb-3 text-xs text-[hsl(var(--danger))]" role="alert">
@@ -128,5 +179,29 @@ export default function CharactersPane({ workId }: { workId: string }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** 队列进度条（一键全部出图时显示；idle 时回调清零） */
+function QueueProgress({ queue, onIdle }: { queue: ImageQueue; onIdle: () => void }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const un = queue.subscribe(() => setTick((t) => t + 1));
+    return () => {
+      un();
+    };
+  }, [queue]);
+  const states = queue.snapshot();
+  const done = [...states.values()].filter((x) => x.status === 'done').length;
+  const fail = [...states.values()].filter((x) => x.status === 'fail').length;
+  const total = states.size;
+  useEffect(() => {
+    if (total > 0 && done + fail >= total) onIdle();
+  }, [total, done, fail, onIdle]);
+  if (total === 0) return null;
+  return (
+    <p className="mb-3 text-xs text-[hsl(var(--fg-muted))]" data-testid="char-batch-progress">
+      批量出图：{done}/{total} 成功{fail > 0 ? ` · 失败 ${fail}` : ''}
+    </p>
   );
 }

@@ -9,6 +9,7 @@
 import type { GenerateMessage } from '../../../api/llm';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
 import { stylePrefix } from './prompts-image';
+import { extractJsonArray } from './json-extract';
 
 // ---------- AI 拆镜头 ----------
 
@@ -60,18 +61,8 @@ export function parseStoryboard(
   episodeId: string,
   project: DuanjuProject,
 ): DuanjuShot[] {
-  let text = raw.trim();
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) text = fence[1].trim();
-  const start = text.indexOf('[');
-  const end = text.lastIndexOf(']');
-  if (start < 0 || end <= start) return [];
-  let arr: unknown[];
-  try {
-    arr = JSON.parse(text.slice(start, end + 1)) as unknown[];
-  } catch {
-    return [];
-  }
+  const arr = extractJsonArray(raw);
+  if (!arr) return [];
   const base = Date.now();
   return arr
     .filter((x): x is RawShot => typeof x === 'object' && x !== null)

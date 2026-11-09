@@ -6,6 +6,7 @@
  * - parseBreakdown：模型输出 → BreakdownResult（容错：剥围栏/截大括号/字段过滤）
  */
 import type { GenerateMessage } from '../../../api/llm';
+import { extractJsonObject } from './json-extract';
 
 /** 剧本生成系统词：竖屏短剧规格（资料第 1-2 课的形态要求） */
 const SCRIPT_SYSTEM = `你是资深竖屏短剧编剧。你写的剧本符合以下规格：
@@ -105,53 +106,44 @@ export function buildBreakdownMessages(scriptText: string, targetEpisodes: numbe
   ];
 }
 
-/** 从模型输出解析拆解 JSON（容错：剥 markdown 围栏、截取首尾大括号、逐字段过滤） */
+/** 从模型输出解析拆解 JSON（容错提取：围栏/解说/尾逗号/注释等污染逐级降级修复） */
 export function parseBreakdown(raw: string): BreakdownResult | null {
-  let text = raw.trim();
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) text = fence[1].trim();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    const obj = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
-    const strArr = (v: unknown): string[] =>
-      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-    return {
-      summary: typeof obj.summary === 'string' ? obj.summary : '',
-      eventChain: strArr(obj.eventChain),
-      conflict: typeof obj.conflict === 'string' ? obj.conflict : '',
-      characterRelations: typeof obj.characterRelations === 'string' ? obj.characterRelations : '',
-      emotionPoints: strArr(obj.emotionPoints),
-      visualActions: strArr(obj.visualActions),
-      riskReplacements: Array.isArray(obj.riskReplacements)
-        ? obj.riskReplacements
-            .filter(
-              (x): x is { original: string; replacement: string } =>
-                typeof x === 'object' &&
-                x !== null &&
-                typeof (x as { original?: unknown }).original === 'string' &&
-                typeof (x as { replacement?: unknown }).replacement === 'string',
-            )
-            .map((x) => ({ original: x.original, replacement: x.replacement }))
-        : [],
-      episodes: Array.isArray(obj.episodes)
-        ? obj.episodes
-            .filter(
-              (x): x is { index: number; title: string; synopsis?: unknown } =>
-                typeof x === 'object' &&
-                x !== null &&
-                typeof (x as { index?: unknown }).index === 'number' &&
-                typeof (x as { title?: unknown }).title === 'string',
-            )
-            .map((x) => ({
-              index: x.index,
-              title: x.title,
-              synopsis: typeof x.synopsis === 'string' ? x.synopsis : '',
-            }))
-        : [],
-    };
-  } catch {
-    return null;
-  }
+  const obj = extractJsonObject(raw);
+  if (!obj) return null;
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  return {
+    summary: typeof obj.summary === 'string' ? obj.summary : '',
+    eventChain: strArr(obj.eventChain),
+    conflict: typeof obj.conflict === 'string' ? obj.conflict : '',
+    characterRelations: typeof obj.characterRelations === 'string' ? obj.characterRelations : '',
+    emotionPoints: strArr(obj.emotionPoints),
+    visualActions: strArr(obj.visualActions),
+    riskReplacements: Array.isArray(obj.riskReplacements)
+      ? obj.riskReplacements
+          .filter(
+            (x): x is { original: string; replacement: string } =>
+              typeof x === 'object' &&
+              x !== null &&
+              typeof (x as { original?: unknown }).original === 'string' &&
+              typeof (x as { replacement?: unknown }).replacement === 'string',
+          )
+          .map((x) => ({ original: x.original, replacement: x.replacement }))
+      : [],
+    episodes: Array.isArray(obj.episodes)
+      ? obj.episodes
+          .filter(
+            (x): x is { index: number; title: string; synopsis?: unknown } =>
+              typeof x === 'object' &&
+              x !== null &&
+              typeof (x as { index?: unknown }).index === 'number' &&
+              typeof (x as { title?: unknown }).title === 'string',
+          )
+          .map((x) => ({
+            index: x.index,
+            title: x.title,
+            synopsis: typeof x.synopsis === 'string' ? x.synopsis : '',
+          }))
+      : [],
+  };
 }

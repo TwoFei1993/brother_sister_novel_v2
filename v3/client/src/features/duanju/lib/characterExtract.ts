@@ -2,6 +2,7 @@
  * 角色提取 prompt（Phase 2）：剧本 + 人物关系 → 角色档案列表 JSON
  */
 import type { GenerateMessage } from '../../../api/llm';
+import { extractJsonArray } from './json-extract';
 
 const SYSTEM = `你是短剧角色设计师。从剧本中提取全部有名有姓/有戏份的角色，输出角色档案。
 只输出 JSON 数组，不要 markdown 代码块、不要解释。每项：
@@ -34,22 +35,13 @@ export interface ExtractedCharacter {
 }
 
 export function parseCharacterExtract(raw: string): ExtractedCharacter[] | null {
-  let text = raw.trim();
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) text = fence[1].trim();
-  const start = text.indexOf('[');
-  const end = text.lastIndexOf(']');
-  if (start < 0 || end <= start) return null;
-  try {
-    const arr = JSON.parse(text.slice(start, end + 1)) as unknown[];
-    return arr
-      .filter(
-        (x): x is { name: string; profile?: string } =>
-          typeof x === 'object' && x !== null && typeof (x as { name?: unknown }).name === 'string',
-      )
-      .map((x) => ({ name: x.name, profile: typeof x.profile === 'string' ? x.profile : '' }))
-      .filter((x) => x.name.trim());
-  } catch {
-    return null;
-  }
+  const arr = extractJsonArray(raw);
+  if (!arr) return null;
+  return arr
+    .filter(
+      (x): x is { name: string; profile?: string } =>
+        typeof x === 'object' && x !== null && typeof (x as { name?: unknown }).name === 'string',
+    )
+    .map((x) => ({ name: x.name, profile: typeof x.profile === 'string' ? x.profile : '' }))
+    .filter((x) => x.name.trim());
 }

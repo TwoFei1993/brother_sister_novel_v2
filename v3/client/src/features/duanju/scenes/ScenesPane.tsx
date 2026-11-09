@@ -4,11 +4,14 @@
  * 场景 = 后续分镜的画面氛围基准（空间/光影/道具统一）。卡内：名字/spec 编辑 +
  * 「生成场景图」（16:9 横版概念图）。AI 提取场景与角色提取同构（Phase 2 简版：手动建）。
  */
-import { Plus, Trash2, ImageIcon } from 'lucide-react';
+import { Plus, Trash2, ImageIcon, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
 import { sceneImagePrompt } from '../lib/prompts-image';
+import { buildSceneExtractMessages, parseSceneExtract } from '../lib/sceneExtract';
+import { generateTextOnce } from '../../../api/llm';
+import { useSettingsStore } from '../../../stores/settings';
 import { useState } from 'react';
 import type { DuanjuScene } from '@shared/duanju';
 
@@ -25,6 +28,7 @@ function newScene(): DuanjuScene {
 export default function ScenesPane({ workId }: { workId: string }) {
   const { project, patch, saving } = useDuanjuStore();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!project) return null;
@@ -36,6 +40,45 @@ export default function ScenesPane({ workId }: { workId: string }) {
 
   async function addScene(): Promise<void> {
     await patch(workId, { scenes: [...project!.scenes, newScene()] });
+  }
+
+  /** AI 从剧本提取场景（反馈 #9：初始生成就该有，不应手填），同名去重 */
+  async function extractScenes(): Promise<void> {
+    if (extracting || !project!.script.text.trim()) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      const prefs = useSettingsStore.getState().llmPrefs;
+      const raw = await generateTextOnce({
+        source: prefs.source,
+        model: prefs.model,
+        messages: buildSceneExtractMessages(project!.script.text),
+        thinking: false,
+        maxTokens: 16000,
+      });
+      const list = parseSceneExtract(raw);
+      if (!list || list.length === 0) {
+        setError('场景提取失败（模型未返回合法结果），请重试');
+        return;
+      }
+      const merged = [...project!.scenes];
+      for (const sc of list) {
+        if (!merged.some((x) => x.name === sc.name)) {
+          merged.push({
+            id: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name: sc.name,
+            spec: sc.spec,
+            images: [],
+            updatedAt: Date.now(),
+          });
+        }
+      }
+      await patch(workId, { scenes: merged });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '提取失败，请重试');
+    } finally {
+      setExtracting(false);
+    }
   }
 
   async function removeScene(id: string): Promise<void> {
@@ -75,6 +118,18 @@ export default function ScenesPane({ workId }: { workId: string }) {
           <Plus className="h-3.5 w-3.5" aria-hidden />
           新增场景
         </button>
+        {project.script.text.trim() && (
+          <button
+            type="button"
+            onClick={() => void extractScenes()}
+            disabled={extracting}
+            className="flex h-9 items-center gap-1 rounded-lg border border-[hsl(var(--accent))] px-3 text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+            data-testid="scenes-extract"
+          >
+            <WandSparkles className="h-3.5 w-3.5" aria-hidden />
+            {extracting ? '提取中…' : '✨ 从剧本提取场景'}
+          </button>
+        )}
         <span className="text-xs text-[hsl(var(--fg-muted))]">
           {project.scenes.length} 个场景 · 空间/光影/道具统一，分镜氛围基准
         </span>
@@ -88,7 +143,7 @@ export default function ScenesPane({ workId }: { workId: string }) {
 
       {project.scenes.length === 0 && (
         <p className="py-12 text-center text-sm text-[hsl(var(--fg-muted))]">
-          还没有场景——新增一个（例：飞船货舱 / 黄昏荒原 / 悬崖边）
+          还没有场景——点「从剧本提取场景」自动识别，或手动新增
         </p>
       )}
 

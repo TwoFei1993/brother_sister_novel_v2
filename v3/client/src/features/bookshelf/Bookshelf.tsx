@@ -31,8 +31,12 @@ const SORT_OPTIONS: ReadonlyArray<{ value: SortKey; label: string }> = [
   { value: 'title', label: '标题' },
 ];
 
+/** 书架视图：小说/短剧分离展示（反馈 #1），默认小说 */
+type ShelfView = 'novel' | 'duanju';
+
 export default function Bookshelf() {
   const [works, setWorks] = useState<WorkSummary[]>([]);
+  const [view, setView] = useState<ShelfView>('novel');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState('');
@@ -52,7 +56,8 @@ export default function Bookshelf() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q ? works.filter((w) => w.title.toLowerCase().includes(q)) : works;
+    let filtered = works.filter((w) => (view === 'duanju' ? w.mode === 'duanju' : w.mode !== 'duanju'));
+    if (q) filtered = filtered.filter((w) => w.title.toLowerCase().includes(q));
     const sorted = [...filtered];
     switch (sortBy) {
       case 'chapters':
@@ -92,7 +97,32 @@ export default function Bookshelf() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">我的书架</h1>
-          <p className="mt-0.5 text-xs text-[hsl(var(--fg-muted))]">共 {works.length} 部作品</p>
+          <div className="mt-1.5 flex items-center gap-3">
+            {/* 小说/短剧分离（反馈 #1） */}
+            <div className="flex rounded-lg border border-[hsl(var(--border-soft))] p-0.5" role="tablist" aria-label="书架类型">
+              {([['novel', '📖 小说'], ['duanju', '🎬 短剧']] as const).map(([v, label]) => {
+                const n = works.filter((w) => (v === 'duanju' ? w.mode === 'duanju' : w.mode !== 'duanju')).length;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === v}
+                    data-testid={`shelf-view-${v}`}
+                    onClick={() => setView(v)}
+                    className={`h-8 rounded-md px-3 text-sm transition-colors ${
+                      view === v
+                        ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]'
+                        : 'text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--fg))]'
+                    }`}
+                  >
+                    {label} {n}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-[hsl(var(--fg-muted))]">共 {visible.length} 部</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input

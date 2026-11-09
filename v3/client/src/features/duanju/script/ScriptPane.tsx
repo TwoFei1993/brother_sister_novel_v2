@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { buildBreakdownMessages, parseBreakdown, mergeEpisodes } from '../lib/prompts-script';
-import { generateTextOnce } from '../../../api/llm';
+import { buildGenerateBody, generateStream, generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import ScriptGenerateForm from './ScriptGenerateForm';
 import ReviewCards from './ReviewCards';
@@ -28,6 +28,7 @@ export default function ScriptPane({ workId }: { workId: string }) {
   const [source, setSource] = useState<DuanjuScript['source']>('manual');
   const [genOpen, setGenOpen] = useState(false);
   const [breakingDown, setBreakingDown] = useState(false);
+  const [streamText, setStreamText] = useState(''); // 打印机式实时输出（反馈 #10）
   const [breakdownError, setBreakdownError] = useState<string | null>(null);
 
   // project 载入/外部刷新时同步本地编辑态
@@ -70,12 +71,32 @@ export default function ScriptPane({ workId }: { workId: string }) {
         });
       }
       const prefs = useSettingsStore.getState().llmPrefs;
-      const raw = await generateTextOnce({
-        source: prefs.source,
-        model: prefs.model,
-        messages: buildBreakdownMessages(text, project.targetEpisodes),
-        thinking: false,
-      });
+      // 流式打印机（反馈 #10）：实时可见模型输出，替代黑盒等待
+      let raw = '';
+      await generateStream(
+        buildGenerateBody({
+          source: prefs.source,
+          model: prefs.model,
+          messages: buildBreakdownMessages(text, project.targetEpisodes),
+          thinking: false,
+          maxTokens: 32000,
+        }),
+        {
+          onChunk: (t) => {
+            raw += t;
+            setStreamText(raw);
+          },
+          onDone: () => undefined,
+          onError: (e) => {
+            if (!raw) throw new Error(e.message || '拆解失败');
+            // 已有部分输出则继续尝试解析（半 JSON 交容错提取兜底）
+          },
+        },
+      );
+      if (!raw.trim()) {
+        setBreakdownError('模型无输出（思考流吃掉了输出），请重试');
+        return;
+      }
       const parsed = parseBreakdown(raw);
       if (!parsed) {
         setBreakdownError('拆解结果解析失败（模型未返回合法 JSON），请重试');
@@ -146,19 +167,48 @@ export default function ScriptPane({ workId }: { workId: string }) {
         )}
       </div>
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={'粘贴剧本，或手写，或点「AI 生成剧本」……\n格式建议：每行一个镜头（场景｜人物｜动作｜台词）'}
-        rows={14}
-        className="w-full rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-4 py-3 text-sm leading-6 outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
-        data-testid="script-text"
-      />
+      {/* 拆解完成后：审核卡前置（结构化可读），剧本原文折叠（反馈 #4：一大段难读） */}
+      {project.reviewCards.summary ? (
+        <>
+          <ReviewCards workId={workId} />
+          <details className="rounded-xl border border-[hsl(var(--border-soft))] px-4 py-3" data-testid="script-raw-details">
+            <summary className="cursor-pointer text-sm font-medium">📜 剧本原文（点击展开编辑）</summary>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={'粘贴剧本，或手写，或点「AI 生成剧本」……\n格式建议：每行一个镜头（场景｜人物｜动作｜台词）'}
+              rows={14}
+              className="mt-3 w-full rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-4 py-3 text-sm leading-7 outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+              data-testid="script-text"
+            />
+          </details>
+        </>
+      ) : (
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={'粘贴剧本，或手写，或点「AI 生成剧本」……\n格式建议：每行一个镜头（场景｜人物｜动作｜台词）'}
+          rows={14}
+          className="w-full rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-4 py-3 text-sm leading-7 outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+          data-testid="script-text"
+        />
+      )}
 
       {breakdownError && (
         <p className="text-xs text-[hsl(var(--danger))]" role="alert">
           {breakdownError}
         </p>
+      )}
+
+      {/* 打印机式实时输出（反馈 #10）：拆解进行中展示模型原始输出，可读不黑盒 */}
+      {breakingDown && streamText && (
+        <pre
+          className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-4 text-xs leading-6"
+          data-testid="breakdown-stream"
+        >
+          {streamText}
+          <span className="animate-pulse text-[hsl(var(--accent))]">▌</span>
+        </pre>
       )}
 
       {/* 保存 + 定稿 */}
@@ -184,8 +234,6 @@ export default function ScriptPane({ workId }: { workId: string }) {
           定稿（解锁角色/场景/分镜）
         </label>
       </div>
-
-      {project.reviewCards.summary && <ReviewCards workId={workId} />}
 
       {genOpen && (
         <ScriptGenerateForm

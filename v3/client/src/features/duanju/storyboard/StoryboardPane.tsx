@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { Plus, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
-import { generateTextOnce } from '../../../api/llm';
+import { buildGenerateBody, generateStream } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import { buildStoryboardMessages, parseStoryboard } from '../lib/prompts-storyboard';
 import { storyboardHealth } from '../lib/stale';
@@ -20,6 +20,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
   const { project, patch } = useDuanjuStore();
   const [epIndex, setEpIndex] = useState(1);
   const [splitting, setSplitting] = useState(false);
+  const [streamText, setStreamText] = useState(''); // 打印机式实时输出（反馈 #10）
   const [error, setError] = useState<string | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
 
@@ -70,17 +71,32 @@ export default function StoryboardPane({ workId }: { workId: string }) {
     setError(null);
     try {
       const prefs = useSettingsStore.getState().llmPrefs;
-      const raw = await generateTextOnce({
-        source: prefs.source,
-        model: prefs.model,
-        messages: buildStoryboardMessages(
-          `${episode.title}：${episode.synopsis}`,
-          project!.script.text,
-          project!.characters,
-          project!.scenes,
-        ),
-        thinking: false,
-      });
+      // 流式打印机（反馈 #10）：拆镜头实时可见
+      let raw = '';
+      await generateStream(
+        buildGenerateBody({
+          source: prefs.source,
+          model: prefs.model,
+          messages: buildStoryboardMessages(
+            `${episode.title}：${episode.synopsis}`,
+            project!.script.text,
+            project!.characters,
+            project!.scenes,
+          ),
+          thinking: false,
+          maxTokens: 32000,
+        }),
+        {
+          onChunk: (t) => {
+            raw += t;
+            setStreamText(raw);
+          },
+          onDone: () => undefined,
+          onError: (e) => {
+            if (!raw) throw new Error(e.message || '拆镜头失败');
+          },
+        },
+      );
       const list = parseStoryboard(raw, episode.id, project!);
       if (list.length === 0) {
         setError('拆镜头失败（模型未返回合法结果），请重试');
@@ -154,6 +170,16 @@ export default function StoryboardPane({ workId }: { workId: string }) {
         <p className="mb-3 text-xs text-[hsl(var(--danger))]" role="alert">
           {error}
         </p>
+      )}
+
+      {splitting && streamText && (
+        <pre
+          className="mb-3 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-4 text-xs leading-6"
+          data-testid="split-stream"
+        >
+          {streamText}
+          <span className="animate-pulse text-[hsl(var(--accent))]">▌</span>
+        </pre>
       )}
 
       {shots.length === 0 && (
