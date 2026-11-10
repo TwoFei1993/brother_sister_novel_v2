@@ -32,7 +32,7 @@ export function buildFrameTasks(
           refId: s.id,
           frameIndex: i,
           prompt: buildFramePrompt(s, i, project),
-          aspectRatio: '1:1',
+          aspectRatio: '9:16', // 竖屏短剧视频规格（1080×1920 9:16），首帧图生视频免裁切
           ...(provider ? { provider } : {}),
         },
         label: `镜头 ${s.index} · F${i}`,

@@ -38,7 +38,7 @@ export default function FramesGrid({ workId, shot, project }: Props) {
         refId: shot.id,
         frameIndex,
         prompt: buildFramePrompt(shot, frameIndex, project),
-        aspectRatio: '1:1',
+        aspectRatio: '9:16', // 竖屏短剧视频规格（1080×1920 9:16），首帧图生视频免裁切
         provider: useSettingsStore.getState().llmPrefs.imageProvider,
       });
       await useDuanjuStore.getState().load(workId);
@@ -91,7 +91,7 @@ export default function FramesGrid({ workId, shot, project }: Props) {
           <img
             src={duanjuFileUrl(workId, shot.gridImage.path)}
             alt={`镜头 ${shot.index} 旧四宫格`}
-            className="aspect-square w-full object-cover"
+            className="aspect-[9/16] w-full object-cover"
           />
         </div>
       ) : (
@@ -108,10 +108,10 @@ export default function FramesGrid({ workId, shot, project }: Props) {
                   <img
                     src={duanjuFileUrl(workId, f.image.path)}
                     alt={`镜头 ${shot.index} 第 ${i} 帧`}
-                    className="aspect-square w-full object-cover"
+                    className="aspect-[9/16] w-full object-cover"
                   />
                 ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-[hsl(var(--bg))] text-[10px] text-[hsl(var(--fg-muted))]">
+                  <div className="flex aspect-[9/16] w-full items-center justify-center bg-[hsl(var(--bg))] text-[10px] text-[hsl(var(--fg-muted))]">
                     F{i} 待生成
                   </div>
                 )}
