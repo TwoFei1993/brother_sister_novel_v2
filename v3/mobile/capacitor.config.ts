@@ -19,6 +19,11 @@ const config: CapacitorConfig = {
     url: serverUrl,
     cleartext: true, // 允许 http（联调期；生产 https 自动不受影响）
   },
+  android: {
+    // 本地生图（手机 webview HTTPS 页面 → http://笔记本:8188 ComfyUI 直连）必须：
+    // 默认 NEVER_ALLOW 会拦混合内容。局域网场景用；Cloudflare 隧道（https）场景不需要。
+    allowMixedContent: true,
+  },
 };
 
 export default config;
