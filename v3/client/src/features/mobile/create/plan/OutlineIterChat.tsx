@@ -12,6 +12,7 @@ import { BookOpenCheck, Check, Target } from 'lucide-react';
 
 import type { GenerateMessage } from '../../../../api/llm';
 import { generateTextOnce } from '../../../../api/llm';
+import { submitTask, waitAndStore, taskPending, clearPending, consumeResult } from '../../../../lib/llmTask';
 import { useWorkStore } from '../../../../stores/work';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
@@ -71,6 +72,33 @@ export default function OutlineIterChat({
     saveIterChat(work.id, { history, lockedIndex });
   }, [work.id, history, lockedIndex]);
 
+  // 后台生成结果恢复（mount 一次）：大纲迭代回复追加进对话流；章节重写结果应用为新版本
+  useEffect(() => {
+    // outline-iter slot 的结果（waitAndStore 完成落盘）消费
+    const iterResult = localStorage.getItem('v3-bg-result-outline-iter');
+    if (iterResult) {
+      localStorage.removeItem('v3-bg-result-outline-iter');
+      localStorage.removeItem('v3-bg-task-outline-iter');
+      const parsed = parseIterReply(iterResult);
+      const reply = parsed?.reply ?? iterResult;
+      setHistory((h) => [...h, { role: 'assistant', content: reply } as ChatLine]);
+      if (parsed?.chapterIndex != null) setLockedIndex(parsed.chapterIndex);
+    }
+    // outline-rewrite slot 的结果应用（meta 持久化了 brief/model）
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const k = localStorage.key(i);
+      if (!k?.startsWith(`v3-outline-rewrite-apply-${work.id}-`)) continue;
+      const chapterIdx = Number(k.slice(`v3-outline-rewrite-apply-${work.id}-`.length));
+      const slot = `outline-rewrite-${work.id}-${chapterIdx}`;
+      const resultText = localStorage.getItem(`v3-bg-result-${slot}`);
+      if (!resultText) continue;
+      localStorage.removeItem(`v3-bg-result-${slot}`);
+      localStorage.removeItem(`v3-bg-task-${slot}`);
+      applyRewrite(chapterIdx, resultText);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [work.id]);
+
   const chapterRefs = useMemo<IterChapterRef[]>(
     () =>
       chapters.map(({ msg }) => ({
@@ -122,10 +150,14 @@ export default function OutlineIterChat({
     if (!locked) return;
     const target = locked.msg;
     const active = target.swipes[target.swipeId];
-    appendTurns([{ role: 'assistant', content: `⏳ 正在按要点重写第${target.chapter!.index}章，生成后自动成为新版本…` }]);
+    const slot = `outline-rewrite-${work.id}-${target.chapter!.index}`;
+    appendTurns([{ role: 'assistant', content: `⏳ 已转后台重写第${target.chapter!.index}章——切出去干别的，回来自动成为新版本…` }]);
     scrollBottom();
-    const text = await callLlm(
-      buildRewriteMessages({
+    const prefs2 = useSettingsStore.getState().llmPrefs;
+    await submitTask(slot, {
+      source: prefs2.source,
+      model: prefs2.model,
+      messages: buildRewriteMessages({
         workTitle: work.title,
         chapter: {
           index: target.chapter!.index,
@@ -135,16 +167,34 @@ export default function OutlineIterChat({
         brief,
         bookBrief: briefOk ? bookBrief : undefined,
       }),
+      thinking: prefs2.thinking !== false,
+      params: { max_tokens: 16000, temperature: prefs2.temperature },
+      label: `重写第${target.chapter!.index}章`,
+    });
+    // 后台完成后的应用（mount/visibility 恢复执行）：结果落 localStorage → 恢复消费
+    localStorage.setItem(
+      `v3-outline-rewrite-apply-${work.id}-${target.chapter!.index}`,
+      JSON.stringify({ brief, model: prefs2.model }),
     );
-    if (!text) {
-      appendTurns([{ role: 'assistant', content: '⚠️ 生成失败（模型无输出），请重试。' }]);
+    const text = await waitAndStore(slot).catch(async (err: Error) => {
+      appendTurns([{ role: 'assistant', content: `⚠️ 重写失败：${err.message}，请重试。` }]);
       scrollBottom();
-      return;
-    }
-    const updated = appendSwipe(target, text, { generationMs: 0, model: prefs.model, tokenCount: 0 });
+      return '';
+    });
+    if (!text) return;
+    applyRewrite(target.chapter!.index, text);
+    scrollBottom();
+  }
+
+  /** 后台重写结果的应用（mount/visibility 恢复共用）：appendSwipe 新版本 + 持久化 + onDone */
+  function applyRewrite(chapterIdx: number, text: string): void {
+    const target = chapters.find(({ msg }) => msg.chapter!.index === chapterIdx)?.msg;
+    if (!target) return;
+    const prefs2 = useSettingsStore.getState().llmPrefs;
+    const updated = appendSwipe(target, text, { generationMs: 0, model: prefs2.model, tokenCount: 0 });
     useWorkStore.getState().upsertLocal(updated);
     try {
-      await patchMessage(work.id, updated);
+      void patchMessage(work.id, updated);
     } catch {
       console.warn('[OutlineIterChat] 新版本持久化失败');
     }
@@ -181,9 +231,23 @@ export default function OutlineIterChat({
       return;
     }
 
+    // 大纲生成后台化（切出 App 继续生成——手机锁屏/切后台安全）：server 任务执行，回来消费
+    const slot = 'outline-iter-' + work.id;
     setBusy(true);
     try {
-      const raw = await callLlm(buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text, bookBrief: briefOk ? bookBrief : undefined }));
+      const messages = buildIterChatMessages({ workTitle: work.title, chapters: chapterRefs, history, userText: text, bookBrief: briefOk ? bookBrief : undefined });
+      const prefs = useSettingsStore.getState().llmPrefs;
+      await submitTask(slot, {
+        source: prefs.source,
+        model: prefs.model,
+        messages,
+        params: { max_tokens: 16000, temperature: prefs.temperature },
+        thinking: prefs.thinking !== false,
+        label: '大纲迭代',
+      });
+      appendTurns([{ role: 'assistant', content: '⏳ 已转后台生成——切出去干别的，回来自动继续。' }]);
+      scrollBottom();
+      const raw = await waitAndStore(slot);
       const parsed = parseIterReply(raw);
       const reply = parsed?.reply ?? raw; // 解析失败：原文当回复显示
       if (parsed?.chapterIndex != null) setLocked(parsed.chapterIndex);

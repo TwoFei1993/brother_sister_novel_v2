@@ -1,15 +1,18 @@
 /**
- * AI 生成剧本表单（共识 D5 来源①）：题材/基调/想法 → 流式生成 → 回填剧本文本框
+ * AI 生成剧本表单（共识 D5 来源①）：题材/基调/想法 → server 后台任务生成 → 回填
  *
- * 复用 generateStream（与 planner 同路径，客户端组 prompt）；生成完成由父级
- * saveScript 落库（source='ai'，confirmed 重置为 false 走定稿门）。
+ * 生成在 server 端后台执行（切出 App/锁屏后继续——手机端量大量场景核心保障）；
+ * 结果经 localStorage『v3-script-gen-result』落盘，由 ScriptPane mount 消费回填
+ * （原 promise 链死亡也不丢——结果落盘跨页面生命周期存活）。页面存活时保留
+ * 打印机式流式预览（反馈 #10），断连时自动降级为后台轮询。
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
 import { buildGenerateBody, generateStream } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import { buildScriptGenMessages } from '../lib/prompts/prompts-script';
+import { submitTask, waitAndStore, consumeResult, clearPending } from '../../../lib/llmTask';
 import type { DuanjuProject } from '@shared/duanju';
 
 interface Props {
@@ -20,6 +23,8 @@ interface Props {
 }
 
 const TONES = ['轻松日常', '热血爽感', '虐恋深情', '悬疑反转', '权谋博弈', '治愈温情'] as const;
+const RESULT_KEY = 'v3-script-gen-result';
+const SLOT = 'script-gen';
 
 export default function ScriptGenerateForm({ project, onClose, onGenerated }: Props) {
   const [idea, setIdea] = useState('');
@@ -30,14 +35,68 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  async function generate(): Promise<void> {
-    if (!idea.trim() || streaming) return;
+  const prefs = useSettingsStore((s) => s.llmPrefs);
+
+  function buildMessages() {
+    return buildScriptGenMessages({
+      genre: genreText.trim() || '自由发挥',
+      tone,
+      idea: idea.trim(),
+      protagonists: project.protagonists,
+      targetEpisodes: project.targetEpisodes,
+    });
+  }
+
+  /**
+   * 后台模式完成处理：结果落盘 → ScriptPane mount 消费回填（跨页面生命周期存活）。
+   * 本组件内直接回填一次（页面存活时立即生效，无需等 mount）。
+   */
+  function applyResult(text: string): void {
+    localStorage.setItem(RESULT_KEY, text);
+    onGenerated(text);
+    localStorage.removeItem(RESULT_KEY);
+  }
+
+  /** 主路径：server 后台任务（切出安全；server 端预算协商同语义空输出加倍） */
+  async function generateBg(): Promise<void> {
     setStreaming(true);
     setError(null);
     setBuffer('');
-    const prefs = useSettingsStore.getState().llmPrefs;
+    try {
+      await submitTask(SLOT, {
+        source: prefs.source,
+        model: prefs.model,
+        messages: buildScriptGenMessages({
+          genre: genreText.trim() || '自由发挥',
+          tone,
+          idea: idea.trim(),
+          protagonists: project.protagonists,
+          targetEpisodes: project.targetEpisodes,
+        }),
+        thinking: false,
+        params: { max_tokens: 32000 },
+        label: '剧本生成',
+      });
+      const text = await waitAndStore(SLOT, () => undefined);
+      if (text.trim()) {
+        applyResult(text);
+        onClose();
+      } else {
+        setError('模型无文本输出，请重试');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成失败，请重试');
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  /** 备选：前台流式（打印机式实时预览）——server 任务不可用时的降级路径 */
+  async function generateStream_(prefs: ReturnType<typeof useSettingsStore.getState>['llmPrefs']): Promise<void> {
+    setStreaming(true);
+    setError(null);
+    setBuffer('');
     const controller = new AbortController();
-    abortRef.current = controller;
     let acc = '';
     let done = false;
     try {
@@ -52,8 +111,6 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
             protagonists: project.protagonists,
             targetEpisodes: project.targetEpisodes,
           }),
-          // 剧本生成显式关思考 + 预算给足（整体测试实测：M3.1 流式缺省 4096 被端点侧思考吃光→text 空；
-          // 与 generateTextOnce 的 32000 下限同哲学，非流式同款已验证）
           thinking: false,
           maxTokens: 32000,
         }),
@@ -72,14 +129,12 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
         controller.signal,
       );
     } catch (err) {
-      // 用户主动停止（原生 AbortError）：静默——不算错误（R4-3 实测抓出英文技术文案外泄）
       const isAbort = err instanceof DOMException && err.name === 'AbortError';
       if (!done && !isAbort) {
         setError(err instanceof Error ? err.message : '生成失败，请重试');
       }
     } finally {
       setStreaming(false);
-      abortRef.current = null;
     }
   }
 
@@ -183,7 +238,7 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
               </button>
               <button
                 type="button"
-                onClick={() => void generate()}
+                onClick={() => void generateBg()}
                 disabled={!idea.trim()}
                 className="h-11 flex-1 rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
                 data-testid="script-gen-start"
