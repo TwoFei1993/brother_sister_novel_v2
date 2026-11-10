@@ -78,6 +78,47 @@ describe('routeParagraphs 说话人路由', () => {
   });
 });
 
+describe('段尾说话人标记（自然小说文风，音色不生效修复）', () => {
+  it('「“对白。”小明说道。」→ 提取小明归角色声', () => {
+    const out = routeParagraphs('“站住。”小明说道。', { 小明: 'yunjian' }, [], 'xiaoxiao');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ voice: 'yunjian', speaker: '小明' });
+    expect(out[0].text).toBe('“站住。”小明说道。'); // 整段送 TTS 不截断
+  });
+
+  it('修饰词+地+动词变体（淡淡地说道/轻声问道）与段尾长尾巴均命中', () => {
+    const vm = { 小明: 'yunjian', 妹妹: 'xiaobei' };
+    const a = routeParagraphs('“别走。”小明淡淡地说道，随即转身离开。', vm, [], 'xiaoxiao');
+    expect(a[0]).toMatchObject({ voice: 'yunjian', speaker: '小明' });
+    const b = routeParagraphs('“你去哪？”妹妹轻声问道。', vm, [], 'xiaoxiao');
+    expect(b[0]).toMatchObject({ voice: 'xiaobei', speaker: '妹妹' });
+    const c = routeParagraphs('“嗯。”小明说着穿好鞋。', vm, [], 'xiaoxiao');
+    expect(c[0]).toMatchObject({ voice: 'yunjian', speaker: '小明' });
+  });
+
+  it('代词/群体标记（她说/众人喊道）不命中 voiceMap → 保持旁白', () => {
+    const out = routeParagraphs('“好。”她说道。', { 小明: 'yunjian' }, [], 'xiaoxiao');
+    expect(out[0]).toMatchObject({ voice: 'xiaoxiao', speaker: 'narrator' });
+  });
+
+  it('纯叙述段不受段尾标记误伤（动词离段尾远/无引号）', () => {
+    const out = routeParagraphs('他说话很温柔，让人如沐春风。', { 小明: 'yunjian' }, [], 'xiaoxiao');
+    expect(out[0]).toMatchObject({ voice: 'xiaoxiao', speaker: 'narrator' });
+  });
+
+  it('段尾标记命中后更新 lastSpeaker：后续无标记引号段延续该角色', () => {
+    const text = '“站住。”小明说道。\n“凭什么？”';
+    const out = routeParagraphs(text, { 小明: 'yunjian' }, [], 'xiaoxiao');
+    expect(out).toHaveLength(2);
+    expect(out[1]).toMatchObject({ voice: 'yunjian', speaker: '小明' });
+  });
+
+  it('直角引号「」同样识别段尾标记', () => {
+    const out = routeParagraphs('「站住。」崔氏笑道。', { 崔氏: 'xiaobei' }, [], 'xiaoxiao');
+    expect(out[0]).toMatchObject({ voice: 'xiaobei', speaker: '崔氏' });
+  });
+});
+
 describe('VOICES 与工具', () => {
   it('Edge 免费声全量 18 声（9 女 9 男），含 easyvoice 底层名', () => {
     expect(VOICES).toHaveLength(18);

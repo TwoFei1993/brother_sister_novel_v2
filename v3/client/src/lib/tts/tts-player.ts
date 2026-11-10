@@ -120,6 +120,30 @@ async function synthWithRetry(text: string, castId: string, speed: number, alive
   return null;
 }
 
+// ---------- 预取缓存（用户反馈：读书衔接太慢——读第 i 段时第 i+1 段已在后台合成） ----------
+
+const prefetch = new Map<number, Promise<string | null>>();
+
+/** 丢弃未消费的预取结果（blob URL 落定即 revoke，防内存泄漏；远程 URL 不需要） */
+function dropPrefetch(i: number): void {
+  const p = prefetch.get(i);
+  if (!p) return;
+  prefetch.delete(i);
+  void p
+    .then((u) => {
+      if (u && u.startsWith('blob:')) URL.revokeObjectURL(u);
+    })
+    .catch(() => undefined);
+}
+
+function clearPrefetch(): void {
+  for (const i of [...prefetch.keys()]) dropPrefetch(i);
+}
+
+function revokeIfBlob(url: string | null): void {
+  if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+}
+
 let audioRef: { current: HTMLAudioElement | null } = { current: null };
 let token = 0;
 let currentBook: PlayerBook | null = null;
@@ -158,6 +182,7 @@ function runLoop(fromIdx: number): void {
   const alive = (): boolean => aliveOf(my);
   if (!currentBook) return;
   audioRef.current?.pause();
+  clearPrefetch(); // seek/倍速/换书旧预取全部作废
   routed = routeMobileParas(currentBook.paras, currentBook.voiceMap);
   set({ idx: fromIdx, playing: true, paraCount: currentBook.paras.length });
   void (async () => {
@@ -165,8 +190,19 @@ function runLoop(fromIdx: number): void {
     for (let i = Math.max(0, fromIdx); i < routed.length; i += 1) {
       if (!alive()) return;
       set({ idx: i, playing: true });
-      const url = await synthWithRetry(routed[i]!.text, routed[i]!.voice, state.speed, alive);
-      if (!alive()) return;
+      // 当前段：命中预取直接用（合成早已在跑），未命中现合成
+      const pending = prefetch.get(i) ?? synthWithRetry(routed[i]!.text, routed[i]!.voice, state.speed, alive);
+      prefetch.delete(i);
+      // 预取下一段：播放当前段（通常 5-20s）的时间足够后台合成完成 → 无缝衔接
+      const nxt = routed[i + 1];
+      if (nxt && !prefetch.has(i + 1)) {
+        prefetch.set(i + 1, synthWithRetry(nxt.text, nxt.voice, state.speed, alive));
+      }
+      const url = await pending;
+      if (!alive()) {
+        revokeIfBlob(url);
+        return;
+      }
       if (!url) {
         consecutiveFailures += 1;
         notifyError(`第 ${i + 1} 段合成失败，已跳过`);
@@ -180,11 +216,12 @@ function runLoop(fromIdx: number): void {
       consecutiveFailures = 0;
       try {
         await playUrl(url);
-        if (!alive()) return;
       } catch {
-        if (!alive()) return;
-        notifyError(`第 ${i + 1} 段播放失败，已跳过`);
+        if (alive()) notifyError(`第 ${i + 1} 段播放失败，已跳过`);
+      } finally {
+        revokeIfBlob(url); // 播完/跳过都释放本段 blob（Edge 引擎是远程 URL，自动跳过）
       }
+      if (!alive()) return;
     }
     if (alive()) {
       // 整本播完：清空悬浮窗（与番茄一致，播完即收）
@@ -211,6 +248,7 @@ export function playerStart(book: PlayerBook, fromIdx = 0): void {
 export function playerStop(): void {
   token += 1;
   audioRef.current?.pause();
+  clearPrefetch();
   currentBook = null;
   set({ bookId: null, idx: -1, playing: false });
 }

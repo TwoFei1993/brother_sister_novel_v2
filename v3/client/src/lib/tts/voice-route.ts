@@ -260,6 +260,21 @@ function resolveVoice(name: string, voiceBy: Record<string, string>): string | u
   return stem !== name && stem.length >= 2 ? voiceBy[stem] : undefined;
 }
 
+/**
+ * 段中/段尾说话人标记（自然小说文风「“……”小明淡淡地说道，转身离开。」）：
+ * 取段中最后一个「名字 + (修饰词)?地? + 说话动词」，动词后允许 ≤10 个非引号尾随字符。
+ * 名字组不含引号与标点（「，说道」前是逗号则该处不匹配——叙述句「他说话很温柔」因动词离段尾远而不命中）。
+ */
+const TAIL_SPEAKER =
+  /([^“”「」『』，。！？；、：\n]{1,12}?)(?:点点头?|摇了摇头|摇头|耸耸肩|眨眨眼|顿了顿|低声|大声|连忙|急忙|轻声|沉声|冷冷|淡淡|微微|小声|高声|突然|随即|笑着|激动|开心|不好意思|认真地)?地?(?:说道|说|笑道|喊道|问道|答道|叹道|吩咐|念叨|嘟囔|嘀咕|开口道|开口|急道|劝道|沉道|冷道|喝道|回答|追问|反问|又道|再道)(?=[^“”「」『』\n]{0,10}$)/g;
+
+/** 段中最后一个说话人标记的名字（无标记返回 null） */
+function lastTailSpeaker(para: string): string | null {
+  let last: string | null = null;
+  for (const m of para.matchAll(TAIL_SPEAKER)) last = m[1]!;
+  return last;
+}
+
 export function routeParagraphs(
   text: string,
   voiceMap: Record<string, string>,
@@ -279,6 +294,15 @@ export function routeParagraphs(
       const name = matched[1];
       lastSpeaker = name;
       out.push({ text: para, voice: resolveVoice(name, voiceBy) ?? defaultVoice, speaker: name });
+      continue;
+    }
+    // 自然小说文风的段尾说话人标记（「“……”小明说道。」）：提取归属，命中 voiceMap 才用角色声
+    // （未命中如「她说」「众人喊道」保持旁白——代词/群体不误配到具体音色）
+    const tailName = para.includes('“') || para.includes('「') ? lastTailSpeaker(para) : null;
+    const tailVoice = tailName ? resolveVoice(tailName, voiceBy) : undefined;
+    if (tailName && tailVoice !== undefined) {
+      lastSpeaker = tailName;
+      out.push({ text: para, voice: tailVoice, speaker: tailName });
     } else if (lastSpeaker !== null && QUOTE_OPENERS.some((q) => para.startsWith(q))) {
       // 无前缀引号对白：归属前文最近说话人
       out.push({

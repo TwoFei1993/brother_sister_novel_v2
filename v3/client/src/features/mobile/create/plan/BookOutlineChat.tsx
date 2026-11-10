@@ -5,10 +5,10 @@
  * - 「🗂 历史」抽屉：每次应用的版本快照可回滚（改错了能找回之前的所有版本）
  * - 上下文持久化（localStorage 按 workId），离开页面再回来聊天记录不丢
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CircleHelp, History, MessageSquarePlus, Sparkles, Wand2 } from 'lucide-react';
 
-import { generateTextOnce } from '../../../../api/llm';
+import { submitTask, waitAndStore, taskPending, peekResult, consumeResult } from '../../../../lib/llmTask';
 import { useSettingsStore } from '../../../../stores/settings';
 import type { Work } from '@shared/work';
 
@@ -54,6 +54,69 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
   const history = useMemo(() => loadHistory(work.id), [work.id, appliedMsg]);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // —— 后台任务（切出 App 继续生成）：策划对话在 server 执行，回来消费结果 ——
+  const slot = `book-outline-${work.id}`;
+  /** 最新会话镜像（异步回调防闭包旧值） */
+  const latestRef = useRef({ turns, proposal });
+  latestRef.current = { turns, proposal };
+  /** 本轮回复是否待应用（防多轮询链解冻后重复消费同一条回复） */
+  const applyGuardRef = useRef(false);
+  /** 等待中的用户输入（失败回滚重填草稿） */
+  const lastSentRef = useRef('');
+
+  /** 应用 AI 回复（防重入；由轮询链/恢复路径调用） */
+  function applyReplyOnce(raw: string): void {
+    if (!applyGuardRef.current) return;
+    applyGuardRef.current = false;
+    const prev = latestRef.current;
+    const parsed = parsePlannerReply(strip(raw));
+    if (!parsed) {
+      commit({ turns: [...prev.turns, { role: 'assistant' as const, text: strip(raw) || '（空回复）' }], proposal: prev.proposal });
+    } else {
+      const aiTurn: BookTurn = { role: 'assistant' as const, text: parsed.reply, questions: parsed.questions };
+      commit({ turns: [...prev.turns, aiTurn], proposal: parsed.proposal ?? prev.proposal });
+    }
+    scrollBottom();
+  }
+
+  /** 轮询链（页面冻结断点安全：server 任务继续跑，切回时 resume 重启） */
+  function resumeOutlineTask(): void {
+    if (!taskPending(slot)) return;
+    setBusy(true);
+    void waitAndStore(slot)
+      .then((raw) => applyReplyOnce(raw))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : '请求失败，请重试');
+        // 失败回滚（巡检语义）：撤掉等待中的用户轮，草稿还原
+        const prev = latestRef.current;
+        commit({ turns: prev.turns.slice(0, -1), proposal: prev.proposal });
+        setInput(lastSentRef.current);
+        scrollBottom();
+      })
+      .finally(() => setBusy(false));
+  }
+
+  // mount / 切回可见：消费已完成结果（上次切出期间完成的）+ 续跑 pending 轮询
+  useEffect(() => {
+    const done = consumeResult(slot);
+    if (done !== null) {
+      applyGuardRef.current = true; // 首次恢复强制应用（guard 初始 false 会拦）
+      applyReplyOnce(done);
+    } else {
+      applyGuardRef.current = peekResult(slot) !== null || taskPending(slot);
+    }
+    resumeOutlineTask();
+    const onVis = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      const d = consumeResult(slot);
+      if (d !== null) applyReplyOnce(d);
+      else resumeOutlineTask();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [work.id]);
+
   function scrollBottom(): void {
     requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }));
   }
@@ -83,40 +146,31 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
     setError(null);
     const history = [...turns, { role: 'user' as const, text }];
     commit({ turns: history, proposal });
-    setBusy(true);
     scrollBottom();
+    // 提交后台任务（切出 App 生成继续）：server 执行 + 轮询，锁屏/切后台安全
     try {
-      // 输出预算按思考开关给足：推理模型思考流与 JSON 输出共用 max_tokens（实测思考可烧 12000+），
-      // 旧值 10000 被思考吃光 → 「模型无输出」；32000 起步、generateTextOnce 空输出自动 ×2 重试
-      const raw = await generateTextOnce(
-        {
-          source: prefs.source,
-          model: prefs.model,
-          messages: bookPlannerMessages(system, history, text, proposal),
+      await submitTask(slot, {
+        source: prefs.source,
+        model: prefs.model,
+        messages: bookPlannerMessages(system, history, text, proposal),
+        params: {
+          max_tokens: prefs.thinking !== false ? 32000 : 16000,
           temperature: 0.8,
-          maxTokens: prefs.thinking !== false ? 32000 : 16000,
-          thinking: prefs.thinking !== false,
         },
-        prefs.thinking !== false ? 32000 : 16000,
-      );
-      const parsed = parsePlannerReply(strip(raw));
-      if (!parsed) {
-        commit({ turns: [...history, { role: 'assistant' as const, text: strip(raw) || '（空回复）' }], proposal });
-      } else {
-        const aiTurn: BookTurn = { role: 'assistant' as const, text: parsed.reply, questions: parsed.questions };
-        commit({ turns: [...history, aiTurn], proposal: parsed.proposal ?? proposal });
-      }
-      scrollBottom();
+        thinking: prefs.thinking !== false,
+        label: '书籍策划',
+      });
     } catch (err) {
-      // 失败回滚（巡检语义）：错误不写进持久会话（旧实现错误气泡永久留档且无重试入口，
-      // 用户只能重发导致重复消息）；恢复到发送前状态 + 输入框还原草稿 + 临时错误条提示
+      // 提交失败回滚（巡检语义）：恢复到发送前状态 + 草稿还原 + 临时错误条
       commit({ turns, proposal });
       setInput(text);
       setError(err instanceof Error ? err.message : '请求失败，请重试');
       scrollBottom();
-    } finally {
-      setBusy(false);
+      return;
     }
+    applyGuardRef.current = true;
+    lastSentRef.current = text;
+    resumeOutlineTask();
   }
 
   /** 🆕 新对话：当前会话有实质内容则先存档（可恢复），再开空白会话（策划案一并清空） */
