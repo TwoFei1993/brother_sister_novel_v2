@@ -117,6 +117,25 @@ describe('段尾说话人标记（自然小说文风，音色不生效修复）'
     const out = routeParagraphs('「站住。」崔氏笑道。', { 崔氏: 'xiaobei' }, [], 'xiaoxiao');
     expect(out[0]).toMatchObject({ voice: 'xiaobei', speaker: '崔氏' });
   });
+
+  it('动作/状态前缀段（真实数据主流形态）→ 最长前缀收缩命中角色声', () => {
+    // 「苏棠的声音发颤：」——段首名字+动作+冒号，名字查表 miss，前缀收缩到「苏棠」
+    const out = routeParagraphs('苏棠的声音发颤：“你们想要什么？”', { 苏棠: 'xiaobei' }, [], 'xiaoxiao');
+    expect(out[0]).toMatchObject({ voice: 'xiaobei', speaker: '苏棠' });
+    expect(out[0].text).toBe('苏棠的声音发颤：“你们想要什么？”');
+  });
+
+  it('speaker 收缩干净：裁尾命中的段首名（「老人说」）speaker 归「老人」', () => {
+    // voiceMap 无「老人说」→ 后续引号延续段经 routeMobileParas vm[lastSpeaker] 直查才不 miss
+    const out = routeParagraphs('老人说：“跟我来。”\n“去哪？”', { 老人: 'yunjian' }, [], 'xiaoxiao');
+    expect(out[0]).toMatchObject({ voice: 'yunjian', speaker: '老人' });
+    expect(out[1]).toMatchObject({ voice: 'yunjian', speaker: '老人' });
+  });
+
+  it('无角色命中的引导段（「纸上只写了一句话：」）落旁白且不误配', () => {
+    const out = routeParagraphs('纸上只写了一句话：“出去。”', { 苏棠: 'xiaobei' }, [], 'xiaoxiao');
+    expect(out[0]).toMatchObject({ voice: 'xiaoxiao', speaker: '纸上只写了一句话' });
+  });
 });
 
 describe('VOICES 与工具', () => {

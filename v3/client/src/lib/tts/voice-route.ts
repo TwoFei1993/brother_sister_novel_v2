@@ -275,6 +275,25 @@ function lastTailSpeaker(para: string): string | null {
   return last;
 }
 
+/**
+ * 配音表最长前缀匹配（段尾提取名的动作尾巴收缩）：
+ * 「苏棠的声音发颤」这类带状态描述的名字精确查表 miss 时，按最长 key 前缀收缩
+ * （「苏棠的声音发颤」→「苏棠」命中）。只用于段尾路径；speaker 标注用收缩后的
+ * 配音表 key，保证后续无标记引号段的 lastSpeaker 延续同样正确。
+ */
+function resolveVoiceByPrefix(
+  name: string,
+  voiceBy: Record<string, string>,
+): { key: string; voice: string } | null {
+  let best: { key: string; voice: string } | null = null;
+  for (const [key, voice] of Object.entries(voiceBy)) {
+    if (key !== NARRATOR_VOICE_KEY && name.startsWith(key) && (!best || key.length > best.key.length)) {
+      best = { key, voice };
+    }
+  }
+  return best;
+}
+
 export function routeParagraphs(
   text: string,
   voiceMap: Record<string, string>,
@@ -292,17 +311,45 @@ export function routeParagraphs(
     const matched = NAME_PREFIX.exec(para);
     if (matched) {
       const name = matched[1];
-      lastSpeaker = name;
-      out.push({ text: para, voice: resolveVoice(name, voiceBy) ?? defaultVoice, speaker: name });
+      let voice = resolveVoice(name, voiceBy);
+      let speaker = name;
+      if (voice === undefined) {
+        // 带动作/状态前缀段（「苏棠的声音发颤：」）→ 最长前缀收缩到配音表 key
+        const viaPrefix = resolveVoiceByPrefix(name, voiceBy);
+        if (viaPrefix) {
+          voice = viaPrefix.voice;
+          speaker = viaPrefix.key;
+        }
+      } else {
+        // speaker 收缩到配音表真实 key（「老人说」裁尾命中「老人」）——
+        // 保证 routeMobileParas 的 carried 延续（vm[lastSpeaker] 直查）不 miss
+        const stem = name.replace(SPEECH_TAIL, '');
+        if (stem !== name && voiceBy[stem] === voice) speaker = stem;
+      }
+      lastSpeaker = speaker;
+      out.push({ text: para, voice: voice ?? defaultVoice, speaker });
       continue;
     }
     // 自然小说文风的段尾说话人标记（「“……”小明说道。」）：提取归属，命中 voiceMap 才用角色声
     // （未命中如「她说」「众人喊道」保持旁白——代词/群体不误配到具体音色）
     const tailName = para.includes('“') || para.includes('「') ? lastTailSpeaker(para) : null;
-    const tailVoice = tailName ? resolveVoice(tailName, voiceBy) : undefined;
-    if (tailName && tailVoice !== undefined) {
-      lastSpeaker = tailName;
-      out.push({ text: para, voice: tailVoice, speaker: tailName });
+    let tailVoice = tailName ? resolveVoice(tailName, voiceBy) : undefined;
+    let tailSpeaker = tailName;
+    if (tailName && tailVoice === undefined) {
+      // 带动作/状态尾巴（「苏棠的声音发颤」）→ 最长前缀收缩到配音表 key
+      const viaPrefix = tailName ? resolveVoiceByPrefix(tailName, voiceBy) : null;
+      if (viaPrefix) {
+        tailVoice = viaPrefix.voice;
+        tailSpeaker = viaPrefix.key;
+      }
+    } else if (tailName && tailVoice !== undefined && tailName) {
+      // speaker 收缩到配音表真实 key（同段首分支，保证 carried 直查命中）
+      const stem = tailName.replace(SPEECH_TAIL, '');
+      if (stem !== tailName && voiceBy[stem] === tailVoice) tailSpeaker = stem;
+    }
+    if (tailName && tailVoice !== undefined && tailSpeaker) {
+      lastSpeaker = tailSpeaker;
+      out.push({ text: para, voice: tailVoice, speaker: tailSpeaker });
     } else if (lastSpeaker !== null && QUOTE_OPENERS.some((q) => para.startsWith(q))) {
       // 无前缀引号对白：归属前文最近说话人
       out.push({

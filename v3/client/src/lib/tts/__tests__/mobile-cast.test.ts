@@ -82,7 +82,8 @@ describe('routeMobileParas 段落说话人路由', () => {
 
   it('routeParagraphs：带叙述尾巴的名字裁尾命中 voiceMap（崔氏笑道→崔氏）', () => {
     const out = routeParagraphs('崔氏笑道：好孩子。\n崔氏：来。', { 崔氏: 'mm:female-yujie' }, [], 'narrator');
-    expect(out[0]).toMatchObject({ speaker: '崔氏笑道', voice: 'mm:female-yujie' });
+    // speaker 收缩到配音表真实 key（音色不生效修复：保证 carried 延续段 vm[lastSpeaker] 直查命中）
+    expect(out[0]).toMatchObject({ speaker: '崔氏', voice: 'mm:female-yujie' });
     expect(out[1]).toMatchObject({ speaker: '崔氏', voice: 'mm:female-yujie' });
   });
 });
