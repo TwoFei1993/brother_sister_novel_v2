@@ -50,6 +50,8 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
   const failed = entries.filter(([, s]) => s.status === 'fail').length;
   const total = entries.length;
   const finished = total > 0 && done + failed >= total;
+  /** 费用/耗时文案随通道：本地 ComfyUI 免费，云端按 0.2 元/张估算 */
+  const isComfy = (useSettingsStore.getState().llmPrefs.imageProvider ?? 'minimax') === 'comfy';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4">
@@ -75,7 +77,9 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
             <p>
               将生成 <strong className="text-[hsl(var(--accent))]">{tasks.length}</strong> 帧
               <span className="text-xs text-[hsl(var(--fg-muted))]">
-                （每张约 0.2 元 · 15-30 秒，并发 2 排队；约 {(tasks.length * 0.2).toFixed(0)} 元）
+                {isComfy
+                  ? '（本地免费 · 秒级出图，并发 2 排队）'
+                  : `（每张约 0.2 元 · 15-30 秒，并发 2 排队；约 ${(tasks.length * 0.2).toFixed(0)} 元）`}
               </span>
             </p>
             <p className="text-xs leading-5 text-[hsl(var(--fg-muted))]">
