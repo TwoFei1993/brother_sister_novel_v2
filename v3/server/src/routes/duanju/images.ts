@@ -75,13 +75,14 @@ function appendSpend(project: DuanjuProject, kind: SpendEntry['kind'], refId: st
   project.spendLog = [...(project.spendLog ?? []), entry].slice(-5000);
 }
 
-/** 持锁落图：character/scene 追加；shot 替换 gridImage（旧模式）；frame 挂/换帧 + rolls+1 */
+/** 持锁落图：character/scene 追加；shot 替换 gridImage（旧模式）；frame 挂/换帧 + rolls+1。spendNote 覆盖记账备注（本地免费图标注豁免成本估算） */
 async function attachImage(
   id: string,
   kind: 'character' | 'scene' | 'shot' | 'frame',
   refId: string,
   image: StoredImage,
   frameIndex?: number,
+  spendNote?: string,
 ): Promise<DuanjuProject> {
   return withWorkLock(id, async () => {
     const project = await readJson<DuanjuProject>(duanjuFile(id));
@@ -115,7 +116,7 @@ async function attachImage(
       snapshotBuiltFrom(project, shot);
       shot.updatedAt = now;
     }
-    appendSpend(project, kind, refId, frameIndex ? `frame-${frameIndex}` : undefined);
+    appendSpend(project, kind, refId, spendNote ?? (frameIndex ? `frame-${frameIndex}` : undefined));
     project.updatedAt = now;
     // 与 project PATCH 语义同步 +1，保证客户端拿最新态
     project.revision += 1;
@@ -258,13 +259,20 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const id = req.params.id;
     assertSafeId(id);
     const file = req.file;
-    const kind = String(req.body?.kind ?? '') as 'character' | 'scene';
+    const kind = String(req.body?.kind ?? '') as 'character' | 'scene' | 'frame';
     const refId = String(req.body?.refId ?? '');
+    const source = String(req.body?.source ?? '');
+    const prompt = String(req.body?.prompt ?? '') || '(外部生图上传)';
+    const frameIndexRaw = Number(req.body?.frameIndex ?? 0);
+    const frameIndex = Number.isInteger(frameIndexRaw) && frameIndexRaw >= 1 && frameIndexRaw <= 4 ? frameIndexRaw : undefined;
     if (!file) throw new HttpError(400, '请上传图片文件（multipart 字段 file + kind + refId）');
     const ext = IMAGE_MIME[file.mimetype];
     if (!ext) throw new HttpError(400, `不支持的图片类型 ${file.mimetype}（支持 png/jpg/webp）`);
     if (file.size < 1024) throw new HttpError(400, '图片内容异常（过小）');
-    if (kind !== 'character' && kind !== 'scene') throw new HttpError(400, 'kind 须为 character 或 scene');
+    if (kind !== 'character' && kind !== 'scene' && kind !== 'frame') {
+      throw new HttpError(400, 'kind 须为 character / scene / frame');
+    }
+    if (kind === 'frame' && !frameIndex) throw new HttpError(400, 'kind=frame 时 frameIndex 必填（1-4）');
 
     const dir = workImagesDir(id);
     await mkdir(dir, { recursive: true });
@@ -273,10 +281,12 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const image: StoredImage = {
       id: `img-${randomUUID().slice(0, 8)}`,
       path: `duanju/images/${name}`,
-      prompt: '(外部生图上传)',
+      prompt,
       createdAt: Date.now(),
     };
-    const project = await attachImage(id, kind, refId, image);
+    // source=comfy（本地免费生图）→ 记账备注标注「本地免费」，成本仪表盘豁免估算
+    const spendNote = source === 'comfy' ? `本地免费${frameIndex ? ` frame-${frameIndex}` : ''}` : undefined;
+    const project = await attachImage(id, kind, refId, image, frameIndex, spendNote);
     res.status(201).json({ image, project });
   } catch (err) {
     next(err);

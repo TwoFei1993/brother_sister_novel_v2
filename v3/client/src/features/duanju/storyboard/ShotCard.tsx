@@ -105,7 +105,7 @@ export default function ShotCard({ workId, shot }: Props) {
 
   return (
     <div className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]/60 p-3 sm:p-4" data-testid="duanju-shot-card">
-      <div className="flex flex-col gap-4 sm:flex-row">
+      <div className="flex flex-col gap-5 sm:flex-row sm:gap-6">
         {/* 左列：帧区 + 工具组 */}
         <div className="w-full shrink-0 sm:w-60">
           <div className="relative">
@@ -136,8 +136,8 @@ export default function ShotCard({ workId, shot }: Props) {
           </div>
         </div>
 
-        {/* 右列：字段组 */}
-        <div className="min-w-0 flex-1">
+        {/* 右列：字段组（细竖线与帧区分栏，贴合 border-soft 设计语言） */}
+        <div className="min-w-0 flex-1 sm:border-l sm:border-[hsl(var(--border-soft))] sm:pl-5">
           {/* 头部：序号章 + 规格字段 */}
           <div className="flex flex-wrap items-end gap-x-2 gap-y-2">
             <span

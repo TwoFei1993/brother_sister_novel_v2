@@ -199,13 +199,13 @@ export default function ScenesPane({ workId }: { workId: string }) {
               aria-label="场景描述"
             />
             {scene.images.length > 0 && (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {scene.images.map((img) => (
                   <img
                     key={img.id}
                     src={duanjuFileUrl(workId, img.path)}
                     alt={`${scene.name} 概念图`}
-                    className="aspect-video w-full rounded-lg border border-[hsl(var(--border-soft))] object-cover"
+                    className="aspect-[7/4] w-full rounded-lg border border-[hsl(var(--border-soft))] object-contain"
                   />
                 ))}
               </div>

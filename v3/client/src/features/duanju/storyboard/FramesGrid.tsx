@@ -27,6 +27,13 @@ export default function FramesGrid({ workId, shot, project }: Props) {
   const [error, setError] = useState<string | null>(null);
   const frames = shot.frames ?? [];
   const missing = missingFrames(shot);
+  /** 按钮价格文案：本地 ComfyUI 免费标注，云端按 0.2 元/张估算 */
+  const priceLabel = (n: number): string => {
+    const provider = useSettingsStore.getState().llmPrefs.imageProvider ?? 'minimax';
+    return provider === 'comfy'
+      ? `生成 ${n} 帧（本地免费）`
+      : `生成 ${n} 帧（约 ${(n * 0.2).toFixed(1)} 元）`;
+  };
 
   /** 生成/重roll 单帧；成功返回 true（补帧串行时用返回值判断是否继续） */
   async function generateFrame(frameIndex: number): Promise<boolean> {
@@ -149,9 +156,7 @@ export default function FramesGrid({ workId, shot, project }: Props) {
             <Grid2X2 className="h-3.5 w-3.5" aria-hidden />
             {busy !== null
               ? '生成中…'
-              : frames.length === 0
-                ? `生成 4 帧（约 ${(4 * 0.2).toFixed(1)} 元）`
-                : `补 ${missing.length} 帧（约 ${(missing.length * 0.2).toFixed(1)} 元）`}
+              : priceLabel(frames.length === 0 ? 4 : missing.length)}
           </button>
         )}
         {frames.length === 4 && (

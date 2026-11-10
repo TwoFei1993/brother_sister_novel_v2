@@ -47,7 +47,7 @@ export default function CharacterCard({ workId, character }: Props) {
         kind: 'character',
         refId: character.id,
         prompt,
-        aspectRatio: '3:4',
+        aspectRatio: '3:2',
         provider: useSettingsStore.getState().llmPrefs.imageProvider,
       });
       // server 已把 project 随响应更新——拉最新
@@ -102,7 +102,7 @@ export default function CharacterCard({ workId, character }: Props) {
           data-testid="char-gen-sheet"
         >
           <ImageIcon className="h-3.5 w-3.5" aria-hidden />
-          {generating ? '生成中 15-30s…' : character.sheetImages.length ? '再生成一张' : '生成设定图'}
+          {generating ? '生成中…' : character.sheetImages.length ? '再生成一张' : '✨ 生成设定图'}
         </button>
         <button
           type="button"
@@ -139,40 +139,25 @@ export default function CharacterCard({ workId, character }: Props) {
         hidden
         onChange={(e) => void onSheetPicked(e)}
       />
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <a
-          href="https://www.doubao.com/chat/"
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => {
-            void navigator.clipboard
-              .writeText(characterSheetPrompt(project?.style ?? '动漫风', character.name, character.profile))
-              .catch(() => undefined);
-          }}
-          title="已复制设定图提示词——豆包免费生图后点右侧上传回流"
-          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))]"
-          data-testid="char-doubao"
-        >
-          🫘 豆包生图（免费）
-        </a>
+      <div className="mt-2">
         <button
           type="button"
           onClick={() => sheetFileRef.current?.click()}
           disabled={generating}
-          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] disabled:opacity-40"
+          className="flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] disabled:opacity-40"
           data-testid="char-upload-sheet"
         >
-          ⬆ 上传回流
+          ⬆ 上传回流（外部生图归档）
         </button>
       </div>
 
       {character.sheetImages.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="char-sheets">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3" data-testid="char-sheets">
           {character.sheetImages.map((img) => {
             const isRef = character.refImageId === img.id;
             return (
               <div key={img.id} className="relative overflow-hidden rounded-lg border border-[hsl(var(--border-soft))]">
-                <img src={duanjuFileUrl(workId, img.path)} alt={`${character.name} 设定图`} className="aspect-[3/4] w-full object-cover" />
+                <img src={duanjuFileUrl(workId, img.path)} alt={`${character.name} 设定图`} className="aspect-[3/2] w-full object-contain" />
                 <button
                   type="button"
                   onClick={() => void save({ refImageId: isRef ? null : img.id })}

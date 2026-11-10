@@ -1,31 +1,42 @@
 /**
- * 本地 ComfyUI 视频生成客户端（第四通道：本地交付，零 API 成本）
+ * 本地 ComfyUI 客户端（视频 + 生图共用，浏览器直连：局域网/Tailscale/frp 地址）
  *
- * 架构：浏览器直连 ComfyUI（局域网/Tailscale/frp 穿透地址），视频不经过云端 server；
- * 生成完成后经既有 uploadDuanjuVideo 归档（自动回流入镜头卡）。
+ * 架构：浏览器直连 ComfyUI，产物不经过云端 server；生成完成后经既有回流端点归档
+ * （视频 uploadDuanjuVideo / 图片 uploadDuanjuImageFile），自动回流入镜头卡/设定图。
  *
- * 工作流约定（设置页粘贴 API 格式 workflow，占位符注入）：
- *   "<<FRAME>>"  → 图片节点的 image 值（上传分帧图后的 ComfyUI 文件名）
- *   "<<PROMPT>>" → 文本节点的 text 值（镜头视频提示词）
+ * 工作流约定（设置页粘贴 API 格式 workflow，提交前全文占位符替换）：
+ *   视频 "<<FRAME>>"=分帧图文件名 "<<PROMPT>>"=镜头提示词
+ *   生图 "<<PROMPT>>"/"<<WIDTH>>"/"<<HEIGHT>>"/"<<SEED>>"（空模板=用内置 Z-Image-Turbo 默认）
  */
+import { Z_IMAGE_TURBO_DEFAULT_WORKFLOW } from './comfyDefaultWorkflow';
 
 const CFG_KEY = 'v3-comfyui-config';
 
 export interface ComfyuiConfig {
   /** ComfyUI 基地址（如 http://192.168.1.10:8188） */
   url: string;
-  /** API 格式 workflow JSON（占位符 <<FRAME>> / <<PROMPT>>） */
-  workflow: string;
+  /** API 格式图生视频 workflow（占位符 <<FRAME>> / <<PROMPT>>） */
+  videoWorkflow: string;
+  /** API 格式文生图 workflow（占位符 <<PROMPT>>/<<WIDTH>>/<<HEIGHT>>/<<SEED>>；空 = 内置默认） */
+  imageWorkflow: string;
 }
 
 export function loadComfyConfig(): ComfyuiConfig {
   try {
     const raw = localStorage.getItem(CFG_KEY);
-    if (raw) return JSON.parse(raw) as ComfyuiConfig;
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ComfyuiConfig> & { workflow?: string };
+      // 迁移：旧结构 {url, workflow} → {url, videoWorkflow, imageWorkflow}
+      return {
+        url: typeof parsed.url === 'string' ? parsed.url : '',
+        videoWorkflow: typeof parsed.videoWorkflow === 'string' ? parsed.videoWorkflow : (parsed.workflow ?? ''),
+        imageWorkflow: typeof parsed.imageWorkflow === 'string' ? parsed.imageWorkflow : '',
+      };
+    }
   } catch {
     /* 损坏即重置 */
   }
-  return { url: '', workflow: '' };
+  return { url: '', videoWorkflow: '', imageWorkflow: '' };
 }
 
 export function saveComfyConfig(cfg: ComfyuiConfig): void {
@@ -42,21 +53,129 @@ export async function pingComfy(url: string): Promise<{ ok: boolean; detail?: st
   }
 }
 
+/** 生图实际生效的 workflow 文本（用户自定义优先，空则内置默认） */
+export function effectiveImageWorkflow(cfg: ComfyuiConfig): string {
+  return cfg.imageWorkflow.trim() || Z_IMAGE_TURBO_DEFAULT_WORKFLOW;
+}
+
 export interface VideoGenProgress {
   phase: 'uploading' | 'queued' | 'generating' | 'downloading' | 'done';
   elapsedSec: number;
 }
 
-/** 上传分帧图 → ComfyUI，返回 {image文件名} */
-async function uploadFrame(url: string, frameBlob: Blob): Promise<string> {
+/** 网络层人话报错：引擎离线/地址错误时给可执行的指引（原始 Failed to fetch 对用户无意义） */
+function netErr(err: unknown): Error {
+  if (err instanceof Error && err.name === 'TimeoutError') return new Error('本地引擎响应超时——请稍重试或确认引擎负载');
+  return new Error('无法连接本地引擎——请确认已启动（scripts/comfy-start.sh）且设置页地址正确');
+}
+
+/** 上传图片 → ComfyUI input 目录，返回可注入 LoadImage 的文件名（subfolder/name） */
+async function uploadImage(url: string, blob: Blob, name: string): Promise<string> {
   const form = new FormData();
-  form.append('image', new File([frameBlob], `frame.png`, { type: 'image/png' }));
+  form.append('image', new File([blob], name, { type: 'image/png' }));
   form.append('overwrite', 'true');
-  const r = await fetch(`${url.replace(/\/$/, '')}/upload/image`, { method: 'POST', body: form });
-  if (!r.ok) throw new Error(`分帧图上传失败（HTTP ${r.status}）`);
+  let r: Response;
+  try {
+    r = await fetch(`${url.replace(/\/$/, '')}/upload/image`, { method: 'POST', body: form });
+  } catch (err) {
+    throw netErr(err);
+  }
+  if (!r.ok) throw new Error(`图片上传失败（HTTP ${r.status}）`);
   const j = (await r.json()) as { name?: string; subfolder?: string };
-  if (!j.name) throw new Error('分帧图上传返回异常');
+  if (!j.name) throw new Error('图片上传返回异常');
   return j.subfolder ? `${j.subfolder}/${j.name}` : j.name;
+}
+
+/** 占位符全文替换后解析 workflow：值统一 JSON 转义（提示词含换行/引号/控制字符均安全）；非法 JSON 带原始原因人话报错 */
+function injectWorkflow(workflowText: string, placeholders: Record<string, string>): Record<string, unknown> {
+  let text = workflowText;
+  for (const [key, value] of Object.entries(placeholders)) {
+    text = text.split(key).join(JSON.stringify(value).slice(1, -1));
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : '';
+    throw new Error(`工作流 JSON 不合法（${detail}）——自定义模板请到设置页检查占位符结构`);
+  }
+}
+
+/** 从 /history outputs 任意节点提取文件条目（SaveImage/SaveVideo/VHS_VideoCombine 通吃） */
+function extractOutputFile(entry: { outputs?: Record<string, Record<string, unknown[]>> }): {
+  filename: string;
+  subfolder: string;
+  type: string;
+} {
+  for (const nodeOut of Object.values(entry.outputs ?? {})) {
+    for (const arr of Object.values(nodeOut ?? {})) {
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) {
+        if (item && typeof item === 'object' && typeof (item as { filename?: unknown }).filename === 'string') {
+          const o = item as { filename: string; subfolder?: unknown; type?: unknown };
+          return {
+            filename: o.filename,
+            subfolder: typeof o.subfolder === 'string' ? o.subfolder : '',
+            type: typeof o.type === 'string' ? o.type : 'output',
+          };
+        }
+      }
+    }
+  }
+  throw new Error('生成完成但未找到输出文件');
+}
+
+/**
+ * 通用执行：注入 → 提交 → 轮询 → 下载产物 blob。
+ * deadlineMs 兜底：生图 5 分钟 / 视频 20 分钟；轮询抖动静默重试。
+ */
+async function runWorkflow(
+  base: string,
+  workflowText: string,
+  placeholders: Record<string, string>,
+  deadlineMs: number,
+  onTick?: () => void,
+): Promise<Blob> {
+  const workflow = injectWorkflow(workflowText, placeholders);
+  const clientId = `app-${Math.random().toString(36).slice(2, 10)}`;
+  let submit: Response;
+  try {
+    submit = await fetch(`${base}/prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: workflow, client_id: clientId }),
+    });
+  } catch (err) {
+    throw netErr(err);
+  }
+  if (!submit.ok) {
+    const t = await submit.text().catch(() => '');
+    throw new Error(`任务提交失败（HTTP ${submit.status}）：${t.slice(0, 160)}`);
+  }
+  const { prompt_id: promptId } = (await submit.json()) as { prompt_id: string };
+  if (!promptId) throw new Error('任务提交返回异常（无 prompt_id）');
+
+  const deadline = Date.now() + deadlineMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+    onTick?.();
+    let entry: { status?: { completed?: boolean; status_str?: string }; outputs?: Record<string, Record<string, unknown[]>> };
+    try {
+      const r = await fetch(`${base}/history/${promptId}`, { signal: AbortSignal.timeout(10_000) });
+      const j = (await r.json()) as Record<string, typeof entry>;
+      entry = j?.[promptId] ?? {};
+    } catch {
+      continue; // 单次轮询抖动静默重试
+    }
+    if (entry.status?.status_str === 'error') throw new Error('ComfyUI 生成失败（详见 ComfyUI 界面日志）');
+    if (entry.status?.completed || entry.status?.status_str === 'success') {
+      const { filename, subfolder, type } = extractOutputFile(entry);
+      const q = new URLSearchParams({ filename, subfolder, type });
+      const vr = await fetch(`${base}/view?${q.toString()}`);
+      if (!vr.ok) throw new Error(`产物下载失败（HTTP ${vr.status}）`);
+      return await vr.blob();
+    }
+  }
+  throw new Error('超时未完成——可在 ComfyUI 界面查看任务状态');
 }
 
 export interface ComfyVideoResult {
@@ -64,10 +183,7 @@ export interface ComfyVideoResult {
   elapsedSec: number;
 }
 
-/**
- * 完整流程：上传帧图 → 注入 workflow → 提交 → 轮询 → 下载 mp4 blob。
- * onProgress 实时回报阶段与已等待秒数（打印机式进度）。
- */
+/** 视频完整流程：上传分帧图 → 注入 → 提交 → 轮询 → 下载 mp4 blob（onProgress 打印机式进度） */
 export async function generateVideoOnComfy(
   cfg: ComfyuiConfig,
   frameBlob: Blob,
@@ -79,78 +195,35 @@ export async function generateVideoOnComfy(
   const tick = () => onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
   onProgress({ phase: 'uploading', elapsedSec: 0 });
-  const frameName = await uploadFrame(base, frameBlob);
-
-  // 占位注入：<<FRAME>> 图片名 / <<PROMPT>> 提示词（全文替换，适配任何工作流结构）
-  let workflowText = cfg.workflow
-    .split('<<FRAME>>').join(frameName)
-    .split('<<PROMPT>>').join(prompt);
-  let workflow: Record<string, unknown>;
-  try {
-    workflow = JSON.parse(workflowText) as Record<string, unknown>;
-  } catch {
-    throw new Error('工作流 JSON 不合法——请到设置页重新粘贴 ComfyUI 导出的 API workflow');
-  }
-
-  const clientId = `app-${Math.random().toString(36).slice(2, 10)}`;
-  const submit = await fetch(`${base}/prompt`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: workflow, client_id: clientId }),
-  });
-  if (!submit.ok) {
-    const t = await submit.text().catch(() => '');
-    throw new Error(`任务提交失败（HTTP ${submit.status}）：${t.slice(0, 160)}`);
-  }
-  const { prompt_id: promptId } = (await submit.json()) as { prompt_id: string };
-  if (!promptId) throw new Error('任务提交返回异常（无 prompt_id）');
-
+  const frameName = await uploadImage(base, frameBlob, 'frame.png');
   onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
-  // 轮询：generating 心跳回报；完成/失败终态；20 分钟兜底
-  const deadline = Date.now() + 20 * 60 * 1000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 3000));
-    tick();
-    let hist: Record<string, { status?: { completed?: boolean; status_str?: string }; outputs?: Record<string, Record<string, unknown[]>> }>;
-    try {
-      const r = await fetch(`${base}/history/${promptId}`, { signal: AbortSignal.timeout(10_000) });
-      const j = (await r.json()) as typeof hist;
-      hist = j?.[promptId] ? j : {};
-    } catch {
-      continue; // 单次轮询抖动静默重试
-    }
-    const entry = hist[promptId];
-    if (!entry) continue;
-    const statusStr = entry.status?.status_str ?? '';
-    if (statusStr === 'error') throw new Error('ComfyUI 生成失败（详见 ComfyUI 界面日志）');
-    if (entry.status?.completed || statusStr === 'success') {
-      // 提取输出：outputs 任意节点里含 filename 的媒体条目（SaveVideo/VHS_VideoCombine/SaveImage 通吃）
-      const outputs = entry.outputs ?? {};
-      let filename = '';
-      let subfolder = '';
-      let type = 'output';
-      for (const nodeOut of Object.values(outputs)) {
-        for (const arr of Object.values(nodeOut ?? {})) {
-          if (!Array.isArray(arr)) continue;
-          for (const item of arr) {
-            if (item && typeof item === 'object' && typeof (item as { filename?: unknown }).filename === 'string') {
-              filename = (item as { filename: string }).filename;
-              subfolder = typeof (item as { subfolder?: unknown }).subfolder === 'string' ? (item as { subfolder: string }).subfolder : '';
-              type = typeof (item as { type?: unknown }).type === 'string' ? (item as { type: string }).type : 'output';
-            }
-          }
-        }
-      }
-      if (!filename) throw new Error('生成完成但未找到输出文件');
-      onProgress({ phase: 'downloading', elapsedSec: Math.round((Date.now() - t0) / 1000) });
-      const q = new URLSearchParams({ filename, subfolder, type });
-      const vr = await fetch(`${base}/view?${q.toString()}`);
-      if (!vr.ok) throw new Error(`视频下载失败（HTTP ${vr.status}）`);
-      const blob = await vr.blob();
-      onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
-      return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
-    }
-  }
-  throw new Error('超时（20 分钟未完成）——可在 ComfyUI 界面查看任务状态');
+  const blob = await runWorkflow(
+    base,
+    cfg.videoWorkflow,
+    { '<<FRAME>>': frameName, '<<PROMPT>>': prompt },
+    20 * 60 * 1000,
+    tick,
+  );
+  onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
+  return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
+}
+
+export interface ComfyImageParams {
+  prompt: string;
+  width: number;
+  height: number;
+  /** 随机 seed——重roll 出新图；固定则同提示词复现同图 */
+  seed: number;
+}
+
+/** 生图完整流程：注入提示词/尺寸/seed → 提交 → 轮询 → 下载 png blob（秒级出图，5 分钟兜底） */
+export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImageParams): Promise<Blob> {
+  const base = cfg.url.replace(/\/$/, '');
+  return runWorkflow(base, effectiveImageWorkflow(cfg), {
+    '<<PROMPT>>': params.prompt,
+    '<<WIDTH>>': String(params.width),
+    '<<HEIGHT>>': String(params.height),
+    '<<SEED>>': String(params.seed),
+  }, 5 * 60 * 1000);
 }

@@ -8,17 +8,23 @@ import { getSecretsMask, putArkKey, putZhipuKey } from './api';
 import { useSettingsStore } from '../../stores/settings';
 
 const PROVIDERS: ReadonlyArray<{
-  id: 'minimax' | 'zhipu' | 'seedream';
+  id: 'minimax' | 'zhipu' | 'seedream' | 'comfy';
   label: string;
   desc: string;
   recommended?: boolean;
   price?: string;
 }> = [
   {
+    id: 'comfy',
+    label: '本地 ComfyUI（Z-Image-Turbo）',
+    desc: '自家电脑出图：免费、秒级、中文提示词直出；需本机/局域网 ComfyUI 引擎（下方「本地引擎」面板配置地址），引擎离线时请切回云端',
+    recommended: true,
+    price: '免费',
+  },
+  {
     id: 'seedream',
     label: 'Seedream 5.0 Flash（火山方舟）',
-    desc: '即梦同源 SOTA：动漫质量/文字/人物一致性全面领先；参考图输入免费（console.volcengine.com 方舟 API Key）',
-    recommended: true,
+    desc: '即梦同源 SOTA：动漫质量/文字/人物一致性全面领先；参考图输入免费（console.volcengine.com 方舟 API Key）——本地引擎不可用时的降级首选',
     price: '0.12 元/张',
   },
   {

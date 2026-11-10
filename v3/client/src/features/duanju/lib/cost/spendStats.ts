@@ -20,7 +20,9 @@ export interface SpendStats {
 }
 
 export function spendStats(project: DuanjuProject): SpendStats {
-  const log = project.spendLog ?? [];
+  const all = project.spendLog ?? [];
+  // 本地 ComfyUI 免费图（note 标注「本地免费」）不计成本账
+  const log = all.filter((e) => !(e.note ?? '').includes('本地免费'));
   const byKind: Record<SpendEntry['kind'], number> = { character: 0, scene: 0, shot: 0, frame: 0 };
   const counts = new Map<string, number>();
   for (const e of log) {

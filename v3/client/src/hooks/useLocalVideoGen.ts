@@ -15,7 +15,7 @@ export type { VideoGenProgress as LocalGenProgress } from '../features/duanju/li
 
 export function useComfyAvailable(): boolean {
   const cfg = loadComfyConfig();
-  return Boolean(cfg.url.trim() && cfg.workflow.trim());
+  return Boolean(cfg.url.trim() && cfg.videoWorkflow.trim());
 }
 
 export function useLocalVideoGen(workId: string, shot: DuanjuShot) {
@@ -30,8 +30,8 @@ export function useLocalVideoGen(workId: string, shot: DuanjuShot) {
       return;
     }
     const cfg = loadComfyConfig();
-    if (!cfg.url.trim() || !cfg.workflow.trim()) {
-      setError('未配置本地引擎——请到设置页填写 ComfyUI 地址与工作流');
+    if (!cfg.url.trim() || !cfg.videoWorkflow.trim()) {
+      setError('未配置本地引擎——请到设置页填写 ComfyUI 地址与视频工作流');
       return;
     }
     setState({ phase: 'uploading', elapsedSec: 0 });

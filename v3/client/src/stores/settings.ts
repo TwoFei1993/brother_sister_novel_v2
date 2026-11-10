@@ -29,8 +29,8 @@ export interface LlmPrefs {
   repetitionPenalty?: number;
   /** 润色模型（可选）：正文生成后用该模型二次润色（同通道）；留空关闭 */
   polishModel?: string;
-  /** 生图通道（反馈：image-01 文字渲染/复杂版式弱）：zhipu=GLM-Image / seedream=火山 Seedream 5.0-flash（0.12元，参考图免费，即梦同源）缺省 minimax */
-  imageProvider?: 'minimax' | 'zhipu' | 'seedream';
+  /** 生图通道（反馈：image-01 文字渲染/复杂版式弱）：zhipu=GLM-Image / seedream=火山 Seedream 5.0-flash（0.12元，参考图免费，即梦同源）/ comfy=本地 ComfyUI（免费秒级，引擎地址在设置页 ComfyUI 面板配置）缺省 minimax */
+  imageProvider?: 'minimax' | 'zhipu' | 'seedream' | 'comfy';
 }
 
 /**

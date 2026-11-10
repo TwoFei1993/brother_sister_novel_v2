@@ -98,7 +98,7 @@ export default function AssetGallery({ workId, project }: Props) {
                   <Play className="h-8 w-8 text-[hsl(var(--accent))]" aria-hidden />
                 </div>
               ) : (
-                <img src={duanjuFileUrl(workId, a.path)} alt={a.label} loading="lazy" className="aspect-square w-full object-cover" />
+                <img src={duanjuFileUrl(workId, a.path)} alt={a.label} loading="lazy" className="aspect-square w-full object-contain" />
               )}
               <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90 backdrop-blur">
                 {KIND_LABEL[a.kind]}
