@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 
 import LlmPanel from '../features/settings/LlmPanel';
 import MigratePanel from '../features/settings/MigratePanel';
+import ComfyUIPanel from '../features/settings/ComfyUIPanel';
 import ImageProviderPanel from '../features/settings/ImageProviderPanel';
 import SecretsPanel from '../features/settings/SecretsPanel';
 import ThemePanel from '../features/settings/ThemePanel';
@@ -74,6 +75,7 @@ export default function SettingsPage() {
       {section === 'llm' && (
         <div className="flex flex-col gap-4">
           <ImageProviderPanel />
+          <ComfyUIPanel />
           <SecretsPanel />
           <LlmPanel />
         </div>

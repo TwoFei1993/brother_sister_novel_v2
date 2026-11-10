@@ -10,6 +10,10 @@ import { ExternalLink, Upload } from 'lucide-react';
 import { duanjuFileUrl } from '../../../api/duanju';
 import type { DuanjuShot } from '@shared/duanju';
 
+import type { LocalGenProgress } from '../../../hooks/useLocalVideoGen';
+
+export type { LocalGenProgress };
+
 const JIMENG_URL = 'https://jimeng.jianying.com/';
 const DOUBAO_URL = 'https://www.doubao.com/chat/';
 
@@ -25,6 +29,11 @@ interface Props {
   onOpenFilePicker: () => void;
   /** 下载分镜图（四宫格整图或首帧；旧/新模式兼容） */
   onDownloadImage: () => void;
+  localGenError: string | null;
+  /** 本地 ComfyUI 视频生成（第四通道）：可用态 + 进行态回调 */
+  localGenAvailable: boolean;
+  localGenState: LocalGenProgress | null;
+  onLocalGen: () => void;
 }
 
 const toolCls = 'flex h-8 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-[11px] text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--fg))]';
@@ -40,6 +49,10 @@ export default function ShotTools({
   onUploadVideo,
   onOpenFilePicker,
   onDownloadImage,
+  localGenError,
+  localGenAvailable,
+  localGenState,
+  onLocalGen,
 }: Props) {
   const jump = (url: string) => () => {
     onCopy();
@@ -48,6 +61,20 @@ export default function ShotTools({
 
   return (
     <div>
+      {(localGenAvailable ? true : true) && (
+        <>
+          <button
+            type="button"
+            onClick={onLocalGen}
+            disabled={!!localGenState || !hasImage || !localGenAvailable}
+            className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-[hsl(var(--accent))]/60 bg-[hsl(var(--accent))]/10 text-xs font-medium text-[hsl(var(--accent))] transition-colors hover:bg-[hsl(var(--accent))]/20 disabled:opacity-40"
+            data-testid="shot-local-gen"
+            title="本地 ComfyUI + H3：分帧图作首帧，免费出片"
+          >
+            🎬 {localGenState ? `本地生成中（${localGenState.phase === 'uploading' ? '传帧图' : localGenState.phase === 'queued' ? '排队' : localGenState.phase === 'downloading' ? '取片' : '生成'} ${localGenState.elapsedSec}s）` : localGenAvailable ? '本地生成视频（免费）' : '本地生成视频（需先配置引擎）'}
+          </button>
+        </>
+      )}
       <button
         type="button"
         onClick={onCopy}

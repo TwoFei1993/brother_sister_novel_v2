@@ -14,6 +14,8 @@ import { isShotStale } from '../lib/stale';
 import type { DuanjuShot } from '@shared/duanju';
 import FramesGrid from './FramesGrid';
 import ShotTools from './ShotTools';
+import { uploadDuanjuImageFile } from '../../../api/duanju';
+import { useLocalVideoGen, type LocalGenProgress } from '../../../hooks/useLocalVideoGen';
 
 interface Props {
   workId: string;
@@ -41,6 +43,7 @@ export default function ShotCard({ workId, shot }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!project) return null;
+  const localGen = useLocalVideoGen(workId, shot);
   const stale = isShotStale(shot, project);
   const hasImage = (shot.frames?.length ?? 0) > 0 || !!shot.gridImage;
   const staging = parseStaging(
@@ -125,6 +128,10 @@ export default function ShotCard({ workId, shot }: Props) {
               onUploadVideo={(e) => void onVideoPicked(e)}
               onOpenFilePicker={() => fileRef.current?.click()}
               onDownloadImage={downloadGridImage}
+              localGenAvailable={localGen.available}
+              localGenState={localGen.state}
+              onLocalGen={() => void localGen.run()}
+              localGenError={localGen.error}
             />
           </div>
         </div>
