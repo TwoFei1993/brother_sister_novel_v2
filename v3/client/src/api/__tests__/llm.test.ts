@@ -421,3 +421,29 @@ describe('generateTextOnce 预算协商（推理烧光 max_tokens 的彻底解�
     expect(MAX_OUTPUT_TOKENS).toBe(64000);
   });
 });
+
+describe('generateTextOnce 网络断连（用户实测：切出页面回来误报「预算已协商仍无产出」）', () => {
+  it('network 错误 → 立即人话报错，不进重试循环（fetch 仅 1 次）', async () => {
+    const fn = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      generateTextOnce({ source: 'openai', model: 'm', messages: [{ role: 'user', content: 'hi' }], thinking: false }, 1000),
+    ).rejects.toThrow(/连接中断/);
+    expect(fn).toHaveBeenCalledTimes(1); // 断连重试无意义——不静默循环
+  });
+
+  it('5xx 仍按空输出加倍重试（回归：网络断连分支不影响既有行为）', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        calls += 1;
+        return new Response('server boom', { status: 500 });
+      }),
+    );
+    await expect(
+      generateTextOnce({ source: 'openai', model: 'm', messages: [{ role: 'user', content: 'hi' }], thinking: false }, 1000),
+    ).rejects.toThrow();
+    expect(calls).toBeGreaterThanOrEqual(2); // 5xx 重试仍在
+  });
+});

@@ -212,7 +212,12 @@ export async function generateTextOnce(
         continue;
       }
       if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err; // 其他 4xx 业务错误不重试
-      // 5xx/网络抖动按空输出处理，交由加倍重试
+      // 网络层断连（切出页面被冻结/电脑休眠/断网导致 fetch 中断）：重试无意义——立即人话报错。
+      // 修复（用户实测）：此前断连被当作空输出静默重试 5 轮，最终误报「预算已协商仍无产出」
+      if (err instanceof ApiError && (err.status === 0 || err.code === 'network')) {
+        throw new Error('连接中断（可能切出了页面或网络断开）——回到本页后重试即可');
+      }
+      // 5xx/上游抖动按空输出处理，交由加倍重试
     }
     const next = Math.min(want * 2, MAX_OUTPUT_TOKENS);
     if (rejected && want <= 4096) break; // 已降到下限仍拒 → 真·能力不足
