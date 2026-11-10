@@ -72,7 +72,7 @@ afterEach(async () => {
 });
 
 describe('LLM 后台任务', () => {
-  it('提交 202 + 轮询 running → done（结果取走即焚）', async () => {
+  it('提交 202 + 轮询 running → done（结果永久保留 draft，幂等可重取）', async () => {
     vi.stubGlobal('fetch', mockUpstream('拆解结果全文。'));
     const app = testApp();
     const sub = await authed(app).post('/api/llm/tasks').send(createBody);
@@ -94,9 +94,11 @@ describe('LLM 后台任务', () => {
     expect(final.status).toBe('done');
     expect(final.text).toContain('拆解结果全文');
 
-    // 取走即焚：二次 GET → 404 lost
+    // 幂等重取（结果永久保留 draft）：二次 GET 返回同一结果
     const again = await authed(app).get(`/api/llm/tasks/${sub.body.taskId}`);
-    expect([404, 410]).toContain(again.status);
+    expect(again.status).toBe(200);
+    expect(again.body.status).toBe('done');
+    expect(again.body.text).toBe(final.text);
   });
 
   it('空输出 → 预算加倍协商（第二次跑出正文）', async () => {

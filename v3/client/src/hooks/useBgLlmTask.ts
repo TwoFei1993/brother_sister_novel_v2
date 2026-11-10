@@ -105,7 +105,7 @@ export function useBgLlmTask(slot: string, onDone: (text: string) => void, onErr
     [clearSlot],
   );
 
-  /** 恢复轮询（mount 时由 pane 调用）：slot 有未完成任务 → 继续轮询（server 端在跑/已完成未取） */
+  /** 恢复轮询（mount/visibilitychange 时由 pane 调用）：slot 有未完成任务 → 继续轮询 */
   const resume = useCallback((): void => {
     const taskId = localStorage.getItem(slotKey(slot));
     if (!taskId) return;
@@ -114,7 +114,7 @@ export function useBgLlmTask(slot: string, onDone: (text: string) => void, onErr
       try {
         j = await apiFetch<{ status: string; text?: string; error?: string }>(`/api/llm/tasks/${taskId}`);
       } catch {
-        return; // 网络抖动——下次 mount 再试
+        return; // 网络抖动——下次可见时再试
       }
       if (!mountedRef.current) return;
       if (j.status === 'done') {
@@ -131,6 +131,16 @@ export function useBgLlmTask(slot: string, onDone: (text: string) => void, onErr
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slot]);
+
+  // 移动端切回 App 时立即续轮询（iOS/Android 后台冻结会暂停轮询定时器——
+  // visibilitychange visible 是系统恢复信号，此时检查 slot 任务状态补上进度）
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') resume();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [resume]);
 
   return { state, submit, resume, clear: clearSlot };
 }

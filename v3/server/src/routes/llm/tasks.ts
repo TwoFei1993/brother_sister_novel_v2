@@ -15,7 +15,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { rm } from 'node:fs/promises';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -26,7 +25,6 @@ import { dataDir } from '../core/paths';
 import { wrap } from '../works/works';
 
 const TASKS_DIR = join(dataDir(), 'llm-tasks');
-const KEEP_MS = 30 * 60 * 1000; // done/failed 结果保留 30 分钟
 
 /** 与 routes/llm.ts 同源（内联避免循环依赖） */
 const sourceSchema = z.enum(['openai', 'claude', 'gemini']);
@@ -94,6 +92,7 @@ async function execute(task: TaskFile, source: 'openai' | 'claude' | 'gemini', m
         if (ev.kind === 'error') throw new LlmError(ev.code as never, ev.message);
         if (ev.kind === 'text') text += ev.text;
       }
+      console.log('[execute] round', round, 'textLen', text.length, 'err', lastErr);
       if (text.trim()) break;
     } catch (err) {
       lastErr = err instanceof Error ? err.message : String(err);
@@ -155,12 +154,8 @@ llmTasksRouter.get('/llm/tasks/:id', wrap(async (req, res) => {
     return;
   }
   if (task.status === 'done' || task.status === 'failed') {
-    const expired = Date.now() - task.createdAt > KEEP_MS;
-    await rm(taskFile(id), { force: true }); // 取走即焚
-    if (expired) {
-      res.status(410).json({ status: 'expired', error: '结果保留超时（30 分钟未取）——请重新提交' });
-      return;
-    }
+    // 结果永久保留为 draft（用户要求：不设 30 分钟过期）——前端取走后 slot 清除不重复回填，
+    // server 侧文件留存可随时复查/重取（幂等 GET）
     res.json({ status: task.status, text: task.text, error: task.error, label: task.label });
     return;
   }
