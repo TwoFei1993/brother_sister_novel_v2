@@ -16,6 +16,7 @@ import type { GenParams, LlmSource } from '../converters';
 import { authRequired } from '../middleware/auth';
 import { zodBody } from '../middleware/validate';
 import { LlmError, runGenerate, type StreamEvent } from '../services/llm';
+import { llmTasksRouter } from './llm/tasks';
 import { countTokens } from '../services/tokenize';
 
 /** Express 4 不自动捕获 async rejection，统一 wrap（与 works 组同模式） */
@@ -199,6 +200,8 @@ llmRouter.post('/llm/test', zodBody(testSchema), wrap(async (req, res) => {
     res.json({ ok: false, code: errorPayload(e).code });
   }
 }));
+
+llmRouter.use('/llm/tasks', llmTasksRouter); // 后台任务（切出 App 后生成继续）
 
 llmRouter.post('/tokenize', zodBody(tokenizeSchema), wrap(async (req, res) => {
   const { source, model, text, messages } = req.body as {

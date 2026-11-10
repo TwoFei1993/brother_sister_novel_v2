@@ -3,16 +3,16 @@
  *
  * - 三来源：AI 生成（ScriptGenerateForm 流式）/ 粘贴 / 手写 —— 统一落到剧本文本框
  * - 「定稿」：确认后解锁下游 tab（D3 依赖门）；定稿后仍可改，改后下游标 stale
- * - 「AI 拆解」：generateTextOnce → parseBreakdown → ReviewCards 逐项编辑确认
+ * - 「AI 拆解」：server 后台任务化（切出 App 后生成继续，回来轮询取结果）→ parseBreakdown → ReviewCards
  */
 import { useEffect, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { buildBreakdownMessages, parseBreakdown, mergeEpisodes } from '../lib/prompts/prompts-script';
-import { buildGenerateBody, generateStream, generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import ScriptGenerateForm from './ScriptGenerateForm';
 import ReviewCards from './ReviewCards';
+import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import type { DuanjuScript } from '@shared/duanju';
 
 const SRC_LABELS: Record<DuanjuScript['source'], string> = {
@@ -27,9 +27,48 @@ export default function ScriptPane({ workId }: { workId: string }) {
   const [confirmed, setConfirmed] = useState(false);
   const [source, setSource] = useState<DuanjuScript['source']>('manual');
   const [genOpen, setGenOpen] = useState(false);
-  const [breakingDown, setBreakingDown] = useState(false);
-  const [streamText, setStreamText] = useState(''); // 打印机式实时输出（反馈 #10）
   const [breakdownError, setBreakdownError] = useState<string | null>(null);
+
+  // 拆解后台化（切出 App 继续生成）：slot 隔离 + 回来轮询取结果/恢复轮询
+  const bg = useBgLlmTask(
+    `script-breakdown-${workId}`,
+    (raw) => {
+      const cur = useDuanjuStore.getState().project;
+      if (!cur) return;
+      const parsed = parseBreakdown(raw);
+      if (!parsed) {
+        setBreakdownError('拆解结果解析失败（模型未返回合法 JSON），请重试');
+        return;
+      }
+      const now = Date.now();
+      const mergedEpisodes = mergeEpisodes(cur.episodes, parsed.episodes, cur.shots);
+      void patch(workId, {
+        reviewCards: {
+          summary: parsed.summary,
+          eventChain: parsed.eventChain,
+          conflict: parsed.conflict,
+          characterRelations: parsed.characterRelations,
+          emotionPoints: parsed.emotionPoints,
+          visualActions: parsed.visualActions,
+          riskReplacements: parsed.riskReplacements.map((r, i) => ({
+            id: `risk-${now}-${i}`,
+            original: r.original,
+            replacement: r.replacement,
+          })),
+          confirmed: {},
+          updatedAt: now,
+        },
+        episodes: mergedEpisodes,
+      });
+    },
+    (msg) => setBreakdownError(msg),
+  );
+
+  // 后台任务恢复（mount 一次）：切出期间完成的拆解自动回填
+  useEffect(() => {
+    bg.resume();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workId]);
 
   // project 载入/外部刷新时同步本地编辑态
   useEffect(() => {
@@ -57,78 +96,25 @@ export default function ScriptPane({ workId }: { workId: string }) {
     });
   }
 
-  /** AI 拆解 → 审核卡（generateTextOnce 非流式拿 JSON） */
+  /** AI 拆解 → server 后台任务（切出安全；预算协商 server 端同语义） */
   async function runBreakdown(): Promise<void> {
-    if (!project || !text.trim() || breakingDown) return;
-    setBreakingDown(true);
+    if (!project || !text.trim() || bg.state?.status === 'submitting' || bg.state?.status === 'running') return;
     setBreakdownError(null);
-    try {
-      // 深度测试实测：拆解基于编辑中文本而违审替换作用于已保存文本——未保存就拆解会让采纳静默失效。
-      // 拆解前先把编辑中的剧本落库（dirty 时），保证剧本/审核卡/替换三者一致，也防编辑丢失。
-      if (dirty) {
-        await patch(workId, {
-          script: { source, text, confirmed, updatedAt: Date.now() },
-        });
-      }
-      const prefs = useSettingsStore.getState().llmPrefs;
-      // 流式打印机（反馈 #10）：实时可见模型输出，替代黑盒等待
-      let raw = '';
-      await generateStream(
-        buildGenerateBody({
-          source: prefs.source,
-          model: prefs.model,
-          messages: buildBreakdownMessages(text, project.targetEpisodes),
-          thinking: false,
-          maxTokens: 32000,
-        }),
-        {
-          onChunk: (t) => {
-            raw += t;
-            setStreamText(raw);
-          },
-          onDone: () => undefined,
-          onError: (e) => {
-            if (!raw) throw new Error(e.message || '拆解失败');
-            // 已有部分输出则继续尝试解析（半 JSON 交容错提取兜底）
-          },
-        },
-      );
-      if (!raw.trim()) {
-        setBreakdownError('模型无输出（思考流吃掉了输出），请重试');
-        return;
-      }
-      const parsed = parseBreakdown(raw);
-      if (!parsed) {
-        setBreakdownError('拆解结果解析失败（模型未返回合法 JSON），请重试');
-        return;
-      }
-      // 拆解结果写入 reviewCards + episodes，待人工逐项确认。
-      // episodes 按 index 合并保留原 id（防孤儿 shots，深度测试抓出——见 mergeEpisodes 注释）
-      const now = Date.now();
-      const mergedEpisodes = mergeEpisodes(project.episodes, parsed.episodes, project.shots);
+    // 深度测试实测：拆解基于编辑中文本而违审替换作用于已保存文本——未保存就拆解会让采纳静默失效。
+    if (dirty) {
       await patch(workId, {
-        reviewCards: {
-          summary: parsed.summary,
-          eventChain: parsed.eventChain,
-          conflict: parsed.conflict,
-          characterRelations: parsed.characterRelations,
-          emotionPoints: parsed.emotionPoints,
-          visualActions: parsed.visualActions,
-          riskReplacements: parsed.riskReplacements.map((r, i) => ({
-            id: `risk-${now}-${i}`,
-            original: r.original,
-            replacement: r.replacement,
-          })),
-          confirmed: {},
-          updatedAt: now,
-        },
-        episodes: mergedEpisodes,
+        script: { source, text, confirmed, updatedAt: Date.now() },
       });
-    } catch (err) {
-      setBreakdownError(err instanceof Error ? err.message : '拆解失败，请重试');
-    } finally {
-      setBreakingDown(false);
     }
+    const prefs = useSettingsStore.getState().llmPrefs;
+    await bg.submit({
+      source: prefs.source,
+      model: prefs.model,
+      messages: buildBreakdownMessages(text, project.targetEpisodes),
+      params: { max_tokens: 32000 },
+      thinking: false,
+      label: '拆解',
+    });
   }
 
   const dirty =
@@ -136,8 +122,15 @@ export default function ScriptPane({ workId }: { workId: string }) {
     confirmed !== project.script.confirmed ||
     source !== project.script.source;
 
+  const bgRunning = bg.state?.status === 'submitting' || bg.state?.status === 'running';
+
   return (
     <div className="mx-auto flex w-full max-w-3xl lg:max-w-5xl flex-col gap-4 px-4 py-4" data-testid="duanju-script">
+      {breakdownError && (
+        <p className="text-xs text-[hsl(var(--danger))]" role="alert">
+          {breakdownError}
+        </p>
+      )}
 
       {/* 来源与操作 */}
       <div className="flex flex-wrap items-center gap-2">
@@ -154,12 +147,12 @@ export default function ScriptPane({ workId }: { workId: string }) {
           <button
             type="button"
             onClick={() => void runBreakdown()}
-            disabled={breakingDown}
+            disabled={bgRunning}
             className="h-9 rounded-lg bg-[hsl(var(--accent))] px-3 text-xs font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
             data-testid="script-breakdown"
           >
-            {breakingDown
-              ? '拆解中…'
+            {bgRunning
+              ? `拆解中…（已等 ${bg.state?.elapsedSec ?? 0}s，可切出）`
               : project.reviewCards.summary
                 ? '重新 AI 拆解'
                 : 'AI 拆解 → 审核卡'}
@@ -194,23 +187,6 @@ export default function ScriptPane({ workId }: { workId: string }) {
         />
       )}
 
-      {breakdownError && (
-        <p className="text-xs text-[hsl(var(--danger))]" role="alert">
-          {breakdownError}
-        </p>
-      )}
-
-      {/* 打印机式实时输出（反馈 #10）：拆解进行中展示模型原始输出，可读不黑盒 */}
-      {breakingDown && streamText && (
-        <pre
-          className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] p-4 text-xs leading-6"
-          data-testid="breakdown-stream"
-        >
-          {streamText}
-          <span className="animate-pulse text-[hsl(var(--accent))]">▌</span>
-        </pre>
-      )}
-
       {/* 保存 + 定稿 */}
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -234,6 +210,12 @@ export default function ScriptPane({ workId }: { workId: string }) {
           定稿（解锁角色/场景/分镜）
         </label>
       </div>
+
+      {bgRunning && (
+        <p className="text-xs text-[hsl(var(--fg-muted))]" data-testid="breakdown-bg-hint">
+          ⏳ 拆解在服务端后台进行——可切出去干别的，回来自动查看结果。
+        </p>
+      )}
 
       {genOpen && (
         <ScriptGenerateForm

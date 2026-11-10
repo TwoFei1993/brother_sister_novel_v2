@@ -1,18 +1,18 @@
 /**
- * 场景分区（共识 D6 / 资料第 4 课）：场景档案列表 + 场景图生成
+ * 场景分区（共识 D6 / 资料第 4 课）：场景档案列表 + 场景图生成 + AI 提取（后台化）
  *
  * 场景 = 后续分镜的画面氛围基准（空间/光影/道具统一）。卡内：名字/spec 编辑 +
- * 「生成场景图」（16:9 横版概念图）。AI 提取场景与角色提取同构（Phase 2 简版：手动建）。
+ * 「生成场景图」（16:9 横版概念图）。「从剧本提取场景」走 server 后台任务（切出安全）。
  */
 import { Plus, Trash2, ImageIcon, WandSparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
 import { sceneImagePrompt } from '../lib/prompts/prompts-image';
 import { buildSceneExtractMessages, parseSceneExtract } from '../lib/sceneExtract';
-import { generateTextOnce } from '../../../api/llm';
+import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import { useSettingsStore } from '../../../stores/settings';
-import { useState } from 'react';
 import type { DuanjuScene } from '@shared/duanju';
 
 function newScene(): DuanjuScene {
@@ -28,8 +28,37 @@ function newScene(): DuanjuScene {
 export default function ScenesPane({ workId }: { workId: string }) {
   const { project, patch, saving } = useDuanjuStore();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 场景提取后台化（切出 App 继续生成，回来轮询取结果自动合并）
+  const bg = useBgLlmTask(
+    `scenes-extract-${workId}`,
+    (raw) => {
+      const cur = useDuanjuStore.getState().project;
+      if (!cur) return;
+      const list = parseSceneExtract(raw);
+      if (!list || list.length === 0) {
+        setError('场景提取失败（模型未返回合法结果），请重试');
+        return;
+      }
+      void (async () => {
+        const merged = [...cur.scenes];
+        for (const sc of list) {
+          if (!merged.some((x) => x.name === sc.name)) {
+            merged.push({
+              id: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: sc.name,
+              spec: sc.spec,
+              images: [],
+              updatedAt: Date.now(),
+            });
+          }
+        }
+        await useDuanjuStore.getState().patch(workId, { scenes: merged });
+      })();
+    },
+    (msg: string) => setError(msg),
+  );
 
   if (!project) return null;
 
@@ -40,45 +69,6 @@ export default function ScenesPane({ workId }: { workId: string }) {
 
   async function addScene(): Promise<void> {
     await patch(workId, { scenes: [...project!.scenes, newScene()] });
-  }
-
-  /** AI 从剧本提取场景（反馈 #9：初始生成就该有，不应手填），同名去重 */
-  async function extractScenes(): Promise<void> {
-    if (extracting || !project!.script.text.trim()) return;
-    setExtracting(true);
-    setError(null);
-    try {
-      const prefs = useSettingsStore.getState().llmPrefs;
-      const raw = await generateTextOnce({
-        source: prefs.source,
-        model: prefs.model,
-        messages: buildSceneExtractMessages(project!.script.text),
-        thinking: false,
-        maxTokens: 16000,
-      });
-      const list = parseSceneExtract(raw);
-      if (!list || list.length === 0) {
-        setError('场景提取失败（模型未返回合法结果），请重试');
-        return;
-      }
-      const merged = [...project!.scenes];
-      for (const sc of list) {
-        if (!merged.some((x) => x.name === sc.name)) {
-          merged.push({
-            id: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            name: sc.name,
-            spec: sc.spec,
-            images: [],
-            updatedAt: Date.now(),
-          });
-        }
-      }
-      await patch(workId, { scenes: merged });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '提取失败，请重试');
-    } finally {
-      setExtracting(false);
-    }
   }
 
   async function removeScene(id: string): Promise<void> {
@@ -95,19 +85,32 @@ export default function ScenesPane({ workId }: { workId: string }) {
     setError(null);
     try {
       const prompt = sceneImagePrompt(project!.style, scene.name, scene.spec);
-      await generateDuanjuImage(workId, {
-        kind: 'scene',
-        refId: scene.id,
-        prompt,
-        aspectRatio: '16:9',
-        provider: useSettingsStore.getState().llmPrefs.imageProvider,
-      });
+      await generateDuanjuImage(workId, { kind: 'scene', refId: scene.id, prompt, aspectRatio: '16:9' });
       await useDuanjuStore.getState().load(workId);
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试');
     } finally {
       setBusyId(null);
     }
+  }
+
+  /** AI 从剧本提取场景（反馈 #9：初始生成就该有，不应手填），同名去重——后台任务（切出安全） */
+  function extractScenes(): void {
+    if (bg.state?.status === 'submitting' || bg.state?.status === 'running') return;
+    if (!project!.script.text.trim()) {
+      setError('剧本为空——先在剧本 tab 写/生成剧本');
+      return;
+    }
+    setError(null);
+    const prefs = useSettingsStore.getState().llmPrefs;
+    bg.submit({
+      source: prefs.source,
+      model: prefs.model,
+      messages: buildSceneExtractMessages(project!.script.text),
+      thinking: false,
+      params: { max_tokens: 16000 },
+      label: '场景提取',
+    });
   }
 
   const inputCls =
@@ -127,13 +130,15 @@ export default function ScenesPane({ workId }: { workId: string }) {
         {project.script.text.trim() && (
           <button
             type="button"
-            onClick={() => void extractScenes()}
-            disabled={extracting}
+            onClick={() => extractScenes()}
+            disabled={bg.state?.status === 'submitting' || bg.state?.status === 'running'}
             className="flex h-9 items-center gap-1 rounded-lg border border-[hsl(var(--accent))] px-3 text-xs text-[hsl(var(--accent))] disabled:opacity-40"
             data-testid="scenes-extract"
           >
             <WandSparkles className="h-3.5 w-3.5" aria-hidden />
-            {extracting ? '提取中…' : '✨ 从剧本提取场景'}
+            {bg.state?.status === 'submitting' || bg.state?.status === 'running'
+              ? `后台提取中…（${bg.state.elapsedSec ?? 0}s，可切出）`
+              : '✨ 从剧本提取场景'}
           </button>
         )}
         <span className="text-xs text-[hsl(var(--fg-muted))]">

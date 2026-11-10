@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Plus, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
+import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import { generateTextOnce } from '../../../api/llm';
 import { useSettingsStore } from '../../../stores/settings';
 import CharacterCard from './CharacterCard';
@@ -37,55 +38,64 @@ export default function CharactersPane({ workId }: { workId: string }) {
   const [queue] = useState(() => new ImageQueue());
   const [batching, setBatching] = useState(0); // 剩余任务数（0=空闲）
 
+  // 角色提取后台化（切出 App 继续生成，回来轮询取结果自动合并）
+  const bg = useBgLlmTask(
+    `characters-extract-${workId}`,
+    (raw: string) => {
+      const cur = useDuanjuStore.getState().project;
+      if (!cur) return;
+      const list = parseCharacterExtract(raw);
+      if (!list || list.length === 0) {
+        setError('角色提取失败（模型未返回合法结果），请重试');
+        return;
+      }
+      void (async () => {
+        const merged = [...cur.characters];
+        for (const c of list) {
+          if (!merged.some((x) => x.name === c.name)) {
+            merged.push({
+              id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: c.name,
+              profile: c.profile,
+              sheetImages: [],
+              refImageId: null,
+              updatedAt: Date.now(),
+            });
+          }
+        }
+        await useDuanjuStore.getState().patch(workId, { characters: merged });
+      })();
+    },
+    (msg: string) => setError(msg),
+  );
+
+  // 后台任务恢复（mount 一次）：切出期间完成的提取自动回填
+  useEffect(() => {
+    bg.resume();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workId]);
+
   if (!project) return null;
 
   async function addCharacter(): Promise<void> {
     await patch(workId, { characters: [...project!.characters, newCharacter()] });
   }
 
-  /** AI 从剧本+人物关系提取角色档案（资料第 3 课：先有档案再有图） */
-  async function extractCharacters(): Promise<void> {
-    if (extracting) return;
-    setExtracting(true);
+  /** AI 从剧本+人物关系提取角色档案（资料第 3 课：先有档案再有图）——后台任务（切出安全） */
+  function extractCharacters(): void {
+    if (extracting || bg.state?.status === 'submitting' || bg.state?.status === 'running') return;
     setError(null);
-    try {
-      const prefs = useSettingsStore.getState().llmPrefs;
-      const raw = await generateTextOnce({
-        source: prefs.source,
-        model: prefs.model,
-        messages: buildCharacterExtractMessages(
-          project!.script.text,
-          project!.reviewCards.characterRelations,
-          project!.protagonists,
-        ),
-        thinking: false,
-      });
-      const list = parseCharacterExtract(raw);
-      if (!list || list.length === 0) {
-        setError('角色提取失败（模型未返回合法结果），请重试');
-        return;
-      }
-      const existing = project!.characters;
-      const merged = [...existing];
-      for (const c of list) {
-        // 同名角色不重复建
-        if (!merged.some((x) => x.name === c.name)) {
-          merged.push({
-            id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            name: c.name,
-            profile: c.profile,
-            sheetImages: [],
-            refImageId: null,
-            updatedAt: Date.now(),
-          });
-        }
-      }
-      await patch(workId, { characters: merged });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '提取失败，请重试');
-    } finally {
-      setExtracting(false);
-    }
+    bg.submit({
+      source: useSettingsStore.getState().llmPrefs.source,
+      model: useSettingsStore.getState().llmPrefs.model,
+      messages: buildCharacterExtractMessages(
+        project!.script.text,
+        project!.reviewCards.characterRelations,
+        project!.protagonists,
+      ),
+      thinking: false,
+      label: '角色提取',
+    });
   }
 
   return (
@@ -102,13 +112,15 @@ export default function CharactersPane({ workId }: { workId: string }) {
         {project.script.text && (
           <button
             type="button"
-            onClick={() => void extractCharacters()}
-            disabled={extracting}
+            onClick={() => extractCharacters()}
+            disabled={extracting || bg.state?.status === 'submitting' || bg.state?.status === 'running'}
             className="flex h-9 items-center gap-1 rounded-lg border border-[hsl(var(--accent))] px-3 text-xs text-[hsl(var(--accent))] disabled:opacity-40"
             data-testid="characters-extract"
           >
             <WandSparkles className="h-3.5 w-3.5" aria-hidden />
-            {extracting ? '提取中…' : '✨ 从剧本提取角色'}
+            {extracting || bg.state?.status === 'submitting' || bg.state?.status === 'running'
+              ? `后台提取中…（${bg.state?.elapsedSec ?? 0}s，可切出）`
+              : '✨ 从剧本提取角色'}
           </button>
         )}
         <span className="text-xs text-[hsl(var(--fg-muted))]">
