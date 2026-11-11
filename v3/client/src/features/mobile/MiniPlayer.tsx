@@ -93,7 +93,7 @@ export default function MiniPlayer() {
           type="button"
           onClick={() => {
             setOpen(false);
-            navigate(`/m/read/${snap.bookId}`);
+            navigate(`/m/read/${snap.workId ?? snap.bookId}`);
           }}
           data-testid="mini-open-book"
           className="h-10 shrink-0 rounded-xl border border-[hsl(var(--border-soft))] px-3 text-xs"

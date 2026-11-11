@@ -15,6 +15,10 @@ import { NARRATOR_VOICE_KEY } from './voice-route';
 // ---------- 状态 ----------
 
 export interface PlayerBook {
+  /** 作品 id（悬浮窗「回到书」导航用） */
+  workId: string;
+  /** 引擎唯一键：`workId:章节msgId`——换章=新书，playFrom 走 start 替换 paras
+   * （旧实现 bookId=作品 id：换章后 seek 沿用旧章 paras，点新章播旧章内容） */
   bookId: string;
   title: string;
   paras: readonly string[];
@@ -23,6 +27,8 @@ export interface PlayerBook {
 
 export interface PlayerSnapshot {
   bookId: string | null;
+  /** 作品 id（与 bookId 同步写；MiniPlayer「回到书」导航用） */
+  workId: string | null;
   title: string;
   paraCount: number;
   /** 当前段下标；-1=未在播 */
@@ -42,7 +48,7 @@ function loadSpeed(): number {
   }
 }
 
-let state: PlayerSnapshot = { bookId: null, title: '', paraCount: 0, idx: -1, playing: false, speed: loadSpeed() };
+let state: PlayerSnapshot = { bookId: null, workId: null, title: '', paraCount: 0, idx: -1, playing: false, speed: loadSpeed() };
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<PlayerSnapshot>): void {
@@ -225,7 +231,7 @@ function runLoop(fromIdx: number): void {
     }
     if (alive()) {
       // 整本播完：清空悬浮窗（与番茄一致，播完即收）
-      set({ bookId: null, idx: -1, playing: false });
+      set({ bookId: null, workId: null, idx: -1, playing: false });
     }
   })();
 }
@@ -241,7 +247,7 @@ export function playerStart(book: PlayerBook, fromIdx = 0): void {
   }
   // 关键：换书启动必须写入 bookId/title——UI（进度条/悬浮窗）靠 bookId 匹配显示，
   // 缺失会导致「引擎在播但界面全静默」（深度验证 T6-e 实锤）
-  set({ bookId: book.bookId, title: book.title, paraCount: book.paras.length, idx: fromIdx, playing: true });
+  set({ bookId: book.bookId, workId: book.workId, title: book.title, paraCount: book.paras.length, idx: fromIdx, playing: true });
   runLoop(fromIdx);
 }
 
@@ -250,7 +256,7 @@ export function playerStop(): void {
   audioRef.current?.pause();
   clearPrefetch();
   currentBook = null;
-  set({ bookId: null, idx: -1, playing: false });
+  set({ bookId: null, workId: null, idx: -1, playing: false });
 }
 
 export function playerPause(): void {
@@ -294,6 +300,9 @@ if (typeof window !== 'undefined') {
     get hasBook() {
       return currentBook !== null;
     },
+    get currentParas() {
+      return currentBook?.paras ?? [];
+    },
   };
 }
 
@@ -303,23 +312,48 @@ export function usePlayerSnapshot(): PlayerSnapshot {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/** useBookPlayer 返回视图（播放控制 + 暂停态；测试与调用方共用类型） */
+export interface UseBookPlayerView {
+  playingIdx: number;
+  playing: boolean;
+  paused: boolean;
+  paraCount: number;
+  speed: number;
+  stop: () => void;
+  pause: () => void;
+  resume: () => void;
+  playFrom: (i: number) => void;
+}
+
 /**
  * 绑定某本书的播放视图（Reader 听书条/悬浮窗共用）：
- * 快照属于本书时返回实况，否则返回空闲态；playFrom 在非本书/未启动时自动 start（跨书安全）。
+ * 快照属于本书时返回实况，否则返回空闲态；playFrom 在非本书/未启动时自动 start（跨章安全——
+ * bookId 含章节 id，换章必然 start 换 paras）。pause/paused 支撑「点播放中段落=暂停」交互。
  */
-export function useBookPlayer(book: PlayerBook | null) {
+export function useBookPlayer(book: PlayerBook | null): UseBookPlayerView {
   const snap = usePlayerSnapshot();
   const mine = !!book && snap.bookId !== null && snap.bookId === book.bookId;
   return {
     playingIdx: mine ? snap.idx : -1,
     playing: mine && snap.playing,
+    /** 暂停态：本书快照、未播、段锚点保留（提示条/顶栏三态切换用） */
+    paused: mine && !snap.playing && snap.idx >= 0,
     paraCount: mine ? snap.paraCount : 0,
     speed: snap.speed,
     stop: playerStop,
+    pause: playerPause,
+    resume: playerResume,
     playFrom: (i: number): void => {
       if (!book) return;
-      if (currentBook?.bookId === book.bookId) playerSeek(i);
-      else playerStart(book, i);
+      if (currentBook?.bookId === book.bookId) {
+        if (snap.playing && snap.idx === i) {
+          playerPause(); // 点正在播放的段落 = 暂停（反馈：点段落像「停止」，应有暂停）
+          return;
+        }
+        playerSeek(i);
+        return;
+      }
+      playerStart(book, i);
     },
   };
 }

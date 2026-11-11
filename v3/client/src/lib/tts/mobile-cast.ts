@@ -5,7 +5,7 @@
  * - 段落说话人路由：routeMobileParas（跨段延续说话人；自动分声用 voice-route 的 autoCastVoices）
  * - 持久化：作品级 voiceMap（VoiceCastPane 写 PATCH；localStorage 仅旧版 cast 兼容读取）
  */
-import { MINIMAX_VOICES, NARRATOR_SPEAKER, NARRATOR_VOICE_KEY, SPEAKER_NAME_PREFIX, VOICES, routeParagraphs } from './voice-route';
+import { MINIMAX_VOICES, NARRATOR_VOICE_KEY, SPEAKER_NAME_PREFIX, VOICES, routeParagraphs, type RouteState } from './voice-route';
 
 /** 正文识别出的候选角色（说话人前缀命中，按出现次数降序） */
 export interface DetectedSpeaker {
@@ -125,8 +125,8 @@ const QUOTE_OPENERS: readonly string[] = ['「', '『', '“'];
 
 /**
  * 移动端段落说话人路由：入参已切好的段落逐段走 routeParagraphs，
- * 并把「前文最近说话人」跨段传递——routeParagraphs 的引号延续只在段内生效，
- * 无前缀引号开头的段在此显式归属上一说话人。旁白声取 voiceMap 的 narrator 键，缺省主持人女。
+ * 以共享 RouteState 跨段延续「最近说话人/最近提及」（归属逻辑单一实现在 voice-route——
+ * 引号延续、叙述提及兜底、代词对白归属都在路由层完成）。旁白声取 voiceMap 的 narrator 键，缺省主持人女。
  */
 export function routeMobileParas(
   paras: readonly string[],
@@ -135,20 +135,10 @@ export function routeMobileParas(
   const vm = normalizeVoiceMap(voiceMap);
   const narrator = vm[NARRATOR_VOICE_KEY] || NARRATOR_CAST_ID;
   const out: MobileRoutedPara[] = [];
-  let lastSpeaker: string | null = null;
+  const state: RouteState = { lastSpeaker: null, lastMention: null };
   for (const text of paras) {
-    const [routed] = routeParagraphs(text, vm, [], narrator);
-    if (!routed) continue;
-    const carried =
-      routed.speaker === NARRATOR_SPEAKER &&
-      lastSpeaker !== null &&
-      QUOTE_OPENERS.some((q) => text.startsWith(q));
-    if (carried && lastSpeaker !== null) {
-      out.push({ text, voice: vm[lastSpeaker] ?? narrator, speaker: lastSpeaker });
-    } else {
-      out.push(routed);
-      if (routed.speaker !== NARRATOR_SPEAKER) lastSpeaker = routed.speaker;
-    }
+    const [routed] = routeParagraphs(text, vm, [], narrator, state);
+    if (routed) out.push(routed);
   }
   return out;
 }

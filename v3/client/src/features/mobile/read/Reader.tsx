@@ -107,11 +107,18 @@ export default function Reader() {
 
   const { chapterIdx, jumpTo, scrollPct, resumeTip, hintOpen } = useReaderProgress(id, chapters, articleRef);
   const chapter = chapters[chapterIdx] ?? null;
-  // 听书引擎（全局）：音色取作品配音表（旁白/角色分声）；失败跳段 toast 提示；退出书页后台续播
+  // 听书引擎（全局）：音色取作品配音表（旁白/角色分声）；失败跳段 toast 提示；退出书页后台续播。
+  // bookId 含章节 msgId——换章=新 bookId，playFrom 走 start 替换 paras（修复「换章仍读旧章」）
   const book: PlayerBook | null = useMemo(
     () =>
       chapter && id
-        ? { bookId: id, title: work?.title ?? '未命名', paras: chapter.paras, voiceMap: work?.voiceMap ?? {} }
+        ? {
+            workId: id,
+            bookId: `${id}:${chapter.msg.id}`,
+            title: work?.title ?? '未命名',
+            paras: chapter.paras,
+            voiceMap: work?.voiceMap ?? {},
+          }
         : null,
     [chapter, id, work?.title, work?.voiceMap],
   );
@@ -236,8 +243,10 @@ export default function Reader() {
     }
   }
 
+  /** 顶栏三态：播放中=暂停；暂停中=继续；空闲=从本章开头播（彻底停止入口在暂停提示条） */
   function toggleTts(): void {
-    if (tts.playing) tts.stop();
+    if (tts.playing) tts.pause();
+    else if (tts.paused) tts.resume();
     else void tts.playFrom(0);
   }
 
@@ -288,7 +297,7 @@ export default function Reader() {
           data-testid="tts-toggle-btn"
           className="flex h-8 items-center gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-2.5 text-xs"
         >
-          {ttsIdx >= 0 ? '⏹ 停止' : '🔊 听本章'}
+          {tts.playing ? '⏸ 暂停' : tts.paused ? '▶ 继续' : ttsIdx >= 0 ? '⏹ 停止' : '🔊 听本章'}
         </button>
       </header>
 
@@ -368,10 +377,23 @@ export default function Reader() {
         </div>
       )}
 
-      {/* 听书进行中提示 */}
-      {ttsIdx >= 0 && (
+      {/* 听书进行中/暂停提示（暂停态带彻底停止入口） */}
+      {ttsIdx >= 0 && tts.playing && (
         <div className="fixed left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs text-white" data-testid="tts-playing-tip">
           🔊 正在朗读第 {ttsIdx + 1}/{chapter?.paras.length ?? 0} 段
+        </div>
+      )}
+      {ttsIdx >= 0 && tts.paused && (
+        <div className="fixed left-1/2 top-16 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-4 py-1.5 text-xs text-white" data-testid="tts-paused-tip">
+          ⏸ 已暂停 第 {ttsIdx + 1} 段 · 再点该段继续
+          <button
+            type="button"
+            onClick={() => tts.stop()}
+            data-testid="tts-stop-btn"
+            className="rounded-full bg-white/15 px-2 py-0.5 text-[11px]"
+          >
+            ⏹ 停止
+          </button>
         </div>
       )}
 

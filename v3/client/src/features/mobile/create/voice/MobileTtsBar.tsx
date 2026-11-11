@@ -29,9 +29,10 @@ export default function MobileTtsBar({ bookId, bookTitle, chapter, voiceMap }: P
     [chapter.content],
   );
   const routedParas = useMemo(() => routeMobileParas(paras, voiceMap ?? {}), [paras, voiceMap]);
+  // bookId 含章节 msgId（与阅读器同规则）：创作页切章后播放走 start 换 paras，不沿旧章内容
   const book = useMemo(
-    () => ({ bookId, title: bookTitle, paras, voiceMap: voiceMap ?? {} }),
-    [bookId, bookTitle, paras, voiceMap],
+    () => ({ workId: bookId, bookId: `${bookId}:${chapter.id}`, title: bookTitle, paras, voiceMap: voiceMap ?? {} }),
+    [bookId, bookTitle, chapter.id, paras, voiceMap],
   );
   const player = useBookPlayer(book);
   const speaker = player.playingIdx >= 0 ? routedParas[player.playingIdx]?.speaker : undefined;
