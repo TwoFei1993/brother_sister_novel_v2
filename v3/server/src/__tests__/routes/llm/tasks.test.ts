@@ -152,7 +152,9 @@ describe('LLM 后台任务', () => {
     expect(String(final.text)).toContain('第二轮');
   });
 
-  it('上游 5xx → failed（含错误）', async () => {
+  it('上游 5xx → 瞬态重试耗尽（无灾备通道）→ failed（含错误）', async () => {
+    // 注入快速退避：重试+灾备全链路走完仍 failed（无其他通道密钥 → fallback 自动跳过）
+    process.env.LLM_TASK_RETRY_DELAYS_MS = '10,10,10,10,10';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('boom', { status: 500 })));
     const app = testApp();
     const sub = await authed(app).post('/api/llm/tasks').send(createBody);
