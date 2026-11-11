@@ -86,7 +86,9 @@ async function execute(task: TaskFile, source: 'openai' | 'claude' | 'gemini', m
         model,
         messages,
         params: { ...baseParams, max_tokens: maxTokens, thinking: task.thinking },
-        stream: false,
+        // 必须流式：非流式下上游生成全程无字节返回，长输入任务（整集拆解等）必撞 120s 空闲超时；
+        // 流式下增量 chunk 持续重置空闲计时（llm.ts 双超时设计正是为此）
+        stream: true,
       });
       for await (const ev of events) {
         if (ev.kind === 'error') throw new LlmError(ev.code as never, ev.message);

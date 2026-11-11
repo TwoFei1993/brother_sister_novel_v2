@@ -49,13 +49,26 @@ const createBody = {
   label: '拆解',
 };
 
-/** mock 上游：OpenAI 兼容非流式 JSON（runGenerate stream:false 期待完整响应） */
+/** mock 上游：OpenAI 兼容流式 SSE（execute 已改 stream:true——增量帧保活，长任务不撞空闲超时） */
 function mockUpstream(text: string, status = 200): ReturnType<typeof vi.fn> {
+  if (status !== 200) {
+    return vi.fn().mockResolvedValue(
+      new Response('upstream error', { status, headers: { 'Content-Type': 'text/plain' } }),
+    );
+  }
+  const frames = [
+    `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+    'data: [DONE]\n\n',
+  ];
+  const stream = new ReadableStream({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+      controller.close();
+    },
+  });
   return vi.fn().mockResolvedValue(
-    new Response(
-      JSON.stringify({ id: 'm', object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }),
-      { status, headers: { 'Content-Type': 'application/json' } },
-    ),
+    new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
   );
 }
 
@@ -111,10 +124,18 @@ describe('LLM 后台任务', () => {
       vi.fn().mockImplementation(async () => {
         call += 1;
         const text = call === 1 ? '' : '第二轮出正文了。';
-        return new Response(
-          JSON.stringify({ id: 'm', object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+        const frames = [
+          `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ];
+        const stream = new ReadableStream({
+          start(controller) {
+            for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
       }),
     );
     const app = testApp();

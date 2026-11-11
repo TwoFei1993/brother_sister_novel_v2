@@ -49,19 +49,24 @@ const createBody = {
 };
 
 /** mock 上游（OpenAI 兼容非流式 JSON） */
+/** mock 上游：OpenAI 兼容流式 SSE（execute 已改 stream:true）——每轮调用各自新 Response（Response 只能读一次） */
 function mockUpstream(): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          id: 'm',
-          object: 'chat.completion',
-          choices: [{ index: 0, message: { role: 'assistant', content: '移动切出场景的生成结果正文。' }, finish_reason: 'stop' }],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    ),
+    vi.fn().mockImplementation(async () => {
+      const frames = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: '移动切出场景的生成结果正文。' } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ];
+      const stream = new ReadableStream({
+        start(controller) {
+          for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+          controller.close();
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    }),
   );
 }
 
