@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { patchMessage } from '../../../api/works';
+import { apiFetch } from '../../../api/client';
 import DuanjuWorkbench from '../../duanju/DuanjuWorkbench';
 import { useGenerate } from '../../../hooks/useGenerate';
 import { useWorkStore } from '../../../stores/work';
@@ -46,6 +47,29 @@ export default function MobileWork() {
   /** 当前编辑的章节消息（正文/版本分区共享；null=自动取最后一章） */
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+
+  /** 小说 → 短剧一键转换（与桌面 WorkPage 同逻辑）：新建短剧作品，剧本=全文并定稿 */
+  async function convertToDuanju(): Promise<void> {
+    if (!work || !id || converting) return;
+    if (
+      !confirm(
+        '将创建一个新的短剧作品（小说本体不动）：剧本正文 = 小说全文并直接定稿，之后到剧本 tab 点「AI 拆解」即可走完短剧流程。继续？',
+      )
+    )
+      return;
+    setConverting(true);
+    try {
+      const r = await apiFetch<{ work: { id: string } }>(`/api/works/${id}/convert-to-duanju`, {
+        method: 'POST',
+      });
+      navigate(`/m/work/${r.work.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '转换失败');
+    } finally {
+      setConverting(false);
+    }
+  }
 
   useEffect(() => {
     if (id) void loadWork(id);
@@ -91,6 +115,18 @@ export default function MobileWork() {
             <span className="ml-1.5 text-xs font-normal text-[hsl(var(--fg-muted))]">{chapters.length} 章</span>
           )}
         </h1>
+        {work?.mode === 'novel' && chapters.length > 0 && (
+          <button
+            type="button"
+            onClick={() => void convertToDuanju()}
+            disabled={converting}
+            data-testid="mobile-convert-btn"
+            className="h-9 rounded-lg px-2.5 text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+            title="把小说正文一键转为短剧：新建短剧作品（小说本体不动），剧本=全文并定稿"
+          >
+            {converting ? '转换中…' : '🎬 转短剧'}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setPublishOpen(true)}
