@@ -40,6 +40,17 @@ function sliceToBracket(text: string, open: '[' | '{'): string {
   return text.slice(start); // 未闭合：截到尾部交修复链
 }
 
+/**
+ * 截断数组挽救（模型输出不完整就停止的失败模式）：找最后一个完整闭合的对象，
+ * 截断到其边界并补数组闭合——已完整产出的前 N 项可救，残尾丢弃。
+ * 近似实现：lastIndexOf('}') 在「断在字符串中途」场景恰好是上一个完整对象（spec 内容极少含 } 字面量）。
+ */
+function salvageTruncatedArray(fragment: string): string {
+  const lastBrace = fragment.lastIndexOf('}');
+  if (lastBrace < 0) return fragment;
+  return `${fragment.slice(0, lastBrace + 1)}\n]`;
+}
+
 /** 常见格式污染修复（不可逆修复，仅在严格解析失败后使用） */
 function repairCommon(text: string): string {
   let t = text;
@@ -74,20 +85,16 @@ export function extractJsonObject(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-/** 从模型输出提取 JSON 数组（同款降级链） */
+/** 从模型输出提取 JSON 数组（同款降级链 + 截断挽救：输出不完整时挽救已完整的项） */
 export function extractJsonArray(raw: string): unknown[] | null {
-  const attempts = [raw, sliceToBracket(raw.trim(), '[')];
+  const trimmed = raw.trim();
+  const sliced = sliceToBracket(trimmed, '[');
+  const salvaged = salvageTruncatedArray(sliced);
+  const attempts = [raw, sliced, salvaged, repairCommon(salvaged)];
   for (const t of attempts) {
     try {
       const a = JSON.parse(t);
-      if (Array.isArray(a)) return a;
-    } catch { /* 下一级 */ }
-  }
-  const sliced = sliceToBracket(raw.trim(), '[');
-  for (const t of [sliced, repairCommon(sliced), repairCommon(raw)]) {
-    try {
-      const a = JSON.parse(t);
-      if (Array.isArray(a)) return a;
+      if (Array.isArray(a) && a.length > 0) return a;
     } catch { /* 下一级 */ }
   }
   return null;

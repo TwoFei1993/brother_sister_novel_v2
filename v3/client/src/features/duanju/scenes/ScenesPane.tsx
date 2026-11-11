@@ -29,13 +29,13 @@ export default function ScenesPane({ workId }: { workId: string }) {
   const { project, patch, saving } = useDuanjuStore();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** 场景介绍重生成：同一时间只跑一个任务，pendingScene 记录写回目标 */
-  const pendingSceneRef = useRef<string | null>(null);
+  /** 场景介绍重生成：同一时间只跑一个任务；写回目标持久化 localStorage（跨组件卸载/重挂恢复——ref 方案会丢结果） */
+  const PENDING_KEY = `scene-spec-pending-${workId}`;
   const specBg = useBgLlmTask(
     `scene-spec-${workId}`,
     (text) => {
-      const sid = pendingSceneRef.current;
-      pendingSceneRef.current = null;
+      const sid = localStorage.getItem(PENDING_KEY);
+      localStorage.removeItem(PENDING_KEY);
       if (!sid) return;
       void (async () => {
         const scenes = (useDuanjuStore.getState().project?.scenes ?? []).map((s) =>
@@ -55,7 +55,7 @@ export default function ScenesPane({ workId }: { workId: string }) {
       return;
     }
     setError(null);
-    pendingSceneRef.current = scene.id;
+    localStorage.setItem(PENDING_KEY, scene.id);
     specBg.submit({
       source: useSettingsStore.getState().llmPrefs.source,
       model: useSettingsStore.getState().llmPrefs.model,
