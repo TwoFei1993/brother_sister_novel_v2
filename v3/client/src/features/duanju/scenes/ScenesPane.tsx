@@ -5,12 +5,12 @@
  * 「生成场景图」（16:9 横版概念图）。「从剧本提取场景」走 server 后台任务（切出安全）。
  */
 import { Plus, Trash2, ImageIcon, WandSparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
 import { sceneImagePrompt } from '../lib/prompts/prompts-image';
-import { buildSceneExtractMessages, parseSceneExtract } from '../lib/sceneExtract';
+import { buildSceneExtractMessages, parseSceneExtract, rebuildSceneSpecMessages } from '../lib/sceneExtract';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import { useSettingsStore } from '../../../stores/settings';
 import type { DuanjuScene } from '@shared/duanju';
@@ -29,6 +29,42 @@ export default function ScenesPane({ workId }: { workId: string }) {
   const { project, patch, saving } = useDuanjuStore();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 场景介绍重生成：同一时间只跑一个任务，pendingScene 记录写回目标 */
+  const pendingSceneRef = useRef<string | null>(null);
+  const specBg = useBgLlmTask(
+    `scene-spec-${workId}`,
+    (text) => {
+      const sid = pendingSceneRef.current;
+      pendingSceneRef.current = null;
+      if (!sid) return;
+      void (async () => {
+        const scenes = (useDuanjuStore.getState().project?.scenes ?? []).map((s) =>
+          s.id === sid ? { ...s, spec: text.trim(), updatedAt: Date.now() } : s,
+        );
+        await useDuanjuStore.getState().patch(workId, { scenes });
+      })();
+    },
+    (msg: string) => setError(msg),
+  );
+
+  /** 单场景介绍重生成（用户需求 2026-11-11：重生成文字描述而非图片）——后台任务（切出安全） */
+  function regenerateSpec(scene: DuanjuScene): void {
+    if (specBg.state?.status === 'submitting' || specBg.state?.status === 'running') return;
+    if (!project!.script.text.trim()) {
+      setError('剧本为空——先在剧本 tab 写/生成剧本');
+      return;
+    }
+    setError(null);
+    pendingSceneRef.current = scene.id;
+    specBg.submit({
+      source: useSettingsStore.getState().llmPrefs.source,
+      model: useSettingsStore.getState().llmPrefs.model,
+      messages: rebuildSceneSpecMessages(project!.script.text, scene.name, scene.spec),
+      thinking: false,
+      params: { max_tokens: 2000 },
+      label: `重写场景介绍·${scene.name || '未命名'}`,
+    });
+  }
 
   // 场景提取后台化（切出 App 继续生成，回来轮询取结果自动合并）
   const bg = useBgLlmTask(
@@ -161,14 +197,26 @@ export default function ScenesPane({ workId }: { workId: string }) {
       <div className="flex flex-col gap-4">
         {project.scenes.map((scene) => (
           <div key={scene.id} className="rounded-xl border border-[hsl(var(--border-soft))] p-4" data-testid="duanju-scene-card">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 value={scene.name}
                 onChange={(e) => void saveScene(scene.id, { name: e.target.value })}
                 placeholder="场景名（必填）"
-                className="h-10 flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm font-medium outline-none focus:border-[hsl(var(--accent))]"
+                className="h-10 min-w-[8rem] flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm font-medium outline-none focus:border-[hsl(var(--accent))]"
                 aria-label="场景名"
               />
+              <button
+                type="button"
+                onClick={() => regenerateSpec(scene)}
+                disabled={specBg.state?.status === 'submitting' || specBg.state?.status === 'running' || saving}
+                className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-[hsl(var(--accent))]/50 px-3 text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+                title="结合剧本重写更详细的场景视觉档案（生图提示词的数据源）"
+              >
+                <WandSparkles className="h-3.5 w-3.5" aria-hidden />
+                {pendingSceneRef.current === scene.id && (specBg.state?.status === 'running' || specBg.state?.status === 'submitting')
+                  ? `重写中…（${specBg.state.elapsedSec ?? 0}s）`
+                  : '✨ 重写介绍'}
+              </button>
               <button
                 type="button"
                 onClick={() => void generateSceneImage(scene)}

@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ListChecks, WandSparkles } from 'lucide-react';
 
-import { createWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
+import { createWork, deleteWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
 import { useGenerationStore } from '../../../stores/generation';
 import { groupByTag } from '../read/ReadShelf';
 import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
@@ -344,9 +344,25 @@ export default function MobileBookshelf() {
     return <ShelfBookCover key={w.id} book={w} badges={badges} onClick={onOpen} />;
   }
 
-  /** 批量移动到分组：逐本取 revision → PATCH shelfTag（微信读书「移动到分组」语义） */
-  async function moveTo(tag: string): Promise<void> {
+  /** 批量删除作品（用户需求 2026-11-11：移动端书架缺删除入口）——逐本 DELETE 整目录，不可恢复 */
+  async function deleteSelected(): Promise<void> {
     if (busy || selected.size === 0) return;
+    if (!confirm(`删除选中的 ${selected.size} 部作品及其全部数据？此操作不可恢复。`)) return;
+    setBusy(true);
+    try {
+      for (const id of selected) await deleteWork(id);
+      setWorks((ws) => (ws ?? []).filter((x) => !selected.has(x.id)));
+      setSelected(new Set());
+      setManaging(false);
+    } catch {
+      alert('删除失败，请重试');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 批量移动到分组：逐本取 revision → PATCH shelfTag（微信读书「移动到分组」语义） */
+  async function moveTo(tag: string): Promise<void> {    if (busy || selected.size === 0) return;
     setBusy(true);
     try {
       for (const id of selected) {
@@ -523,6 +539,15 @@ export default function MobileBookshelf() {
               className="h-10 flex-1 rounded-xl bg-[hsl(var(--accent))] text-xs font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
             >
               移动到分组…
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteSelected()}
+              disabled={busy}
+              data-testid="delete-selected-btn"
+              className="h-10 flex-1 rounded-xl border border-[hsl(var(--danger))]/60 text-xs text-[hsl(var(--danger))] disabled:opacity-40"
+            >
+              🗑 删除
             </button>
             <button type="button" onClick={() => setSelected(new Set())} className="h-10 flex-1 rounded-xl border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))]">
               取消选择

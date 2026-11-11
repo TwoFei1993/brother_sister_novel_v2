@@ -6,12 +6,14 @@
  * - 主参考图：生四宫格时保持人物一致（Data URL，spike S8）；首图自动设为主参考
  */
 import { useRef, useState } from 'react';
-import { ImageIcon, Star, Trash2 } from 'lucide-react';
+import { ImageIcon, Star, Trash2, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl } from '../../../api/duanju';
 import { characterSheetPrompt } from '../lib/prompts/prompts-image';
+import { rebuildCharacterProfileMessages } from '../lib/characterExtract';
+import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import type { DuanjuCharacter } from '@shared/duanju';
 
 interface Props {
@@ -25,7 +27,41 @@ export default function CharacterCard({ workId, character }: Props) {
   const sheetFileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /** 单角色档案重生成（用户需求 2026-11-11：重生成的是文字档案而非图片）——后台任务（切出安全） */
+  const profileBg = useBgLlmTask(`char-profile-${workId}-${character.id}`, (text) => {
+    void save({ profile: text.trim() });
+  }, (msg) => setError(msg));
+
   if (!project) return null;
+
+  async function save(next: Partial<DuanjuCharacter>): Promise<void> {
+    const characters = project!.characters.map((c) =>
+      c.id === character.id ? { ...c, ...next, updatedAt: Date.now() } : c,
+    );
+    await patch(workId, { characters });
+  }
+
+  function regenerateProfile(): void {
+    const busy = profileBg.state?.status === 'submitting' || profileBg.state?.status === 'running';
+    if (busy || !character.name.trim()) {
+      if (!character.name.trim()) setError('先填角色名——重生成需要知道角色是谁');
+      return;
+    }
+    setError(null);
+    profileBg.submit({
+      source: useSettingsStore.getState().llmPrefs.source,
+      model: useSettingsStore.getState().llmPrefs.model,
+      messages: rebuildCharacterProfileMessages(
+        project!.script.text,
+        character.name,
+        character.profile,
+        project!.reviewCards.characterRelations,
+      ),
+      thinking: false,
+      params: { max_tokens: 2000 },
+      label: `重生成档案·${character.name}`,
+    });
+  }
 
   async function save(next: Partial<DuanjuCharacter>): Promise<void> {
     const characters = project!.characters.map((c) =>
@@ -131,6 +167,23 @@ export default function CharacterCard({ workId, character }: Props) {
           {error}
         </p>
       )}
+
+      {/* 档案重生成（后台任务：切出安全） */}
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={regenerateProfile}
+          disabled={profileBg.state?.status === 'submitting' || profileBg.state?.status === 'running'}
+          data-testid="char-regen-profile"
+          className="flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+          title="结合剧本重新生成更详细的外观档案（生图一致性的事实源）"
+        >
+          <WandSparkles className="h-3 w-3" aria-hidden />
+          {profileBg.state?.status === 'submitting' || profileBg.state?.status === 'running'
+            ? `重生成中…（${profileBg.state.elapsedSec ?? 0}s，可切出）`
+            : '✨ AI 重生成外观档案'}
+        </button>
+      </div>
 
       {/* 设定图区 */}
       <input

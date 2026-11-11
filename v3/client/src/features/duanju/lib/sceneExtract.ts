@@ -25,6 +25,34 @@ export interface ExtractedScene {
   spec: string;
 }
 
+/** 单场景视觉档案重生成（用户需求 2026-11-11）——在现有描述上修正补全，可直接用于生图 */
+export function rebuildSceneSpecMessages(
+  scriptText: string,
+  sceneName: string,
+  currentSpec: string,
+): GenerateMessage[] {
+  const SYSTEM = `你是短剧美术指导。为指定场景重写一份「可直接用于 AI 生图」的视觉档案。
+只输出档案文本本身（纯文本，不要 JSON、不要 markdown、不要解释）。
+要求：
+1. 在现有描述基础上修正与补全——保留正确的细节，充实缺漏的维度；
+2. 逐项写全：空间布局与尺度｜建筑/陈设材质细节｜主光源方向与色温｜时间与天气氛围｜色彩基调（2-3个主色）｜关键道具及其位置（80-150字）；
+3. 以剧本为准，剧本未提及处按题材合理补全；
+4. 场景概念图无人物出现。`;
+  return [
+    { role: 'system', content: SYSTEM },
+    {
+      role: 'user',
+      content: [
+        `场景：${sceneName}`,
+        currentSpec ? `当前描述：${currentSpec}` : '',
+        `剧本：\n${scriptText}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    },
+  ];
+}
+
 export function parseSceneExtract(raw: string): ExtractedScene[] | null {
   const arr = extractJsonArray(raw);
   if (!arr) return null;

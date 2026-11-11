@@ -39,6 +39,36 @@ export interface ExtractedCharacter {
   profile: string;
 }
 
+/** 单角色档案重生成（用户需求 2026-11-11：重新生成的是文字描述而非图片）——在现有档案上修正补全 */
+export function rebuildCharacterProfileMessages(
+  scriptText: string,
+  name: string,
+  currentProfile: string,
+  characterRelations: string,
+): GenerateMessage[] {
+  const SYSTEM = `你是短剧角色设计师。为指定角色重写一份「可直接用于 AI 生图」的外观档案。
+只输出档案文本本身（纯文本，不要 JSON、不要 markdown、不要解释）。
+要求：
+1. 在现有档案基础上修正与补全——保留正确的锚点，充实缺漏的维度；
+2. 逐项写全：年龄性别身份｜发型发色（长度/造型）｜瞳色｜脸型五官特征｜体型身高｜服装（款式/颜色/材质）｜标志性配饰｜气质神态（80-150字）；
+3. 以剧本描写为准，剧本未提及处按题材合理补全，并保持该角色前后一致；
+4. 生图模型看不到剧本——档案必须自足完整。`;
+  return [
+    { role: 'system', content: SYSTEM },
+    {
+      role: 'user',
+      content: [
+        `角色：${name}`,
+        currentProfile ? `当前档案：${currentProfile}` : '',
+        characterRelations ? `人物关系：${characterRelations}` : '',
+        `剧本：\n${scriptText}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    },
+  ];
+}
+
 export function parseCharacterExtract(raw: string): ExtractedCharacter[] | null {
   const arr = extractJsonArray(raw);
   if (!arr) return null;
