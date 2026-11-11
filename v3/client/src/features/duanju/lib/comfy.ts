@@ -21,6 +21,20 @@ export interface ComfyuiConfig {
   imageWorkflow: string;
 }
 
+/**
+ * 引擎地址缺省：本机访问（localhost/127.0.0.1）且用户未配置时预填本地引擎默认地址——
+ * 新浏览器/新会话开箱即用；远程访问（手机/生产站）留空并提示填局域网地址（127.0.0.1 在那些设备上指其自身，不可用）。
+ */
+const DEFAULT_LOCAL_URL = 'http://127.0.0.1:8188';
+
+function defaultUrl(): string {
+  try {
+    return /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? DEFAULT_LOCAL_URL : '';
+  } catch {
+    return '';
+  }
+}
+
 export function loadComfyConfig(): ComfyuiConfig {
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -28,7 +42,7 @@ export function loadComfyConfig(): ComfyuiConfig {
       const parsed = JSON.parse(raw) as Partial<ComfyuiConfig> & { workflow?: string };
       // 迁移：旧结构 {url, workflow} → {url, videoWorkflow, imageWorkflow}
       return {
-        url: typeof parsed.url === 'string' ? parsed.url : '',
+        url: typeof parsed.url === 'string' && parsed.url ? parsed.url : defaultUrl(),
         videoWorkflow: typeof parsed.videoWorkflow === 'string' ? parsed.videoWorkflow : (parsed.workflow ?? ''),
         imageWorkflow: typeof parsed.imageWorkflow === 'string' ? parsed.imageWorkflow : '',
       };
@@ -36,7 +50,7 @@ export function loadComfyConfig(): ComfyuiConfig {
   } catch {
     /* 损坏即重置 */
   }
-  return { url: '', videoWorkflow: '', imageWorkflow: '' };
+  return { url: defaultUrl(), videoWorkflow: '', imageWorkflow: '' };
 }
 
 export function saveComfyConfig(cfg: ComfyuiConfig): void {
