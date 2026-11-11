@@ -87,9 +87,10 @@ const FALLBACK_MODELS: Record<'openai' | 'claude' | 'gemini', string> = {
 
 /** secrets.json 中已配置 apiKey 的 LLM 通道（claude=MiniMax 端点 / openai / gemini） */
 async function configuredChannels(exclude: string): Promise<Array<'openai' | 'claude' | 'gemini'>> {
-  const s: Record<string, { apiKey?: string }> = await readJson<
-    Record<string, { apiKey?: string }>
-  >(join(dataDir(), 'secrets.json')).catch(() => ({}));
+  const s: Record<string, { apiKey?: string }> =
+    (await readJson<Record<string, { apiKey?: string }>>(join(dataDir(), 'secrets.json')).catch(
+      () => ({}),
+    )) ?? {};
   const all: Array<'openai' | 'claude' | 'gemini'> = ['gemini', 'openai', 'claude'];
   return all.filter((c) => c !== exclude && Boolean(s?.[c]?.apiKey));
 }
