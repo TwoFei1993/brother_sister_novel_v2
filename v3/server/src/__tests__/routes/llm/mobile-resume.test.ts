@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import express, { type Express, type NextFunction, type Request, type Response } from 'express';
+import express, { Router, type Express, type NextFunction, type Request, type Response } from 'express';
 import request from 'supertest';
 import { llmTasksRouter } from '../../../routes/llm/tasks';
 import { authRequired, signToken } from '../../../middleware/auth';
@@ -20,8 +20,11 @@ process.env.ACCESS_PASSWORD = 'test123';
 function testApp(): Express {
   const app = express();
   app.use(express.json());
+  // 与生产同构挂载（挂载点剥前缀）——防再次掩盖子路由路径语义
   app.use('/api', authRequired);
-  app.use('/api', llmTasksRouter);
+  const tasksMount = Router();
+  tasksMount.use('/llm/tasks', llmTasksRouter);
+  app.use('/api', tasksMount);
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: String(err) });
   });

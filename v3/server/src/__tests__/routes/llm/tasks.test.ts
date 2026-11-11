@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import express, { type Express, type NextFunction, type Request, type Response } from 'express';
+import express, { Router, type Express, type NextFunction, type Request, type Response } from 'express';
 import request from 'supertest';
 
 import { llmTasksRouter } from '../../../routes/llm/tasks';
@@ -20,9 +20,12 @@ process.env.ACCESS_PASSWORD = 'test123';
 function testApp(): Express {
   const app = express();
   app.use(express.json());
-  // 与生产 app.ts 同语义：llm 域作者专属（未登录 401/读者 403 由 auth 层判定）
+  // 与生产 app.ts 同构挂载：llmRouter.use('/llm/tasks', llmTasksRouter) 剥前缀 + auth 层
+  // （此前测试不剥前缀挂载，恰好掩盖了子路由完整路径的双重前缀 404）
   app.use('/api', authRequired);
-  app.use('/api', llmTasksRouter);
+  const tasksMount = Router();
+  tasksMount.use('/llm/tasks', llmTasksRouter);
+  app.use('/api', tasksMount);
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: String(err) });
   });

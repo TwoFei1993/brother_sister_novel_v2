@@ -114,8 +114,10 @@ async function execute(task: TaskFile, source: 'openai' | 'claude' | 'gemini', m
 
 export const llmTasksRouter = Router();
 
+// 相对路径（挂载点 llmRouter.use('/llm/tasks', …) 已剥前缀）——
+// 此前写成完整路径 '/llm/tasks' 造成双重前缀，实际匹配 /api/llm/tasks/llm/tasks，带登录态必 404「接口不存在」
 llmTasksRouter.post(
-  '/llm/tasks',
+  '/',
   zodBody(createSchema),
   wrap(async (req, res) => {
     const { source, model, messages, params, thinking, label } = req.body as z.infer<typeof createSchema>;
@@ -146,7 +148,7 @@ llmTasksRouter.post(
   }),
 );
 
-llmTasksRouter.get('/llm/tasks/:id', wrap(async (req, res) => {
+llmTasksRouter.get('/:id', wrap(async (req, res) => {
   const id = req.params.id;
   const task = await readJson<TaskFile>(taskFile(id)).catch(() => null);
   if (!task) {
