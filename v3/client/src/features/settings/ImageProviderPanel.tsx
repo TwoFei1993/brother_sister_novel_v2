@@ -33,12 +33,6 @@ const PROVIDERS: ReadonlyArray<{
     desc: '中文文字渲染与多格一致性突出，需智谱密钥（bigmodel.cn）',
     price: '0.1 元/张',
   },
-  {
-    id: 'minimax',
-    label: 'MiniMax image-01',
-    desc: '文字渲染与复杂版式较弱；用已配置的 MiniMax 密钥（plan 内免费额度）',
-    price: 'plan 内',
-  },
 ];
 
 export default function ImageProviderPanel() {

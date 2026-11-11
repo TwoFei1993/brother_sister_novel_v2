@@ -87,7 +87,7 @@ export async function generateDuanjuImage(
   workId: string,
   input: GenerateImageInput,
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
-  const provider = input.provider ?? useSettingsStore.getState().llmPrefs.imageProvider ?? 'minimax';
+  const provider = input.provider ?? useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy';
   if (provider !== 'comfy') {
     // 云端路径：把有效 provider 显式带给 server（顺带修复场景图缺省漏传 provider 的不一致）；
     // sheetSplit 仅本地双段合成用，server genSchema 是 strictObject，透传前必须剥离

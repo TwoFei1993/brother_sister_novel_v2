@@ -29,7 +29,7 @@ export interface LlmPrefs {
   repetitionPenalty?: number;
   /** 润色模型（可选）：正文生成后用该模型二次润色（同通道）；留空关闭 */
   polishModel?: string;
-  /** 生图通道（反馈：image-01 文字渲染/复杂版式弱）：zhipu=GLM-Image / seedream=火山 Seedream 5.0-flash（0.12元，参考图免费，即梦同源）/ comfy=本地 ComfyUI（免费秒级，引擎地址在设置页 ComfyUI 面板配置）缺省 minimax */
+  /** 生图通道（用户决策 2026-11-11：默认强制本地 ComfyUI，不再用 minimax 生图）：zhipu / seedream 为手动切换的云端备选，comfy=本地免费秒级 */
   imageProvider?: 'minimax' | 'zhipu' | 'seedream' | 'comfy';
 }
 
@@ -56,6 +56,8 @@ const DEFAULT_PREFS: LlmPrefs = {
   maxContext: 65536,
   maxTokens: 8192,
   temperature: 0.8,
+  /** 生图默认走本地 ComfyUI（用户决策：不用 minimax 生图） */
+  imageProvider: 'comfy',
 };
 
 /** localStorage 持久化切片（partialize 输出；migrate 返回值同构） */
@@ -87,7 +89,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'v3-llm-prefs',
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, version: number): PersistedSettings => {
         const prev =
           typeof persisted === 'object' && persisted !== null
@@ -102,6 +104,8 @@ export const useSettingsStore = create<SettingsState>()(
             ? { ...DEFAULT_PREFS }
             : { ...DEFAULT_PREFS, ...(prev.llmPrefs ?? {}), model: prev.llmPrefs?.model ?? DEFAULT_PREFS.model };
         if (llmPrefs.maxContext === 1000000) llmPrefs.maxContext = DEFAULT_PREFS.maxContext;
+        // 4→5 生图强制本地 ComfyUI（用户决策：不用 minimax 生图）——旧存储的 minimax 通道迁移为 comfy
+        if (llmPrefs.imageProvider === 'minimax') llmPrefs.imageProvider = 'comfy';
         return { llmPrefs, uiTheme: null };
       },
       storage: createJSONStorage(() => localStorage),
