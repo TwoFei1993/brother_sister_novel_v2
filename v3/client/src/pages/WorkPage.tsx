@@ -12,6 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { BookOpen, List, MessageSquare, Settings, Wrench } from 'lucide-react';
 
 import { updateWork } from '../api/works';
+import { apiFetch } from '../api/client';
 import DuanjuWorkbench from '../features/duanju/DuanjuWorkbench';
 import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDrawer';
 import { useTtsStore } from '../stores/tts';
@@ -83,6 +84,7 @@ export default function WorkPage() {
   useWorkTheme(work?.genre ?? 'hunhe');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
   /** 视图乐观切换覆盖值（PATCH 成功后清除，回落到 work.viewPreference 派生） */
   const [viewOverride, setViewOverride] = useState<ViewPreference | null>(null);
 
@@ -115,6 +117,28 @@ export default function WorkPage() {
   const iconBtn =
     'flex h-10 min-w-10 items-center justify-center rounded-lg text-sm transition-colors hover:bg-[hsl(var(--surface))]';
 
+  /** 小说 → 短剧一键转换：新建短剧作品（小说本体不动），剧本=全文并定稿，跳转短剧工作台 */
+  async function convertToDuanju(): Promise<void> {
+    if (!work || !id || converting) return;
+    if (
+      !confirm(
+        '将创建一个新的短剧作品（小说本体不动）：剧本正文 = 小说全文并直接定稿，之后在剧本 tab 点「重新 AI 拆解」即可走完短剧流程。继续？',
+      )
+    )
+      return;
+    setConverting(true);
+    try {
+      const r = await apiFetch<{ work: { id: string } }>(`/api/works/${id}/convert-to-duanju`, {
+        method: 'POST',
+      });
+      navigate(`/work/${r.work.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '转换失败');
+    } finally {
+      setConverting(false);
+    }
+  }
+
   // 短剧模式：整页委托 DuanjuWorkbench（自带顶栏 tab：剧本/角色/场景/分镜/出图导出，D3/D4）
   if (!loading && !loadError && work?.mode === 'duanju' && id) {
     return <DuanjuWorkbench workId={id} title={work.title} onBack={() => navigate('/')} />;
@@ -133,6 +157,17 @@ export default function WorkPage() {
             <span className="ml-2 text-xs font-normal text-[hsl(var(--fg-muted))]">共 {chapters.length} 章</span>
           )}
         </h1>
+        {work && work.mode === 'novel' && chapters.length > 0 && (
+          <button
+            type="button"
+            onClick={() => void convertToDuanju()}
+            disabled={converting}
+            className={`${iconBtn} text-[hsl(var(--accent))]`}
+            title="把小说正文一键转为短剧：新建短剧作品（小说本体不动），剧本=全文并定稿"
+          >
+            {converting ? '转换中…' : '🎬 转短剧'}
+          </button>
+        )}
         {work && work.mode === 'novel' && (
           <ViewSwitcher value={currentView} disabled={loading || loadError} onChange={(v) => void handleViewChange(v)} />
         )}

@@ -38,7 +38,7 @@ const WORKS_SERVER_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 export function worksDir(): string {
   return resolve(WORKS_SERVER_ROOT, process.env.DATA_DIR ?? '../data', 'works');
 }
-function workFile(id: string): string {
+export function workFile(id: string): string {
   return join(worksDir(), id, 'work.json');
 }
 
