@@ -7,8 +7,6 @@
 import { apiFetch } from './client';
 import type { DuanjuPatch, DuanjuProject, StoredImage } from '@shared/duanju';
 import { generateImageOnComfy, loadComfyConfig } from '../features/duanju/lib/comfy';
-import { composeCharacterSheet } from '../features/duanju/lib/comfyCompose';
-import { characterSheetSplitPrompts } from '../features/duanju/lib/prompts/prompts-image';
 import { useSettingsStore } from '../stores/settings';
 
 export async function getDuanjuProject(workId: string): Promise<DuanjuProject> {
@@ -44,39 +42,11 @@ export interface GenerateImageInput {
   provider?: 'zhipu' | 'seedream' | 'comfy';
   /** 分帧号（kind='frame' 必填 1-4） */
   frameIndex?: number;
-  /** 设定图双段合成的原始数据（仅 comfy 通道用；云端 schema strictObject 会拒，透传前剥离） */
-  sheetSplit?: { style: string; name: string; profile: string };
 }
 
 /** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏 */
 function comfySizeFor(kind: GenerateImageInput['kind']): { width: number; height: number } {
   return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
-}
-
-/**
- * 设定图双段生成 + 合成（版式硬规定）：三视图（1344×768）+ 头像特写（448×768）
- * 各自是模型高遵循任务，canvas 合成「左特写 + 右三视图」——版式由代码保证。
- */
-async function generateCharacterSheetLocal(
-  workId: string,
-  input: GenerateImageInput,
-): Promise<{ image: StoredImage; project: DuanjuProject }> {
-  const cfg = loadComfyConfig();
-  if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
-  const split = input.sheetSplit;
-  if (!split) throw new Error('设定图双段生成缺少角色数据（style/name/profile）');
-  const { portrait, triView } = characterSheetSplitPrompts(split.style, split.name, split.profile);
-  const seed = () => Math.floor(Math.random() * 2_147_483_647);
-  const [portraitBlob, triViewBlob] = await Promise.all([
-    generateImageOnComfy(cfg, { prompt: portrait, width: 448, height: 768, seed: seed() }),
-    generateImageOnComfy(cfg, { prompt: triView, width: 1344, height: 768, seed: seed() }),
-  ]);
-  const blob = await composeCharacterSheet(portraitBlob, triViewBlob);
-  const file = new File([blob], 'comfy-sheet.png', { type: 'image/png' });
-  return uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
-    prompt: input.prompt,
-    source: 'comfy',
-  });
 }
 
 /**
@@ -89,16 +59,11 @@ export async function generateDuanjuImage(
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const provider = input.provider ?? useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy';
   if (provider !== 'comfy') {
-    // 云端路径：把有效 provider 显式带给 server（顺带修复场景图缺省漏传 provider 的不一致）；
-    // sheetSplit 仅本地双段合成用，server genSchema 是 strictObject，透传前必须剥离
-    const { sheetSplit: _split, ...cloudInput } = input;
+    // 云端路径：把有效 provider 显式带给 server（顺带修复场景图缺省漏传 provider 的不一致）
     return apiFetch<{ image: StoredImage; project: DuanjuProject }>(
       `/api/works/${workId}/duanju/images`,
-      { method: 'POST', body: JSON.stringify({ ...cloudInput, provider }) },
+      { method: 'POST', body: JSON.stringify({ ...input, provider }) },
     );
-  }
-  if (input.kind === 'character' && input.sheetSplit) {
-    return generateCharacterSheetLocal(workId, input);
   }
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
