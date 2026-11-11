@@ -165,15 +165,16 @@ describe('buildGridPrompt / buildVideoPrompt', () => {
 });
 
 describe('buildFramePrompt（分帧，成本优化 A 项）', () => {
-  it('单帧：帧序号 + 该帧描述 + 人物锚点 + 一致性要求', () => {
+  it('单帧：帧序号 + 该帧描述 + 人物锚点 + 一致性要求 + 镜头语言', () => {
     const project = makeProject();
     const shot = makeShot({ gridParts: ['低头', '抬头', '握拳', '起身'] });
     const p2 = buildFramePrompt(shot, 2, project);
     expect(p2).toContain('第 2/4 帧');
-    expect(p2).toContain('画面内容：抬头');
+    expect(p2).toContain('【画面主体】抬头'); // 详细版：主体瞬间段（含力势/情绪指令）
     expect(p2).toContain('小满（蓝发双马尾红瞳）');
     expect(p2).toContain('完全一致');
     expect(p2).toContain('荒原');
+    expect(p2).toContain('【镜头语言】'); // 详细版：景别映射成可执行构图指令
     expect(p2).not.toContain('握拳'); // 不串其他帧
   });
 

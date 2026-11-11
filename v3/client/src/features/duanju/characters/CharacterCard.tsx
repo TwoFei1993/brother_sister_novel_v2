@@ -49,6 +49,7 @@ export default function CharacterCard({ workId, character }: Props) {
         prompt,
         aspectRatio: '3:2',
         provider: useSettingsStore.getState().llmPrefs.imageProvider,
+        sheetSplit: { style: project!.style, name: character.name, profile: character.profile },
       });
       // server 已把 project 随响应更新——拉最新
       await useDuanjuStore.getState().load(workId);

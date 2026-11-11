@@ -55,8 +55,15 @@ export function useBgLlmTask(slot: string, onDone: (text: string) => void, onErr
         });
         taskId = r.taskId;
       } catch (err) {
-        setState({ status: 'failed', error: err instanceof Error ? err.message : '提交失败' });
-        onErrorRef.current(err instanceof Error ? err.message : '提交失败');
+        // 404「接口不存在」= 服务端版本过旧（后台任务接口是近期功能）——给可执行的升级指引而非裸文案
+        const status = (err as { status?: number }).status;
+        const raw = err instanceof Error ? err.message : '提交失败';
+        const msg =
+          status === 404
+            ? '服务端版本过旧，缺少后台任务接口——本地请重启 server，线上请更新部署版本'
+            : raw;
+        setState({ status: 'failed', error: msg });
+        onErrorRef.current(msg);
         return;
       }
       localStorage.setItem(slotKey(slot), taskId);

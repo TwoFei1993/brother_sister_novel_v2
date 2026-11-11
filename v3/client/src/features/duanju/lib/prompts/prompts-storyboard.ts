@@ -140,7 +140,15 @@ export function buildGridPrompt(shot: DuanjuShot, gridParts: string[], project: 
 
 const DEFAULT_PARTS = ['起手动作', '动作进行', '高潮瞬间', '收势定格'];
 
-/** 单帧生图 prompt：画风 + 人物锚点 + 场景 + 该帧画面描述（数据源 shot.gridParts，可编辑） */
+/** 景别 → 构图指令映射：把抽象景别词翻译成模型可执行的画面构成（详细版 prompt 的核心增量） */
+const SHOT_COMPOSITION: Record<string, string> = {
+  全景: '全身入画，环境占画面主体，人物与空间的位置关系清晰',
+  中景: '膝盖以上入画，人物动作与姿态为画面主体，环境作氛围陪衬',
+  近景: '胸部以上入画，人物表情与手部细节清晰',
+  特写: '面部或关键局部充满画面，情绪与材质细节放大',
+};
+
+/** 单帧生图 prompt（详细版）：导演视角分段——主体瞬间 / 人物锚点 / 场景光线 / 镜头语言 / 画质 */
 export function buildFramePrompt(shot: DuanjuShot, frameIndex: number, project: DuanjuProject): string {
   const chars = shot.characterIds
     .map((cid) => project.characters.find((c) => c.id === cid))
@@ -148,15 +156,16 @@ export function buildFramePrompt(shot: DuanjuShot, frameIndex: number, project: 
   const scene = shot.sceneId ? project.scenes.find((s) => s.id === shot.sceneId) : undefined;
   const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
   const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
+  const composition = SHOT_COMPOSITION[shot.shotSize] ?? `${shot.shotSize}景别，人物主体清晰`;
   return [
-    `${stylePrefix(project.style)}，单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
+    `${stylePrefix(project.style)}，电影感单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
+    `【画面主体】${desc}——只画这一个动作瞬间，动作的力势与人物情绪要鲜明`,
     chars.length > 0
       ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
       : '【无人物】纯场景帧',
-    scene ? `【场景】${scene.name}（${scene.spec}）` : '',
-    `【镜头】景别：${shot.shotSize}；站位：${shot.staging}`,
-    `画面内容：${desc}`,
-    '要求：只画这一个动作瞬间，画面干净，构图横平竖直，无文字水印',
+    scene ? `【场景与光线】${scene.name}（${scene.spec}）——按场景的光影基调与时间氛围渲染，人物与环境光交互自然` : '',
+    `【镜头语言】${composition}（${shot.shotSize}）；人物位置：${shot.staging}`,
+    '画质要求：细节丰富，光影真实，构图稳定横平竖直，无文字水印',
   ]
     .filter(Boolean)
     .join('\n');

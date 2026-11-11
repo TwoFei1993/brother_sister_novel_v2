@@ -30,6 +30,9 @@ export default function SpendCard() {
       <span>
         记账 <strong className="text-[hsl(var(--accent))]">{s.logged}</strong> 张 ≈ {s.estCostYuan} 元
       </span>
+      {s.freeCount > 0 && (
+        <span className="text-[hsl(var(--accent))]">🎁 本地免费 {s.freeCount} 张</span>
+      )}
       {parts.length > 0 && <span className="text-[hsl(var(--fg-muted))]">{parts.join(' · ')}</span>}
       {s.rollCount > 0 && (
         <span className="text-[hsl(var(--danger))]">重roll {s.rollCount} 张（≈ {(s.rollCount * YUAN_PER_IMAGE).toFixed(1)} 元）</span>

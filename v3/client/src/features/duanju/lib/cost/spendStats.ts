@@ -17,11 +17,14 @@ export interface SpendStats {
   rollCount: number;
   existingAssets: number;
   estCostYuan: number;
+  /** 本地 ComfyUI 免费生图张数（不进金额账，但要展示——否则用户看不到生成量） */
+  freeCount: number;
 }
 
 export function spendStats(project: DuanjuProject): SpendStats {
   const all = project.spendLog ?? [];
-  // 本地 ComfyUI 免费图（note 标注「本地免费」）不计成本账
+  // 本地 ComfyUI 免费图（note 标注「本地免费」）不计成本账，张数单独统计展示
+  const freeLog = all.filter((e) => (e.note ?? '').includes('本地免费'));
   const log = all.filter((e) => !(e.note ?? '').includes('本地免费'));
   const byKind: Record<SpendEntry['kind'], number> = { character: 0, scene: 0, shot: 0, frame: 0 };
   const counts = new Map<string, number>();
@@ -45,5 +48,6 @@ export function spendStats(project: DuanjuProject): SpendStats {
     rollCount,
     existingAssets,
     estCostYuan: Math.round(log.length * YUAN_PER_IMAGE * 10) / 10,
+    freeCount: freeLog.length,
   };
 }
