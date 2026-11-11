@@ -53,7 +53,7 @@ beforeEach(async () => {
 // 生图 key 读 dataDir/secrets.json（无则 IMG_AUTH）——mock fetch 前先落测试 key
 beforeEach(async () => {
   await mkdir(join(root), { recursive: true });
-  await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' } }), 'utf8');
+  await writeFile(join(root, 'secrets.json'), JSON.stringify({ ark: { apiKey: 'sk-test' } }), 'utf8');
 });
 
 afterEach(() => {
@@ -70,9 +70,9 @@ function mockImageUpstream(): void {
     'fetch',
     vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes('image_generation')) {
+      if (u.includes('images/generations')) {
         return new Response(
-          JSON.stringify({ base_resp: { status_code: 0 }, data: { image_urls: ['https://cdn.example.com/x.png'] } }),
+          JSON.stringify({ data: [{ url: 'https://cdn.example.com/x.png' }] }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }

@@ -104,9 +104,9 @@ function mockImageUpstream(): void {
     'fetch',
     vi.fn(async (url: string | URL, _init?: RequestInit) => {
       const u = String(url);
-      if (u.includes('image_generation')) {
+      if (u.includes('images/generations')) {
         return new Response(
-          JSON.stringify({ base_resp: { status_code: 0 }, data: { image_urls: ['https://cdn.example.com/x.png'] } }),
+          JSON.stringify({ data: [{ url: 'https://cdn.example.com/x.png' }] }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
@@ -322,7 +322,7 @@ beforeEach(async () => {
   await mkdir(join(root), { recursive: true });
   await writeFile(
     join(root, 'secrets.json'),
-    JSON.stringify({ claude: { apiKey: 'sk-test' } }),
+    JSON.stringify({ ark: { apiKey: 'sk-test' } }),
     'utf8',
   );
 });

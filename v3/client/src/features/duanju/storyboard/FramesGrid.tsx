@@ -27,12 +27,12 @@ export default function FramesGrid({ workId, shot, project }: Props) {
   const [error, setError] = useState<string | null>(null);
   const frames = shot.frames ?? [];
   const missing = missingFrames(shot);
-  /** 按钮价格文案：本地 ComfyUI 免费标注，云端按 0.2 元/张估算 */
+  /** 按钮价格文案：本地 ComfyUI 免费标注，云端按 0.12 元/张估算 */
   const priceLabel = (n: number): string => {
-    const provider = useSettingsStore.getState().llmPrefs.imageProvider ?? 'minimax';
+    const provider = useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy';
     return provider === 'comfy'
       ? `生成 ${n} 帧（本地免费）`
-      : `生成 ${n} 帧（约 ${(n * 0.2).toFixed(1)} 元）`;
+      : `生成 ${n} 帧（约 ${(n * 0.12).toFixed(1)} 元）`;
   };
 
   /** 生成/重roll 单帧；成功返回 true（补帧串行时用返回值判断是否继续） */

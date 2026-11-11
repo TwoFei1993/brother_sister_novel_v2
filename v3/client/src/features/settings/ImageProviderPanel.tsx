@@ -8,7 +8,7 @@ import { getSecretsMask, putArkKey, putZhipuKey } from './api';
 import { useSettingsStore } from '../../stores/settings';
 
 const PROVIDERS: ReadonlyArray<{
-  id: 'minimax' | 'zhipu' | 'seedream' | 'comfy';
+  id: 'zhipu' | 'seedream' | 'comfy';
   label: string;
   desc: string;
   recommended?: boolean;
@@ -36,7 +36,7 @@ const PROVIDERS: ReadonlyArray<{
 ];
 
 export default function ImageProviderPanel() {
-  const imageProvider = useSettingsStore((s) => s.llmPrefs.imageProvider ?? 'minimax');
+  const imageProvider = useSettingsStore((s) => s.llmPrefs.imageProvider ?? 'comfy');
   const setLlmPrefs = useSettingsStore((s) => s.setLlmPrefs);
   const [maskZhipu, setMaskZhipu] = useState<boolean | null>(null);
   const [maskArk, setMaskArk] = useState<boolean | null>(null);

@@ -1,10 +1,11 @@
 /**
- * 生图服务测试（实施计划 T2.x）：mock fetch，验证调用契约与错误分类
+ * 生图服务测试：mock fetch，验证调用契约与错误分类
  *
- * 不打真实上游（spike 脚本已实测真链路）；此处锁定：
- * - 成功：body 契约（model/prompt 截断/aspect_ratio 白名单兜底）+ DataURL 参考图格式
- * - base_resp 分类：1004/2049→AUTH、1008→QUOTA、1026→REJECTED
- * - 网络/5xx：重试 3 次后 IMG_NET
+ * minimax image-01 通道已移除（用户决策 2026-11-11）；缺省/云端语义 = seedream（火山方舟）。
+ * 此处锁定：
+ * - 成功：body 契约（model/size 映射与兜底/prompt 截断 2000/watermark）+ DataURL 参考图格式
+ * - 错误：401→AUTH、非 200→UPSTREAM、空 data→UPSTREAM
+ * - 网络：重试 3 次后 IMG_NET
  * - downloadAndStore：落盘路径与 originUrl
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +20,7 @@ let root = '';
 
 async function writeSecrets(): Promise<void> {
   await mkdir(root, { recursive: true });
-  await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' } }), 'utf8');
+  await writeFile(join(root, 'secrets.json'), JSON.stringify({ ark: { apiKey: 'sk-test' } }), 'utf8');
 }
 
 const { callImageGeneration, downloadAndStore, ImageError } = await import('../../services/image');
@@ -44,44 +45,43 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe('callImageGeneration', () => {
-  it('成功：契约字段 + aspect_ratio 白名单兜底 3:4', async () => {
-    const fn = mockFetchJson(200, {
-      base_resp: { status_code: 0 },
-      data: { image_urls: ['https://cdn.example.com/a.png'] },
-    });
-    const urls = await callImageGeneration({ prompt: 'x'.repeat(2000), aspectRatio: 'weird' });
-    expect(urls).toEqual(['https://cdn.example.com/a.png']);
-    const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.model).toBe('image-01');
-    expect(body.prompt.length).toBe(1500); // 截断到官方上限
-    expect(body.aspect_ratio).toBe('3:4'); // 非白名单值兜底
-    expect(body.response_format).toBe('url');
+describe('callImageGeneration（缺省 seedream）', () => {
+  it('成功：契约字段 + size 兜底 1536x2048 + watermark=false + data[{url}] 解析', async () => {
+    const fn = mockFetchJson(200, { data: [{ url: 'https://ark.example.com/a.png' }] });
+    const urls = await callImageGeneration({ prompt: 'x'.repeat(2500), aspectRatio: 'weird' });
+    expect(urls).toEqual(['https://ark.example.com/a.png']);
+    const [url, init] = fn.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('ark.cn-beijing.volces.com');
+    const body = JSON.parse(init.body as string);
+    expect(body.model).toBe('doubao-seedream-5-0-flash');
+    expect(body.prompt.length).toBe(2000); // 截断到 seedream 上限
+    expect(body.size).toBe('1536x2048'); // 非白名单比例兜底
+    expect(body.watermark).toBe(false);
   });
 
-  it('参考图转 Data URL（mime 按 png）', async () => {
+  it('参考图转 Data URL（mime 按 png，经 image 字段免费传入）', async () => {
     const refFile = join(root, 'ref.png');
     await writeFile(refFile, Buffer.from('fakepng'));
-    const fn = mockFetchJson(200, {
-      base_resp: { status_code: 0 },
-      data: { image_urls: ['https://cdn.example.com/b.png'] },
-    });
+    const fn = mockFetchJson(200, { data: [{ url: 'https://ark.example.com/b.png' }] });
     await callImageGeneration({ prompt: 'p', subjectRefPath: refFile });
     const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.subject_reference).toEqual([
-      { type: 'character', image_file: expect.stringMatching(/^data:image\/png;base64,/) },
-    ]);
+    expect(String(body.image)).toMatch(/^data:image\/png;base64,/);
   });
 
-  it('1004 → IMG_AUTH；1008 → IMG_QUOTA；1026 → IMG_REJECTED（不重试）', async () => {
-    mockFetchJson(200, { base_resp: { status_code: 1004, status_msg: 'auth fail' } });
+  it('401 → IMG_AUTH；非 200 → IMG_UPSTREAM（不重试）', async () => {
+    mockFetchJson(401, { error: { message: 'invalid token' } });
     await expect(callImageGeneration({ prompt: 'p' })).rejects.toMatchObject({ code: 'IMG_AUTH' });
 
-    mockFetchJson(200, { base_resp: { status_code: 1008, status_msg: 'quota' } });
-    await expect(callImageGeneration({ prompt: 'p' })).rejects.toMatchObject({ code: 'IMG_QUOTA' });
+    mockFetchJson(200, { error: { message: 'content sensitive' } });
+    await expect(callImageGeneration({ prompt: 'p' })).rejects.toMatchObject({ code: 'IMG_UPSTREAM' });
 
-    mockFetchJson(200, { base_resp: { status_code: 1026, status_msg: 'sensitive' } });
-    await expect(callImageGeneration({ prompt: 'p' })).rejects.toMatchObject({ code: 'IMG_REJECTED' });
+    mockFetchJson(500, {});
+    await expect(callImageGeneration({ prompt: 'p' })).rejects.toMatchObject({ code: 'IMG_UPSTREAM' });
+  });
+
+  it('空 data / 无 url → IMG_UPSTREAM', async () => {
+    mockFetchJson(200, { data: [] });
+    await expect(callImageGeneration({ prompt: 'p' })).rejects.toMatchObject({ code: 'IMG_UPSTREAM' });
   });
 
   it('网络错误：重试 3 次后 IMG_NET', async () => {
@@ -114,9 +114,9 @@ describe('downloadAndStore', () => {
   });
 });
 
-describe('zhipu GLM-Image 通道（生图升级轮）', () => {
-  it('provider=zhipu：端点/模型/size 形态 + data[{url}] 解析', async () => {
-    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' }, zhipu: { apiKey: 'zp-test' } }), 'utf8');
+describe('zhipu GLM-Image 通道', () => {
+  it('provider=zhipu：端点/模型/size 形态 + data[{url}] 解析 + prompt 截断 1000', async () => {
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({ zhipu: { apiKey: 'zp-test' } }), 'utf8');
     const fn = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({ data: [{ url: 'https://cdn.zhipu.example.com/a.png' }] }),
@@ -124,7 +124,7 @@ describe('zhipu GLM-Image 通道（生图升级轮）', () => {
       ),
     );
     vi.stubGlobal('fetch', fn);
-    const urls = await callImageGeneration({ prompt: '角色设定图', aspectRatio: '3:4', provider: 'zhipu' });
+    const urls = await callImageGeneration({ prompt: '角色设定图'.repeat(400), aspectRatio: '3:4', provider: 'zhipu' });
     expect(urls).toEqual(['https://cdn.zhipu.example.com/a.png']);
     const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
     expect(body.model).toBe('glm-image');
@@ -134,79 +134,24 @@ describe('zhipu GLM-Image 通道（生图升级轮）', () => {
   });
 
   it('provider=zhipu 且未配置密钥 → IMG_AUTH 人话（提示切换通道）', async () => {
-    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: {} }), 'utf8');
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({}), 'utf8');
     await expect(
       callImageGeneration({ prompt: 'p', provider: 'zhipu' }),
     ).rejects.toMatchObject({ code: 'IMG_AUTH' });
-    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' } }), 'utf8');
-  });
-
-  it('缺省 provider（旧调用方）→ 仍走 minimax 契约', async () => {
-    const fn = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ base_resp: { status_code: 0 }, data: { image_urls: ['https://cdn.example.com/m.png'] } }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
-    vi.stubGlobal('fetch', fn);
-    const urls = await callImageGeneration({ prompt: 'p' });
-    expect(urls).toHaveLength(1);
-    const body = JSON.parse((fn.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.model).toBe('image-01');
-    expect(body.aspect_ratio).toBe('3:4');
-  });
-});
-
-
-describe('seedream 通道（火山方舟，质量升级轮）', () => {
-  it('provider=seedream：端点/模型/size/watermark + 参考图 image 字段', async () => {
-    await writeFile(
-      join(root, 'secrets.json'),
-      JSON.stringify({ claude: { apiKey: 'sk-test' }, ark: { apiKey: 'ark-test' } }),
-      'utf8',
-    );
-    const refFile = join(root, 'ref.png');
-    await writeFile(refFile, Buffer.from('fakepng'));
-    const fn = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ data: [{ url: 'https://ark.example.com/a.png' }] }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
-    vi.stubGlobal('fetch', fn);
-    const urls = await callImageGeneration({
-      prompt: '四宫格分镜',
-      aspectRatio: '1:1',
-      subjectRefPath: refFile,
-      provider: 'seedream',
-    });
-    expect(urls).toEqual(['https://ark.example.com/a.png']);
-    const [url, init] = fn.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('ark.cn-beijing.volces.com');
-    const body = JSON.parse(init.body as string);
-    expect(body.model).toBe('doubao-seedream-5-0-flash');
-    expect(body.size).toBe('2048x2048');
-    expect(body.watermark).toBe(false);
-    expect(String(body.image)).toMatch(/^data:image\/png;base64,/); // 参考图输入免费
-    expect(body.subject_reference).toBeUndefined();
+    await writeSecrets();
   });
 
   it('provider=seedream 无 ark 密钥 → IMG_AUTH（提示切换通道）', async () => {
-    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'k' } }), 'utf8');
+    await writeFile(join(root, 'secrets.json'), JSON.stringify({}), 'utf8');
     await expect(callImageGeneration({ prompt: 'p', provider: 'seedream' })).rejects.toMatchObject({
       code: 'IMG_AUTH',
     });
-    await writeFile(join(root, 'secrets.json'), JSON.stringify({ claude: { apiKey: 'sk-test' } }), 'utf8');
+    await writeSecrets();
   });
 
-  it('seedream prompt 上限 2000（比 minimax 1500 宽松）', async () => {
-    await writeFile(
-      join(root, 'secrets.json'),
-      JSON.stringify({ claude: { apiKey: 'sk' }, ark: { apiKey: 'ark' } }),
-      'utf8',
-    );
+  it('seedream prompt 上限 2000', async () => {
     const fn = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ base_resp: { status_code: 0 }, data: [{ url: 'https://x/a.png' }] }), {
+      new Response(JSON.stringify({ data: [{ url: 'https://x/a.png' }] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),

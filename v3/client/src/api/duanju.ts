@@ -40,8 +40,8 @@ export interface GenerateImageInput {
   aspectRatio?: string;
   /** 角色参考图 id（保持人物一致；缺省用角色当前主参考图） */
   refImageId?: string;
-  /** 生图通道（comfy=本地 ComfyUI 免费秒级 / zhipu=GLM-Image 文字强 / seedream=火山 Seedream 质量顶级；缺省按用户设置或 minimax） */
-  provider?: 'minimax' | 'zhipu' | 'seedream' | 'comfy';
+  /** 生图通道（comfy=本地 ComfyUI 免费秒级 / zhipu=GLM-Image 文字强 / seedream=火山 Seedream 质量顶级；缺省按用户设置或 comfy） */
+  provider?: 'zhipu' | 'seedream' | 'comfy';
   /** 分帧号（kind='frame' 必填 1-4） */
   frameIndex?: number;
   /** 设定图双段合成的原始数据（仅 comfy 通道用；云端 schema strictObject 会拒，透传前剥离） */

@@ -146,7 +146,7 @@ describe('spendStats（成本仪表盘）', () => {
     expect(s.logged).toBe(7);
     expect(s.byKind).toEqual({ character: 2, scene: 1, shot: 1, frame: 3 });
     expect(s.rollCount).toBe(2);
-    expect(s.estCostYuan).toBe(1.4); // 7 × 0.2
+    expect(s.estCostYuan).toBe(0.8); // 7 × 0.12，一位小数四舍五入
   });
 
   it('盘面数 = 设定图 + 场景图 + 帧 + 旧整图；spendLog 缺省（旧数据）防御', () => {

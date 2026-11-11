@@ -1,7 +1,7 @@
 /**
  * 整集批量出图（共识 D6 → 成本优化：帧级任务）
  *
- * 两段式：①确认弹窗（帧数=待补帧总数，每张约 0.2 元；说明分帧修补只花 1/4）
+ * 两段式：①确认弹窗（帧数=待补帧总数，每张约 0.12 元；说明分帧修补只花 1/4）
  * ②执行面板（ImageQueue 并发 2；单帧失败不阻塞；可中止未开始任务）。
  * 待生成口径：分帧镜头补缺帧；旧整图镜头（有 gridImage 无 frames）跳过；
  * 空镜头（无任何图）按 4 帧全生成。
@@ -50,8 +50,8 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
   const failed = entries.filter(([, s]) => s.status === 'fail').length;
   const total = entries.length;
   const finished = total > 0 && done + failed >= total;
-  /** 费用/耗时文案随通道：本地 ComfyUI 免费，云端按 0.2 元/张估算 */
-  const isComfy = (useSettingsStore.getState().llmPrefs.imageProvider ?? 'minimax') === 'comfy';
+  /** 费用/耗时文案随通道：本地 ComfyUI 免费，云端按 0.12 元/张估算 */
+  const isComfy = (useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy') === 'comfy';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4">
@@ -79,7 +79,7 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
               <span className="text-xs text-[hsl(var(--fg-muted))]">
                 {isComfy
                   ? '（本地免费 · 秒级出图，并发 2 排队）'
-                  : `（每张约 0.2 元 · 15-30 秒，并发 2 排队；约 ${(tasks.length * 0.2).toFixed(0)} 元）`}
+                  : `（每张约 0.12 元 · 15-30 秒，并发 2 排队；约 ${(tasks.length * 0.12).toFixed(0)} 元）`}
               </span>
             </p>
             <p className="text-xs leading-5 text-[hsl(var(--fg-muted))]">

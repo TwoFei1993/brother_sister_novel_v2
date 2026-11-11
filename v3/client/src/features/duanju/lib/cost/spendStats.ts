@@ -4,12 +4,12 @@
  * - logged：升级到记账后的生成张数（按 kind 分桶）
  * - rollCount：重roll 张数（同 kind:refId:note 重复出现，次数-1 求和）
  * - existingAssets：现存产物盘面（角色设定图 + 场景图 + 分镜帧/旧整图）——升级前存量无日志
- * - estCostYuan：按单价估算（minimax image-01 ≈ 0.2 元/张；zhipu 通道更便宜，给区间下限）
+ * - estCostYuan：按单价估算（云端唯一计费通道 seedream ≈ 0.12 元/张；本地 ComfyUI 免费不计）
  */
 import type { DuanjuProject, SpendEntry } from '@shared/duanju';
 
-/** minimax image-01 单张约 0.2 元（BatchBar 同口径） */
-export const YUAN_PER_IMAGE = 0.2;
+/** seedream 单张约 0.12 元（BatchBar 同口径；minimax 通道已移除） */
+export const YUAN_PER_IMAGE = 0.12;
 
 export interface SpendStats {
   logged: number;
