@@ -132,11 +132,12 @@ async function generateCharacterSheetLocal(
     source: 'comfy',
   });
   // ③ 主参考显式指向特写单图（server 首图逻辑只在 refImageId 为空时生效，覆盖不了存量）
-  const cur = afterSheet ?? afterPortrait;
+  const cur = afterSheet;
   const characters = cur.characters.map((c) =>
     c.id === input.refId ? { ...c, refImageId: portraitImg.id } : c,
   );
-  return patchDuanjuProject(workId, { revision: cur.revision, characters });
+  const project = await patchDuanjuProject(workId, { revision: cur.revision, characters });
+  return { image: portraitImg, project };
 }
 
 /**

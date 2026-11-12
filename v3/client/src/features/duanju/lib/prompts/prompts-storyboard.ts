@@ -181,13 +181,24 @@ export function buildFramePrompt(
   const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
   const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
   const composition = SHOT_COMPOSITION[shot.shotSize] ?? `${shot.shotSize}景别，人物主体清晰`;
-  const charsLine = opts.refMode
-    ? chars.length > 0
-      ? `【出场人物】${chars.map((c) => c.name).join('、')}——人物外貌严格保持与参考图完全一致（同一个人，勿改发型/服装/五官）`
-      : '【无人物】纯场景帧'
-    : chars.length > 0
-      ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
-      : '【无人物】纯场景帧';
+  // 参考通道（2511 编辑指令式——社区实证：编辑模型必须用「保留+改变+机位」指令动词结构，
+  // 纯描述式会被参考图构图锁死导致四帧雷同；短场景级指令优于冗长描述）
+  if (opts.refMode) {
+    return [
+      chars.length > 0
+        ? `保持图1中${chars.map((c) => c.name).join('、')}的外貌完全一致（毛色/五官/体型/服装一项都不改），改变取景与构图，生成一张全新的画面：`
+        : '生成一张全新画面：',
+      `【画面内容】${desc}`,
+      scene ? `【场景】置于${scene.name}：${scene.spec}` : '',
+      `【机位指令】${composition}——重新构图取景（不要沿用图1的取景角度）`,
+      `${stylePrefix(project.style)}，${shot.staging}。画质要求：细节丰富，光影真实，无文字水印`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+  const charsLine = chars.length > 0
+    ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
+    : '【无人物】纯场景帧';
   return [
     `${stylePrefix(project.style)}，电影感单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
     `【画面主体】${desc}——只画这一个动作瞬间，动作的力势与人物情绪要鲜明`,
