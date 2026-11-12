@@ -34,11 +34,13 @@ interface Props {
   work: Work;
   /** 应用/回滚成功回调（宿主同步 workStore，切「资料」即可见） */
   onApplied: (w: Work) => void;
+  /** 应用成功后跳去写正文（宿主切分区；缺省不显示入口） */
+  onGoWrite?: () => void;
 }
 
 const strip = (t: string): string => t.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-export default function BookOutlineChat({ work, onApplied }: Props) {
+export default function BookOutlineChat({ work, onApplied, onGoWrite }: Props) {
   const prefs = useSettingsStore((s) => s.llmPrefs);
   const initial = useMemo(() => loadChat(work.id), [work.id]);
   const [turns, setTurns] = useState<BookTurn[]>(initial.turns);
@@ -352,12 +354,24 @@ export default function BookOutlineChat({ work, onApplied }: Props) {
           )}
           {error && <p className="rounded-lg bg-[hsl(var(--danger))]/10 p-2 text-xs text-[hsl(var(--danger))]">{error}</p>}
           {appliedMsg && (
-            <p
-              className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 text-xs text-emerald-600 dark:text-emerald-400"
-              data-testid="book-outline-applied"
-            >
-              {appliedMsg}
-            </p>
+            <div className="space-y-1.5">
+              <p
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 text-xs text-emerald-600 dark:text-emerald-400"
+                data-testid="book-outline-applied"
+              >
+                {appliedMsg}
+              </p>
+              {onGoWrite && (
+                <button
+                  type="button"
+                  onClick={onGoWrite}
+                  data-testid="book-outline-go-write"
+                  className="h-9 w-full rounded-xl border border-emerald-500/50 bg-emerald-500/10 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                >
+                  📖 资料已就绪，去写第 1 章 →
+                </button>
+              )}
+            </div>
           )}
         </div>
 

@@ -6,7 +6,7 @@
  * - 会话与历史按 workId 独立持久化（localStorage），跨页面切换上下文不丢
  */
 import type { ExtractedOutline } from '../../lib/outline/wizard';
-import type { PlannerProposal, PlannerQuestion } from './planner-llm';
+import { normalizeOutlineChapters, type PlannerProposal, type PlannerQuestion } from './planner-llm';
 
 export interface BookTurn {
   role: 'user' | 'assistant';
@@ -175,19 +175,20 @@ export function bookPlannerMessages(
   ];
 }
 
-/** 应用策划案 → 资料 settings 切片（updateWork 与历史快照共用） */
+/** 应用策划案 → 资料 settings 切片（updateWork 与历史快照共用；chapters 归一化防缺 index → NaN → null 被校验拒） */
 export function proposalToSlice(
   proposal: PlannerProposal,
   base: { desiredChapterCount?: number },
 ): AppliedVersion['slice'] {
-  const chapters = proposal.extracted.chapters ?? [];
+  const chapters = normalizeOutlineChapters(proposal.extracted.chapters ?? []);
+  const baseCount = Number.isFinite(base.desiredChapterCount) ? (base.desiredChapterCount ?? 0) : 0;
   const desired = Math.max(
     chapters.reduce((mx, c) => Math.max(mx, c.index), 0),
-    base.desiredChapterCount ?? 0,
+    Math.floor(baseCount),
     1,
   );
   return {
-    chapterOutlines: chapters.map((c) => ({ index: c.index, title: c.title, plot: c.plot })),
+    chapterOutlines: chapters,
     desiredChapterCount: desired,
     backgroundNote: proposal.extracted.background,
     coreConflict: proposal.extracted.conflict,

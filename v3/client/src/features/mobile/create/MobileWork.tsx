@@ -186,6 +186,7 @@ export default function MobileWork() {
                 work={work}
                 chapters={chapters}
                 onApplied={setWork}
+                onGoWrite={() => pickPane('text')}
                 onDone={(msg) => {
                   upsertLocal(msg);
                   setChapterId(msg.id);

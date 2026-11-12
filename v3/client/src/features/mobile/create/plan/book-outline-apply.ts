@@ -15,7 +15,7 @@ import {
   pushHistory,
   type AppliedVersion,
 } from '../../../planner/book-planner';
-import type { PlannerProposal } from '../../../planner/planner-llm';
+import { normalizeOutlineChapters, type PlannerProposal } from '../../../planner/planner-llm';
 
 export type ApplyStage = 'cards' | 'worldbook' | 'settings';
 
@@ -92,11 +92,17 @@ export async function applyProposalToBook(
   return { updated, msg };
 }
 
-/** 历史回滚：恢复该版本的资料切片（不动已绑定的卡/书）；失败抛错 */
+/** 历史回滚：恢复该版本的资料切片（不动已绑定的卡/书）；失败抛错。
+ *  旧快照可能存着 NaN 序列化出的 null（缺 index 修复前的历史数据）——恢复前归一化防再被校验拒 */
 export async function restoreBookSlice(work: Work, v: AppliedVersion): Promise<Work> {
   const latest = await apiFetch<Work>(`/api/works/${work.id}`);
+  const chapters = normalizeOutlineChapters(v.slice.chapterOutlines);
+  const desired =
+    Number.isFinite(v.slice.desiredChapterCount) && v.slice.desiredChapterCount > 0
+      ? Math.floor(v.slice.desiredChapterCount)
+      : Math.max(chapters.reduce((mx, c) => Math.max(mx, c.index), 0), 1);
   return updateWork(work.id, {
     revision: latest.revision,
-    settings: { ...work.settings, ...v.slice },
+    settings: { ...work.settings, ...v.slice, chapterOutlines: chapters, desiredChapterCount: desired },
   });
 }

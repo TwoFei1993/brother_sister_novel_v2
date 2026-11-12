@@ -20,6 +20,7 @@ export function OutlinePane({
   chapters,
   onApplied,
   onDone,
+  onGoWrite,
 }: {
   work: Work;
   chapters: readonly ChapterMsg[];
@@ -27,6 +28,8 @@ export function OutlinePane({
   onApplied: (w: Work) => void;
   /** 章节新版本生成成功回调 */
   onDone: (msg: Message) => void;
+  /** 全书策划应用成功后跳去写正文（宿主切分区） */
+  onGoWrite?: () => void;
 }) {
   const hasChapters = chapters.length > 0;
   const [mode, setMode] = useState<OutlineMode>(hasChapters ? 'chapter' : 'book');
@@ -67,7 +70,7 @@ export function OutlinePane({
       </div>
 
       {mode === 'book' ? (
-        <BookOutlineChat work={work} onApplied={onApplied} />
+        <BookOutlineChat work={work} onApplied={onApplied} onGoWrite={onGoWrite} />
       ) : hasChapters ? (
         <OutlineIterChat work={work} chapters={chapters.map((msg) => ({ msg }))} onDone={onDone} />
       ) : (

@@ -65,6 +65,21 @@ describe('parsePlannerReply', () => {
     const r = parsePlannerReply('{"reply":"x","outline":{"characters":"oops","background":1}}');
     expect(r?.proposal).toBeNull();
   });
+
+  it('chapters 条目缺 index（卷规划/截断尾条）→ 按数组序补正整数，不产生 NaN', () => {
+    // 实测回归：缺 index 的条目进 Math.max 得 NaN，JSON.stringify 序列化为 null 被服务端校验拒
+    const r = parsePlannerReply(
+      '{"reply":"出案","questions":[],"title":"T","genre":"G","outline":{"characters":[{"name":"A","role":"主角","traits":[]}],"background":"背景。","abilities":[],"factions":[],"conflict":"C","chapters":[{"title":"第一卷 起步","plot":"卷规划一段"},{"index":2,"title":"第2章","plot":"细纲"},{"title":"尾条缺号","plot":"截断"}]}}',
+    );
+    expect(r?.proposal?.extracted.chapters?.map((c) => c.index)).toEqual([1, 2, 3]);
+  });
+
+  it('chapters 条目 index 非法（字符串/负数）→ 归一化为序号', () => {
+    const r = parsePlannerReply(
+      '{"reply":"x","questions":[],"title":"T","genre":"G","outline":{"characters":[{"name":"A","role":"主角","traits":[]}],"background":"b","abilities":[],"factions":[],"conflict":"","chapters":[{"index":"三","title":"a","plot":"pa"},{"index":-2,"title":"b","plot":"pb"}]}}',
+    );
+    expect(r?.proposal?.extracted.chapters?.map((c) => c.index)).toEqual([1, 2]);
+  });
 });
 
 describe('plannerMessages（对话组装）', () => {
@@ -121,5 +136,20 @@ describe('proposalToChapterSettings', () => {
       { index: 5, title: 'b', plot: 'pb' },
     ]);
     expect(s.desiredChapterCount).toBe(5);
+  });
+
+  it('无章节大纲（只有人物/背景）→ 目标章数兜底 1（0 会被服务端 positive 校验拒）', () => {
+    const proposal: PlannerProposal = {
+      title: 'T',
+      genre: 'G',
+      extracted: {
+        characters: [{ name: 'A', role: '主角', traits: [] }],
+        background: 'b',
+        abilities: [],
+        factions: [],
+        conflict: '',
+      },
+    };
+    expect(proposalToChapterSettings(proposal).desiredChapterCount).toBeGreaterThanOrEqual(1);
   });
 });

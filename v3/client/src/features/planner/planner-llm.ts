@@ -29,6 +29,26 @@ export interface ParsedPlannerReply {
   proposal: PlannerProposal | null;
 }
 
+/**
+ * 章节大纲归一化（缺 index 修复）：LLM 输出的 chapters 条目可能缺 index（卷规划条目、
+ * 截断尾条、忘记编号）——undefined 进 Math.max 得 NaN，JSON.stringify(NaN) 序列化为 null，
+ * 被 settings 校验（desiredChapterCount/chapterOutlines.index 均为正整数）以
+ * 「Expected number, received null」拒之门外。统一在此补序号兜底 + 字段字符串化，
+ * 所有消费方（向导一键开书 / 书内应用资料）拿到的 index 保证为正整数。
+ */
+export function normalizeOutlineChapters(
+  chapters: ReadonlyArray<{ index?: unknown; title?: unknown; plot?: unknown }>,
+): Array<{ index: number; title: string; plot: string }> {
+  return chapters.map((c, i) => {
+    const raw = Number(c.index);
+    return {
+      index: Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : i + 1,
+      title: String(c.title ?? ''),
+      plot: String(c.plot ?? ''),
+    };
+  });
+}
+
 export const PLANNER_SYSTEM = `你是网文创作向导。用户描述创作想法后，你负责**先问清楚、再产出**一份可直接开书的策划案（像资深编辑的选题面谈，不要自顾自脑补）。
 每次回复输出严格 JSON（无其他文字）：
 {"reply":"给用户的话（口语化）","questions":[{"q":"需要用户拍板的问题","options":["候选项一","候选项二","候选项三"]}],"title":"书名","genre":"题材","outline":{...}或null}
@@ -136,7 +156,7 @@ function tryParseReply(candidate: string): ParsedPlannerReply | null {
             ability: typeof o.ability === 'string' ? o.ability : undefined,
             factions: Array.isArray(o.factions) ? o.factions.map(String) : [],
             conflict: typeof o.conflict === 'string' ? o.conflict : '',
-            chapters: Array.isArray(o.chapters) ? o.chapters : [],
+            chapters: Array.isArray(o.chapters) ? normalizeOutlineChapters(o.chapters) : [],
           },
         }
       : null;
@@ -162,14 +182,14 @@ export function plannerMessages(
   ];
 }
 
-/** 策划案 → 作品 settings.chapterOutlines（三字段裁剪）与目标章数 */
+/** 策划案 → 作品 settings.chapterOutlines（三字段裁剪）与目标章数（空大纲兜底 1——校验要求 positive） */
 export function proposalToChapterSettings(proposal: PlannerProposal): {
   chapterOutlines: Array<{ index: number; title: string; plot: string }>;
   desiredChapterCount: number;
 } {
-  const chapters = proposal.extracted.chapters ?? [];
+  const chapters = normalizeOutlineChapters(proposal.extracted.chapters ?? []);
   return {
     chapterOutlines: toChapterOutlineItems(chapters),
-    desiredChapterCount: chapters.reduce((mx, c) => Math.max(mx, c.index), 0),
+    desiredChapterCount: Math.max(chapters.reduce((mx, c) => Math.max(mx, c.index), 0), 1),
   };
 }
