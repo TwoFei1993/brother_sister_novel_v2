@@ -236,6 +236,7 @@ export async function generateVideoOnComfy(
       '<<FRAME>>': frameName,
       '<<PROMPT>>': prompt,
       '<<LENGTH>>': String(framesForDuration(durationSec ?? 5)),
+      '<<SEED>>': String(Math.floor(Math.random() * 2_147_483_647)),
     },
     20 * 60 * 1000,
     tick,

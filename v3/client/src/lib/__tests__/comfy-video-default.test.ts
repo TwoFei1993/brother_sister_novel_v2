@@ -19,15 +19,16 @@ describe('HYPERFLOW_I2V_DEFAULT_WORKFLOW（内置 H3 视频模板）', () => {
     expect(types).toContain('SaveVideo');
   });
 
-  it('<<LENGTH>> 位于 MiniMaxH3ImageToVideo.inputs.length', () => {
+  it('<<LENGTH>>/<<SEED>> 位于注入位，画布竖屏 768×1344 与分镜帧同比例免缩放', () => {
     const parsed = JSON.parse(HYPERFLOW_I2V_DEFAULT_WORKFLOW) as Record<
       string,
       { class_type: string; inputs: Record<string, unknown> }
     >;
     const node = Object.values(parsed).find((n) => n.class_type === 'MiniMaxH3ImageToVideo');
     expect(node?.inputs.length).toBe('<<LENGTH>>');
-    expect(node?.inputs.width).toBe(1344);
-    expect(node?.inputs.height).toBe(768);
+    expect(node?.inputs.width).toBe(768);
+    expect(node?.inputs.height).toBe(1344);
+    expect(HYPERFLOW_I2V_DEFAULT_WORKFLOW).toContain('<<SEED>>');
   });
 });
 
