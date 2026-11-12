@@ -35,6 +35,32 @@ export function characterSheetPrompt(style: string, name: string, profile: strin
   ].join('\n');
 }
 
+/**
+ * 设定图双段 prompt（版式硬规定 v2·零压缩）：左头像特写 448×768 + 右三视图 1344×768
+ * 各自高遵循任务 → App 内 canvas 合成 1792×768（两段原尺寸落位，无压缩）。
+ */
+export function characterSheetSplitPrompts(
+  style: string,
+  name: string,
+  profile: string,
+): { portrait: string; triView: string } {
+  return {
+    portrait: [
+      `${stylePrefix(style)}，单人角色头像特写`,
+      `【角色：${name}】${profile}`,
+      '画面要求：肩部以上大特写，正面微侧，五官清晰锐利，眼神有神，表情自然；人物居中占满画面。',
+      '渲染要求：影棚级柔光均匀照明，无强烈投影，边缘清晰，服装领口与发型细节真实可辨；浅灰色干净背景，无文字',
+    ].join('\n'),
+    triView: [
+      `${stylePrefix(style)}，角色三视图 reference sheet（仅三张全身像，无特写、无其他区块）`,
+      `【角色：${name}】${profile}`,
+      '版式要求：画面仅并排三张全身像——正面全身、侧面全身、背面全身；站立姿态自然挺直，双臂自然下垂，双脚与肩同宽；三张等距分布、大小一致、撑满画面高度。',
+      '渲染要求：边缘清晰锐利，材质与纹理细节真实可辨（毛发纤毫毕现/布料垂坠感/纹样与配饰做工），影棚级柔光均匀照明，无强烈投影。',
+      '一致性要求：三张画面五官/发型/体型/服装/配饰完全一致，同一人物同一画风；浅灰色干净背景，留白分隔，无文字标签',
+    ].join('\n'),
+  };
+}
+
 /** 场景图 prompt（详细版）：构图三层纵深 + 光影交互 + 时间温度氛围，画面氛围统一不乱跳 */
 export function sceneImagePrompt(style: string, name: string, spec: string): string {
   return [

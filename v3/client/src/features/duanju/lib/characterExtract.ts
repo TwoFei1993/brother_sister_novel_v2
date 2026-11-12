@@ -39,7 +39,11 @@ export interface ExtractedCharacter {
   profile: string;
 }
 
-/** 单角色档案重生成（用户需求 2026-11-11：重新生成的是文字描述而非图片）——在现有档案上修正补全 */
+/**
+ * 单角色档案重生成（增量模式·用户改动优先）：用户在角色框手改的设定（如换了颜色/品种/类型）
+ * 是最高优先基准——AI 只在其上扩写补全其他字段，禁止把用户改动改回剧本原样。
+ * 剧本仅作背景参考（补全用户未写的维度时取材）。
+ */
 export function rebuildCharacterProfileMessages(
   scriptText: string,
   name: string,
@@ -49,9 +53,9 @@ export function rebuildCharacterProfileMessages(
   const SYSTEM = `你是短剧角色设计师。为指定角色重写一份「可直接用于 AI 生图」的外观档案。
 只输出档案文本本身（纯文本，不要 JSON、不要 markdown、不要解释）。
 要求：
-1. 在现有档案基础上修正与补全——保留正确的锚点，充实缺漏的维度；
-2. 逐项写全：年龄性别身份｜发型发色（长度/造型）｜瞳色｜脸型五官特征｜体型身高｜服装（款式/颜色/材质）｜标志性配饰｜气质神态（80-150字）；
-3. 以剧本描写为准，剧本未提及处按题材合理补全，并保持该角色前后一致；
+1. **用户改动优先（铁律）**：当前档案中的设定（颜色/品种/类型/服装/发型等一切已写明项）是最高基准——即使与剧本冲突也一律保留当前档案的版本，禁止改回剧本原样；你只做扩写与补全，不推翻用户的任何设定；
+2. 在当前档案基础上逐项写全：年龄性别身份｜发型发色（长度/造型）｜瞳色｜脸型五官特征｜体型身高｜服装（款式/颜色/材质）｜标志性配饰｜气质神态（80-150字）；
+3. 当前档案未写明的维度才参考剧本补全；剧本也没有的按题材合理设定；
 4. 生图模型看不到剧本——档案必须自足完整。`;
   return [
     { role: 'system', content: SYSTEM },
@@ -59,9 +63,11 @@ export function rebuildCharacterProfileMessages(
       role: 'user',
       content: [
         `角色：${name}`,
-        currentProfile ? `当前档案：${currentProfile}` : '',
+        currentProfile
+          ? `当前档案（用户已确认/手改，以下设定不得变更，只在其上扩写）：${currentProfile}`
+          : '（当前档案为空，请按剧本从零建立）',
         characterRelations ? `人物关系：${characterRelations}` : '',
-        `剧本：\n${scriptText}`,
+        `剧本（仅作背景参考，与当前档案冲突时以当前档案为准）：\n${scriptText}`,
       ]
         .filter(Boolean)
         .join('\n\n'),
