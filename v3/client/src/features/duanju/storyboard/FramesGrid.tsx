@@ -11,7 +11,7 @@ import { Download, Grid2X2, RefreshCw } from 'lucide-react';
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
-import { buildFramePrompt } from '../lib/prompts/prompts-storyboard';
+import { buildFramePrompt, frameRefImage } from '../lib/prompts/prompts-storyboard';
 import { downloadFrameGrid, missingFrames } from '../lib/cost/frameGrid';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
 
@@ -39,14 +39,17 @@ export default function FramesGrid({ workId, shot, project }: Props) {
   async function generateFrame(frameIndex: number): Promise<boolean> {
     setBusy(frameIndex);
     setError(null);
+    const refImagePath = frameRefImage(shot, project);
     try {
       await generateDuanjuImage(workId, {
         kind: 'frame',
         refId: shot.id,
         frameIndex,
-        prompt: buildFramePrompt(shot, frameIndex, project),
+        prompt: buildFramePrompt(shot, frameIndex, project, refImagePath ? { refMode: true } : {}),
         aspectRatio: '9:16', // 竖屏短剧视频规格（1080×1920 9:16），首帧图生视频免裁切
         provider: imageProviderForApi(),
+        // 定妆照参考通道：出场角色有主参考图时走 Qwen-Edit-2511（跨帧角色一致）
+        ...(refImagePath ? { refImagePath } : {}),
       });
       await useDuanjuStore.getState().load(workId);
       return true;

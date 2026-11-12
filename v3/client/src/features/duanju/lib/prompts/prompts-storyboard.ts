@@ -153,8 +153,27 @@ const SHOT_COMPOSITION: Record<string, string> = {
   特写: '面部或关键局部充满画面，情绪与材质细节放大',
 };
 
-/** 单帧生图 prompt（详细版）：导演视角分段——主体瞬间 / 人物锚点 / 场景光线 / 镜头语言 / 画质 */
-export function buildFramePrompt(shot: DuanjuShot, frameIndex: number, project: DuanjuProject): string {
+/**
+ * 镜头定妆照路径：出场角色中第一个有主参考图的（与 server 端 subjectRef 逻辑一致）。
+ * 有值时该镜头分帧走 Qwen-Image-Edit-2511 参考生图通道（跨帧角色一致）。
+ */
+export function frameRefImage(shot: DuanjuShot, project: DuanjuProject): string | undefined {
+  for (const cid of shot.characterIds) {
+    const c = project.characters.find((x) => x.id === cid);
+    const img = c?.sheetImages.find((i) => i.id === c.refImageId);
+    if (img) return img.path;
+  }
+  return undefined;
+}
+
+/** 单帧生图 prompt（详细版）：导演视角分段——主体瞬间 / 人物锚点 / 场景光线 / 镜头语言 / 画质
+ *  opts.refMode=true 时为参考生图通道精简版：外貌交给定妆照，prompt 只保留名字+情绪与场景/镜头指令 */
+export function buildFramePrompt(
+  shot: DuanjuShot,
+  frameIndex: number,
+  project: DuanjuProject,
+  opts: { refMode?: boolean } = {},
+): string {
   const chars = shot.characterIds
     .map((cid) => project.characters.find((c) => c.id === cid))
     .filter((c): c is DuanjuCharacter => !!c);
@@ -162,12 +181,17 @@ export function buildFramePrompt(shot: DuanjuShot, frameIndex: number, project: 
   const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
   const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
   const composition = SHOT_COMPOSITION[shot.shotSize] ?? `${shot.shotSize}景别，人物主体清晰`;
+  const charsLine = opts.refMode
+    ? chars.length > 0
+      ? `【出场人物】${chars.map((c) => c.name).join('、')}——人物外貌严格保持与参考图完全一致（同一个人，勿改发型/服装/五官）`
+      : '【无人物】纯场景帧'
+    : chars.length > 0
+      ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
+      : '【无人物】纯场景帧';
   return [
     `${stylePrefix(project.style)}，电影感单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
     `【画面主体】${desc}——只画这一个动作瞬间，动作的力势与人物情绪要鲜明`,
-    chars.length > 0
-      ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
-      : '【无人物】纯场景帧',
+    charsLine,
     scene ? `【场景与光线】${scene.name}（${scene.spec}）——按场景的光影基调与时间氛围渲染，人物与环境光交互自然` : '',
     `【镜头语言】${composition}（${shot.shotSize}）；人物位置：${shot.staging}`,
     '画质要求：细节丰富，光影真实，构图稳定横平竖直，无文字水印',

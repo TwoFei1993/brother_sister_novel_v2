@@ -8,7 +8,7 @@
  *   视频 "<<FRAME>>"=分帧图文件名 "<<PROMPT>>"=镜头提示词
  *   生图 "<<PROMPT>>"/"<<WIDTH>>"/"<<HEIGHT>>"/"<<SEED>>"（空模板=用内置 Z-Image-Turbo 默认）
  */
-import { Z_IMAGE_TURBO_DEFAULT_WORKFLOW } from './comfyDefaultWorkflow';
+import { Z_IMAGE_TURBO_DEFAULT_WORKFLOW, QWEN_EDIT_2511_WORKFLOW } from './comfyDefaultWorkflow';
 
 const CFG_KEY = 'v3-comfyui-config';
 
@@ -229,11 +229,24 @@ export interface ComfyImageParams {
   height: number;
   /** 随机 seed——重roll 出新图；固定则同提示词复现同图 */
   seed: number;
+  /** 参考图 blob（分镜参考生图通道）：上传 ComfyUI 后注入 <<REF>>；传值时走 Qwen-Edit-2511 workflow */
+  refBlob?: Blob;
+  /** 指定 workflow（默认 Z-Image-Turbo；'qwen-edit-2511' = 分镜参考通道） */
+  workflow?: 'qwen-edit-2511';
 }
 
-/** 生图完整流程：注入提示词/尺寸/seed → 提交 → 轮询 → 下载 png blob（秒级出图，5 分钟兜底） */
+/** 生图完整流程：注入提示词/尺寸/seed → 提交 → 轮询 → 下载 png blob（秒级出图，5 分钟兜底；参考通道 15 分钟） */
 export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImageParams): Promise<Blob> {
   const base = cfg.url.replace(/\/$/, '');
+  if (params.workflow === 'qwen-edit-2511') {
+    if (!params.refBlob) throw new Error('参考生图缺少定妆照（refBlob）');
+    const refName = await uploadImage(base, params.refBlob, 'ref.png');
+    return runWorkflow(base, QWEN_EDIT_2511_WORKFLOW, {
+      '<<PROMPT>>': params.prompt,
+      '<<REF>>': refName,
+      '<<SEED>>': String(params.seed),
+    }, 15 * 60 * 1000);
+  }
   return runWorkflow(base, effectiveImageWorkflow(cfg), {
     '<<PROMPT>>': params.prompt,
     '<<WIDTH>>': String(params.width),

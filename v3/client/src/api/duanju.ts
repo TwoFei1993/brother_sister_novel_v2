@@ -46,6 +46,8 @@ export interface GenerateImageInput {
   frameIndex?: number;
   /** 设定图双段合成的原始数据（仅 comfy 通道用；云端 schema strictObject 会拒，透传前剥离） */
   sheetSplit?: { style: string; name: string; profile: string };
+  /** 角色定妆照路径（分镜参考生图通道用：comfy+frame 时走 Qwen-Image-Edit-2511 参考图编辑） */
+  refImagePath?: string;
 }
 
 /**
@@ -61,6 +63,37 @@ export function imageProviderForApi(): GenerateImageInput['provider'] {
 /** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏 */
 function comfySizeFor(kind: GenerateImageInput['kind']): { width: number; height: number } {
   return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
+}
+
+/**
+ * 分镜帧参考生图（Qwen-Image-Edit-2511）：角色定妆照上传 ComfyUI → 注入 <<REF>>
+ * 参考位 + 分镜指令 <<PROMPT>> → Lightning 4 步出图——跨帧角色一致性的落地点。
+ * 指令只写场景/动作/景别（外貌交给参考图，调用方组装 prompt 时已剔除外貌描述）。
+ */
+async function generateFrameWithRef(
+  workId: string,
+  input: GenerateImageInput,
+): Promise<{ image: StoredImage; project: DuanjuProject }> {
+  const cfg = loadComfyConfig();
+  if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
+  // 定妆照：server 产物经同源 fetch 取 blob → 上传 ComfyUI input 目录
+  const refRes = await fetch(duanjuFileUrl(workId, input.refImagePath!));
+  if (!refRes.ok) throw new Error(`定妆照读取失败（HTTP ${refRes.status}）——角色需先生成设定图`);
+  const refBlob = await refRes.blob();
+  const blob = await generateImageOnComfy(cfg, {
+    prompt: input.prompt,
+    width: 0,
+    height: 0,
+    seed: Math.floor(Math.random() * 2_147_483_647),
+    refBlob,
+    workflow: 'qwen-edit-2511',
+  });
+  const file = new File([blob], 'comfy-frame.png', { type: blob.type || 'image/png' });
+  return uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
+    frameIndex: input.frameIndex,
+    prompt: input.prompt,
+    source: 'comfy',
+  });
 }
 
 /**
@@ -99,8 +132,8 @@ export async function generateDuanjuImage(
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const provider = input.provider ?? useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy';
   if (provider !== 'comfy') {
-    // 云端路径：把有效 provider 显式带给 server；sheetSplit 仅本地合成用，strictObject 前剥离
-    const { sheetSplit: _split, ...cloudInput } = input;
+    // 云端路径：把有效 provider 显式带给 server；本地专用字段 strictObject 前剥离
+    const { sheetSplit: _split, refImagePath: _ref, ...cloudInput } = input;
     return apiFetch<{ image: StoredImage; project: DuanjuProject }>(
       `/api/works/${workId}/duanju/images`,
       { method: 'POST', body: JSON.stringify({ ...cloudInput, provider }) },
@@ -108,6 +141,9 @@ export async function generateDuanjuImage(
   }
   if (input.kind === 'character' && input.sheetSplit) {
     return generateCharacterSheetLocal(workId, input);
+  }
+  if (input.kind === 'frame' && input.refImagePath) {
+    return generateFrameWithRef(workId, input);
   }
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
