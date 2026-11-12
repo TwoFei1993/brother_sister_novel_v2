@@ -48,6 +48,16 @@ export interface GenerateImageInput {
   sheetSplit?: { style: string; name: string; profile: string };
 }
 
+/**
+ * 生图通道读取 helper：store 的 imageProvider 保留 minimax（旧存储兼容），
+ * 对外统一收敛为三通道（minimax 通道已移除——按迁移语义落到 comfy）。
+ */
+export function imageProviderForApi(): GenerateImageInput['provider'] {
+  const p = useSettingsStore.getState().llmPrefs.imageProvider;
+  if (p === 'zhipu' || p === 'seedream' || p === 'comfy') return p;
+  return 'comfy';
+}
+
 /** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏 */
 function comfySizeFor(kind: GenerateImageInput['kind']): { width: number; height: number } {
   return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
@@ -68,8 +78,8 @@ async function generateCharacterSheetLocal(
   const { portrait, triView } = characterSheetSplitPrompts(split.style, split.name, split.profile);
   const seed = () => Math.floor(Math.random() * 2_147_483_647);
   const [portraitBlob, triViewBlob] = await Promise.all([
-    generateImageOnComfy(cfg, { prompt: portrait, width: 448, height: 768, seed: seed() }),
-    generateImageOnComfy(cfg, { prompt: triView, width: 1344, height: 768, seed: seed() }),
+    generateImageOnComfy(cfg, { prompt: portrait, width: 704, height: 1024, seed: seed() }),
+    generateImageOnComfy(cfg, { prompt: triView, width: 1344, height: 1024, seed: seed() }),
   ]);
   const blob = await composeCharacterSheet(portraitBlob, triViewBlob);
   const file = new File([blob], 'comfy-sheet.png', { type: 'image/png' });
@@ -143,7 +153,7 @@ export async function uploadDuanjuVideo(
 /** 外部生图回流（豆包/即梦 web 免费生成后上传归档为设定图/场景图；亦承接本地 ComfyUI 产物归档） */
 export async function uploadDuanjuImageFile(
   workId: string,
-  kind: 'character' | 'scene' | 'frame',
+  kind: 'character' | 'scene' | 'shot' | 'frame',
   refId: string,
   file: File,
   opts?: { frameIndex?: number; prompt?: string; source?: 'comfy' },

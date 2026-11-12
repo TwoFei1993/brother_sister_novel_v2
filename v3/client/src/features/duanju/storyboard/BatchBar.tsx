@@ -13,6 +13,7 @@ import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { ImageQueue, type TaskState } from '../lib/imageQueue';
 import { buildFrameTasks } from '../lib/cost/frameGrid';
+import { imageProviderForApi } from '../../../api/duanju';
 import type { DuanjuShot } from '@shared/duanju';
 
 interface Props {
@@ -41,7 +42,7 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
     setPhase('run');
     queue.enqueue(
       workId,
-      buildFrameTasks(shots, project!, useSettingsStore.getState().llmPrefs.imageProvider),
+      buildFrameTasks(shots, project!, imageProviderForApi()),
     );
   }
 

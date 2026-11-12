@@ -67,6 +67,7 @@ export default function ScriptPane({ workId }: { workId: string }) {
         {
           workId,
           project: { ...cur, reviewCards, episodes: mergedEpisodes },
+          onStep: setPipelineLabel,
         },
         { source: prefs.source, model: prefs.model, thinking: prefs.thinking !== false },
       )

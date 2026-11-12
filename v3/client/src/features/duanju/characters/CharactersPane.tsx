@@ -11,6 +11,7 @@ import { Plus, WandSparkles } from 'lucide-react';
 import { useDuanjuStore } from '../store';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import { generateTextOnce } from '../../../api/llm';
+import { imageProviderForApi } from '../../../api/duanju';
 import { useSettingsStore } from '../../../stores/settings';
 import CharacterCard from './CharacterCard';
 import { ImageQueue } from '../lib/imageQueue';
@@ -156,7 +157,7 @@ export default function CharactersPane({ workId }: { workId: string }) {
                     refId: c.id,
                     prompt: characterSheetPrompt(project!.style, c.name, c.profile),
                     aspectRatio: '3:4',
-                    provider: useSettingsStore.getState().llmPrefs.imageProvider,
+                    provider: imageProviderForApi(),
                   },
                   label: c.name,
                 })),

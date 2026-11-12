@@ -1,15 +1,14 @@
 /**
- * 设定图双段合成（版式硬规定·v2 零压缩）：左头像特写 448×768 + 右三视图 1344×768 → 1792×768。
+ * 设定图双段合成（v3·用户样图复刻）：左大特写 704×1024 + 右三视图 1344×1024 → 2048×1024（2:1 横版）。
  *
- * 两次生成各自是模型高遵循任务（纯头像 / 纯三视图），版式拼接由 canvas 保证——
- * 不依赖模型对复杂版式指令的运气。v1 曾把右区压到 896 宽（1344 画布）被否决；
- * v2 画布加宽到 1792，两段均按生成原尺寸落位、零缩放。背景浅灰遮拼缝。
+ * 样图规范：特写占宽 ~35% 垂直占满；右三张全身像横排脚底对齐；纯白背景无边框无文字。
+ * 两段各自按生成原尺寸落位（零压缩）；canvas 仅做拼接与白底。
  */
-const CANVAS_W = 1792;
-const CANVAS_H = 768;
-const LEFT_W = 448; // 特写区宽 = B 段生成宽（原尺寸落位）
-const RIGHT_W = 1344; // 三视图区宽 = A 段生成宽（原尺寸落位，零压缩）
-const BG = '#dcdcdc'; // 浅灰背景（与设定图提示词「浅灰色干净背景」一致）
+const CANVAS_W = 2048;
+const CANVAS_H = 1024;
+const LEFT_W = 704; // 特写区宽 = B 段生成宽（占 34%，样图 ~35%）
+const RIGHT_W = 1344; // 三视图区宽 = A 段生成宽（原尺寸落位）
+const BG = '#ffffff'; // 纯白背景（样图规范）
 
 async function blobToBitmap(blob: Blob): Promise<ImageBitmap> {
   try {
@@ -29,9 +28,9 @@ export async function composeCharacterSheet(portrait: Blob, triView: Blob): Prom
 
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  // 左：头像特写原尺寸落位（生成即 448×768）
+  // 左：大特写原尺寸落位（生成即 704×1024，垂直占满）
   ctx.drawImage(pImg, 0, 0, LEFT_W, CANVAS_H);
-  // 右：三视图原尺寸落位（生成即 1344×768，零缩放不压缩）
+  // 右：三视图原尺寸落位（生成即 1344×1024，零压缩）
   ctx.drawImage(tImg, LEFT_W, 0, RIGHT_W, CANVAS_H);
 
   const blob = await new Promise<Blob | null>((resolve) =>

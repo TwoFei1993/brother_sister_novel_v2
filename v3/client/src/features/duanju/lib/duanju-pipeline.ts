@@ -20,7 +20,7 @@ export interface PipelinePrefs {
 
 export interface PipelineOpts {
   workId: string;
-  /** 拆解完成后的项目快照（含 script.text/characters/scenes/episodes/reviewCards） */
+  /** 拆解完成后的项目快照（完整 project——拆镜头解析需全量角色/场景做 id 映射） */
   project: DuanjuProject;
   /** 实时步骤回调（UI 展示「流水线：xxx 中…」） */
   onStep: (label: string) => void;

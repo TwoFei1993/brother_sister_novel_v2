@@ -10,7 +10,7 @@ import { ImageIcon, Star, Trash2, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
-import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl } from '../../../api/duanju';
+import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
 import { characterSheetPrompt } from '../lib/prompts/prompts-image';
 import { rebuildCharacterProfileMessages } from '../lib/characterExtract';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
@@ -63,13 +63,6 @@ export default function CharacterCard({ workId, character }: Props) {
     });
   }
 
-  async function save(next: Partial<DuanjuCharacter>): Promise<void> {
-    const characters = project!.characters.map((c) =>
-      c.id === character.id ? { ...c, ...next, updatedAt: Date.now() } : c,
-    );
-    await patch(workId, { characters });
-  }
-
   async function generateSheet(): Promise<void> {
     if (generating || !character.name.trim() || !character.profile.trim()) {
       if (!character.name.trim() || !character.profile.trim()) setError('先填角色名和外观锚点（生图一致性的事实源）');
@@ -84,7 +77,7 @@ export default function CharacterCard({ workId, character }: Props) {
         refId: character.id,
         prompt,
         aspectRatio: '3:2',
-        provider: useSettingsStore.getState().llmPrefs.imageProvider,
+        provider: imageProviderForApi(),
         sheetSplit: { style: project!.style, name: character.name, profile: character.profile },
       });
       // server 已把 project 随响应更新——拉最新

@@ -10,7 +10,7 @@ import { Download, Grid2X2, RefreshCw } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
-import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
+import { generateDuanjuImage, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
 import { buildFramePrompt } from '../lib/prompts/prompts-storyboard';
 import { downloadFrameGrid, missingFrames } from '../lib/cost/frameGrid';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
@@ -46,7 +46,7 @@ export default function FramesGrid({ workId, shot, project }: Props) {
         frameIndex,
         prompt: buildFramePrompt(shot, frameIndex, project),
         aspectRatio: '9:16', // 竖屏短剧视频规格（1080×1920 9:16），首帧图生视频免裁切
-        provider: useSettingsStore.getState().llmPrefs.imageProvider,
+        provider: imageProviderForApi(),
       });
       await useDuanjuStore.getState().load(workId);
       return true;

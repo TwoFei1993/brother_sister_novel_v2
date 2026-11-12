@@ -213,7 +213,7 @@ export default function ScenesPane({ workId }: { workId: string }) {
                 title="结合剧本重写更详细的场景视觉档案（生图提示词的数据源）"
               >
                 <WandSparkles className="h-3.5 w-3.5" aria-hidden />
-                {pendingSceneRef.current === scene.id && (specBg.state?.status === 'running' || specBg.state?.status === 'submitting')
+                {localStorage.getItem(PENDING_KEY) === scene.id && (specBg.state?.status === 'running' || specBg.state?.status === 'submitting')
                   ? `重写中…（${specBg.state.elapsedSec ?? 0}s）`
                   : '✨ 重写介绍'}
               </button>

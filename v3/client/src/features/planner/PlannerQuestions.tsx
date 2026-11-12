@@ -18,8 +18,8 @@ interface Props {
   questions: PlannerQuestion[];
   busy: boolean;
   onSend: (text: string) => void;
-  /** 每轮底部的「直接生成」：跳过剩余提问，基于已回答信息直接出策划案（用户要求 2026-11-12） */
-  onGenerateDirect: () => void;
+  /** 每轮底部的「直接生成」：跳过剩余提问，基于已回答信息直接出策划案（可选——大纲聊天等场景不需要） */
+  onGenerateDirect?: () => void;
 }
 
 export default function PlannerQuestions({ questions, busy, onSend, onGenerateDirect }: Props) {
@@ -134,6 +134,7 @@ export default function PlannerQuestions({ questions, busy, onSend, onGenerateDi
       >
         {total + otherCount > 0 ? `提交所选（${total + otherCount} 项，合并发送）` : '点选上面的选项后一起提交'}
       </button>
+      {onGenerateDirect && (
       <button
         type="button"
         onClick={onGenerateDirect}
@@ -144,6 +145,7 @@ export default function PlannerQuestions({ questions, busy, onSend, onGenerateDi
       >
         🎯 直接生成（跳过剩余提问）
       </button>
+      )}
     </div>
   );
 }
