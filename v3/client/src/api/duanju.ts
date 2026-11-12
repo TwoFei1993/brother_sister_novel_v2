@@ -97,8 +97,9 @@ async function generateFrameWithRef(
 }
 
 /**
- * 设定图双段生成 + 合成（版式硬规定 v2·零压缩）：三视图 1344×768 + 头像特写 448×768
- * 各自高遵循任务 → canvas 合成 1792×768，两段原尺寸落位（v1 压缩问题已修）。
+ * 设定图双段生成（版式硬规定 v3 + 参考图修正）：三视图 1344×1024 + 头像特写 704×1024
+ * → 版式合成图 2048×1024（人看）+ **特写单图单独归档并设为主参考**（AI 参考用——
+ * 2511 参考生图的定妆照必须是单主体干净图；版式拼图（多只猫/多人）会让参考通道理解混乱跨帧漂移）。
  */
 async function generateCharacterSheetLocal(
   workId: string,
@@ -114,12 +115,28 @@ async function generateCharacterSheetLocal(
     generateImageOnComfy(cfg, { prompt: portrait, width: 704, height: 1024, seed: seed() }),
     generateImageOnComfy(cfg, { prompt: triView, width: 1344, height: 1024, seed: seed() }),
   ]);
+  // ① 特写单图先归档（单主体干净图——分镜参考通道的定妆照）
+  const portraitFile = new File([portraitBlob], 'comfy-portrait.png', { type: 'image/png' });
+  const { image: portraitImg, project: afterPortrait } = await uploadDuanjuImageFile(
+    workId,
+    input.kind,
+    input.refId,
+    portraitFile,
+    { prompt: input.prompt, source: 'comfy' },
+  );
+  // ② 版式合成图随后归档（人看的完整设定图）
   const blob = await composeCharacterSheet(portraitBlob, triViewBlob);
   const file = new File([blob], 'comfy-sheet.png', { type: 'image/png' });
-  return uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
+  const { project: afterSheet } = await uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
     prompt: input.prompt,
     source: 'comfy',
   });
+  // ③ 主参考显式指向特写单图（server 首图逻辑只在 refImageId 为空时生效，覆盖不了存量）
+  const cur = afterSheet ?? afterPortrait;
+  const characters = cur.characters.map((c) =>
+    c.id === input.refId ? { ...c, refImageId: portraitImg.id } : c,
+  );
+  return patchDuanjuProject(workId, { revision: cur.revision, characters });
 }
 
 /**
