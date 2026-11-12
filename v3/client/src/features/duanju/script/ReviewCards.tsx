@@ -114,13 +114,13 @@ export default function ReviewCards({ workId }: { workId: string }) {
 
   return (
     <section className="rounded-2xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]/40" data-testid="duanju-review-cards">
-      {/* 头部：标题 + 引导语 + 确认进度条 + 主按钮 */}
-      <header className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-[hsl(var(--border-soft))] px-5 py-4">
-        <div className="min-w-0 flex-1">
+      {/* 头部：标题 + 引导语 + 确认进度条 + 主按钮（窄屏竖排防挤压） */}
+      <header className="flex flex-col gap-3 border-b border-[hsl(var(--border-soft))] px-4 py-4 sm:flex-row sm:items-center sm:gap-x-5 sm:gap-y-3 sm:px-5">
+        <div className="min-w-0">
           <h3 className="m-serif text-base font-semibold">拆解审核卡</h3>
-          <p className="mt-0.5 text-xs text-[hsl(var(--fg-muted))]">AI 已从剧本提取六项创作要素——逐项核对微调后确认，作为分镜拆解的锁定依据</p>
+          <p className="mt-0.5 text-xs leading-5 text-[hsl(var(--fg-muted))]">AI 已从剧本提取六项创作要素——逐项核对微调后确认，作为分镜拆解的锁定依据</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 sm:ml-auto">
           <div className="flex items-center gap-2.5">
             <div className="h-1.5 w-28 overflow-hidden rounded-full bg-[hsl(var(--border-soft))]">
               <div

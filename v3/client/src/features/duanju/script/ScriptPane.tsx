@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { buildBreakdownMessages, parseBreakdown, mergeEpisodes } from '../lib/prompts/prompts-script';
+import { runBreakdownPipeline } from '../lib/duanju-pipeline';
 import { useSettingsStore } from '../../../stores/settings';
 import ScriptGenerateForm from './ScriptGenerateForm';
 import ReviewCards from './ReviewCards';
@@ -28,6 +29,8 @@ export default function ScriptPane({ workId }: { workId: string }) {
   const [source, setSource] = useState<DuanjuScript['source']>('manual');
   const [genOpen, setGenOpen] = useState(false);
   const [breakdownError, setBreakdownError] = useState<string | null>(null);
+  /** 拆解完成后的自动流水线进度（角色→场景→逐集拆镜头；切出安全） */
+  const [pipelineLabel, setPipelineLabel] = useState<string | null>(null);
 
   // 拆解后台化（切出 App 继续生成）：slot 隔离 + 回来轮询取结果/恢复轮询
   const bg = useBgLlmTask(
@@ -41,25 +44,37 @@ export default function ScriptPane({ workId }: { workId: string }) {
         return;
       }
       const now = Date.now();
+      const reviewCards = {
+        summary: parsed.summary,
+        eventChain: parsed.eventChain,
+        conflict: parsed.conflict,
+        characterRelations: parsed.characterRelations,
+        emotionPoints: parsed.emotionPoints,
+        visualActions: parsed.visualActions,
+        riskReplacements: parsed.riskReplacements.map((r, i) => ({
+          id: `risk-${now}-${i}`,
+          original: r.original,
+          replacement: r.replacement,
+        })),
+        confirmed: {},
+        updatedAt: now,
+      };
       const mergedEpisodes = mergeEpisodes(cur.episodes, parsed.episodes, cur.shots);
-      void patch(workId, {
-        reviewCards: {
-          summary: parsed.summary,
-          eventChain: parsed.eventChain,
-          conflict: parsed.conflict,
-          characterRelations: parsed.characterRelations,
-          emotionPoints: parsed.emotionPoints,
-          visualActions: parsed.visualActions,
-          riskReplacements: parsed.riskReplacements.map((r, i) => ({
-            id: `risk-${now}-${i}`,
-            original: r.original,
-            replacement: r.replacement,
-          })),
-          confirmed: {},
-          updatedAt: now,
+      void patch(workId, { reviewCards, episodes: mergedEpisodes });
+      // 拆解完成 → 自动流水线串联：提取角色 → 提取场景 → 逐集拆镜头（后台任务，切出安全）
+      const prefs = useSettingsStore.getState().llmPrefs;
+      void runBreakdownPipeline(
+        {
+          workId,
+          project: { ...cur, reviewCards, episodes: mergedEpisodes },
         },
-        episodes: mergedEpisodes,
-      });
+        { source: prefs.source, model: prefs.model, thinking: prefs.thinking !== false },
+      )
+        .then(() => setPipelineLabel(null))
+        .catch((err: unknown) => {
+          setPipelineLabel(null);
+          setBreakdownError(`流水线中断：${err instanceof Error ? err.message : '未知错误'}——已完成步骤的成果已保留，失败步骤可手动补跑`);
+        });
     },
     (msg) => setBreakdownError(msg),
   );
@@ -214,6 +229,15 @@ export default function ScriptPane({ workId }: { workId: string }) {
       {bgRunning && (
         <p className="text-xs text-[hsl(var(--fg-muted))]" data-testid="breakdown-bg-hint">
           ⏳ 拆解在服务端后台进行——可切出去干别的，回来自动查看结果。
+        </p>
+      )}
+
+      {pipelineLabel && (
+        <p
+          className="text-xs text-[hsl(var(--accent))]"
+          data-testid="breakdown-pipeline-hint"
+        >
+          ⚡ 自动流水线：{pipelineLabel}…（后台执行，可切出 App）
         </p>
       )}
 
