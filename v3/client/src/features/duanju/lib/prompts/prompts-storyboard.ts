@@ -166,6 +166,14 @@ export function frameRefImage(shot: DuanjuShot, project: DuanjuProject): string 
   return undefined;
 }
 
+/** 镜头场景图路径：关联场景的最新一张图（注入 2511 的 image2——跨帧场景一致）。 */
+export function frameSceneImage(shot: DuanjuShot, project: DuanjuProject): string | undefined {
+  if (!shot.sceneId) return undefined;
+  const scene = project.scenes.find((s) => s.id === shot.sceneId);
+  const imgs = scene?.images ?? [];
+  return imgs.length > 0 ? imgs[imgs.length - 1].path : undefined;
+}
+
 /** 单帧生图 prompt（详细版）：导演视角分段——主体瞬间 / 人物锚点 / 场景光线 / 镜头语言 / 画质
  *  opts.refMode=true 时为参考生图通道精简版：外貌交给定妆照，prompt 只保留名字+情绪与场景/镜头指令 */
 export function buildFramePrompt(
@@ -186,10 +194,10 @@ export function buildFramePrompt(
   if (opts.refMode) {
     return [
       chars.length > 0
-        ? `保持图1中${chars.map((c) => c.name).join('、')}的外貌完全一致（毛色/五官/体型/服装一项都不改），改变取景与构图，生成一张全新的画面：`
-        : '生成一张全新画面：',
+        ? `保持图1中${chars.map((c) => c.name).join('、')}的外貌完全一致（毛色/五官/体型/服装一项都不改），将角色置于图2的场景环境中（空间布局/光源色调/关键道具与图2保持一致），改变取景与构图，生成一张全新的画面：`
+        : '参照图2的场景环境（布局/光源/道具保持一致），生成一张全新的画面：',
       `【画面内容】${desc}`,
-      scene ? `【场景】置于${scene.name}：${scene.spec}` : '',
+      scene ? `【场景补充】${scene.name}：${scene.spec}` : '',
       `【机位指令】${composition}——重新构图取景（不要沿用图1的取景角度）`,
       `${stylePrefix(project.style)}，${shot.staging}。画质要求：细节丰富，光影真实，无文字水印`,
     ]

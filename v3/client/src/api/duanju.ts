@@ -48,6 +48,8 @@ export interface GenerateImageInput {
   sheetSplit?: { style: string; name: string; profile: string };
   /** 角色定妆照路径（分镜参考生图通道用：comfy+frame 时走 Qwen-Image-Edit-2511 参考图编辑） */
   refImagePath?: string;
+  /** 场景图路径（分镜参考通道 image2：镜头关联场景的最新场景图，跨帧场景一致） */
+  sceneRefPath?: string;
 }
 
 /**
@@ -66,9 +68,8 @@ function comfySizeFor(kind: GenerateImageInput['kind']): { width: number; height
 }
 
 /**
- * 分镜帧参考生图（Qwen-Image-Edit-2511）：角色定妆照上传 ComfyUI → 注入 <<REF>>
- * 参考位 + 分镜指令 <<PROMPT>> → Lightning 4 步出图——跨帧角色一致性的落地点。
- * 指令只写场景/动作/景别（外貌交给参考图，调用方组装 prompt 时已剔除外貌描述）。
+ * 分镜帧参考生图（Qwen-Image-Edit-2511 双参考）：定妆照注入 <<REF>>（image1 锁角色）
+ * + 场景图注入 <<SCENE_REF>>（image2 锁场景）+ 分镜指令 <<PROMPT>> → Lightning 4 步出图。
  */
 async function generateFrameWithRef(
   workId: string,
@@ -80,12 +81,19 @@ async function generateFrameWithRef(
   const refRes = await fetch(duanjuFileUrl(workId, input.refImagePath!));
   if (!refRes.ok) throw new Error(`定妆照读取失败（HTTP ${refRes.status}）——角色需先生成设定图`);
   const refBlob = await refRes.blob();
+  // 场景图（可选）：镜头关联场景有图则双参考注入（image2）
+  let sceneRefBlob: Blob | undefined;
+  if (input.sceneRefPath) {
+    const sceneRes = await fetch(duanjuFileUrl(workId, input.sceneRefPath));
+    if (sceneRes.ok) sceneRefBlob = await sceneRes.blob();
+  }
   const blob = await generateImageOnComfy(cfg, {
     prompt: input.prompt,
     width: 0,
     height: 0,
     seed: Math.floor(Math.random() * 2_147_483_647),
     refBlob,
+    sceneRefBlob,
     workflow: 'qwen-edit-2511',
   });
   const file = new File([blob], 'comfy-frame.png', { type: blob.type || 'image/png' });
@@ -151,7 +159,7 @@ export async function generateDuanjuImage(
   const provider = input.provider ?? useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy';
   if (provider !== 'comfy') {
     // 云端路径：把有效 provider 显式带给 server；本地专用字段 strictObject 前剥离
-    const { sheetSplit: _split, refImagePath: _ref, ...cloudInput } = input;
+    const { sheetSplit: _split, refImagePath: _ref, sceneRefPath: _sceneRef, ...cloudInput } = input;
     return apiFetch<{ image: StoredImage; project: DuanjuProject }>(
       `/api/works/${workId}/duanju/images`,
       { method: 'POST', body: JSON.stringify({ ...cloudInput, provider }) },
