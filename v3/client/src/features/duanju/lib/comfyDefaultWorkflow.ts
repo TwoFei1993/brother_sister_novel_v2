@@ -53,17 +53,21 @@ export const Z_IMAGE_TURBO_DEFAULT_WORKFLOW = `{
 }`;
 
 /**
- * 内置参考生图工作流：Qwen-Image-Edit-2511（分镜帧通道——定妆照做参考，跨帧角色一致）
+ * 内置参考生图工作流：Qwen-Image-Edit-2511（分镜帧通道——定妆照+场景图双参考，角色与场景双一致）
  *
  * 按官方模板 image_qwen_image_edit_2511.json 连线手工构造（Lightning 4 步档）。
- * 占位符：<<PROMPT>>（分镜指令）/ <<REF>>（上传后的参考图文件名）/ <<SEED>>。
- * 分镜指令只写场景/动作/景别——外貌交给参考图（社区共识，勿在 prompt 描述脸）。
+ * 占位符：<<PROMPT>>（分镜指令）/ <<REF>>（定妆照文件名）/ <<SCENE_REF>>（场景图文件名）/ <<SEED>>。
+ * image1=定妆照（锁角色外貌），image2=场景图（锁场景环境）——TextEncodeQwenImageEditPlus 原生多参考。
  * 模型：qwen_image_edit_2511_int8_convrot（19GB 官方重打包）+ Lightning-4steps LoRA。
  */
 export const QWEN_EDIT_2511_WORKFLOW = `{
   "1": {
     "class_type": "LoadImage",
     "inputs": { "image": "<<REF>>" }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "<<SCENE_REF>>" }
   },
   "161": {
     "class_type": "UNETLoader",
@@ -93,13 +97,17 @@ export const QWEN_EDIT_2511_WORKFLOW = `{
     "class_type": "FluxKontextImageScale",
     "inputs": { "image": ["1", 0] }
   },
+  "1610": {
+    "class_type": "FluxKontextImageScale",
+    "inputs": { "image": ["2", 0] }
+  },
   "151": {
     "class_type": "TextEncodeQwenImageEditPlus",
-    "inputs": { "clip": ["162", 0], "vae": ["146", 0], "image1": ["160", 0], "prompt": "<<PROMPT>>" }
+    "inputs": { "clip": ["162", 0], "vae": ["146", 0], "image1": ["160", 0], "image2": ["1610", 0], "prompt": "<<PROMPT>>" }
   },
   "149": {
     "class_type": "TextEncodeQwenImageEditPlus",
-    "inputs": { "clip": ["162", 0], "vae": ["146", 0], "image1": ["160", 0], "prompt": "" }
+    "inputs": { "clip": ["162", 0], "vae": ["146", 0], "image1": ["160", 0], "image2": ["1610", 0], "prompt": "" }
   },
   "156": {
     "class_type": "VAEEncode",
@@ -122,3 +130,13 @@ export const QWEN_EDIT_2511_WORKFLOW = `{
     "inputs": { "filename_prefix": "comfy-app/frame-ref", "images": ["158", 0] }
   }
 }`;
+
+/**
+ * 内置默认视频工作流：HyperFlow H3 Flash i2v（MiniMax H3 开源压缩版 14B，视频+同步音轨一次出）
+ *
+ * 2026-11-13 本地实测通过（12GB 显存 73 帧/3s 4 分钟出片；Q4_K_M GGUF + nvfp4 文本编码器）。
+ * 占位符：<<FRAME>>（首帧图）/ <<PROMPT>>（镜头动作提示词）/ <<LENGTH>>（帧数，24fps snap 17k+5，
+ * 由调用方按镜头 durationSec 换算注入）。模型四件对应 HF VideoRebirthAI/hyperflow-h3-flash；
+ * 设置页粘贴自定义模板即可覆盖本默认。
+ */
+export const HYPERFLOW_I2V_DEFAULT_WORKFLOW = `{"1":{"class_type":"HyperFlowLoader","inputs":{"unet_name":"minimax_h3_fl2va_hyperflow_flash_14b-Q4_K_M.gguf","weights_in":"auto"},"_meta":{"title":"HyperFlowLoader"}},"2":{"class_type":"CLIPLoader","inputs":{"clip_name":"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors","type":"minimax","device":"default"},"_meta":{"title":"Text encoder (type minimax)"}},"3":{"class_type":"VAELoader","inputs":{"vae_name":"minimax_h3_video_vae_fp16.safetensors"},"_meta":{"title":"Video VAE"}},"4":{"class_type":"VAELoader","inputs":{"vae_name":"minimax_h3_audio_vae_fp32.safetensors"},"_meta":{"title":"Audio VAE"}},"5":{"class_type":"MiniMaxH3ImageToVideo","inputs":{"clip":["2",0],"vae":["3",0],"prompt":"<<PROMPT>>","width":1344,"height":768,"length":"<<LENGTH>>","first_frame":["20",0]},"_meta":{"title":"Prompt, size, length"}},"6":{"class_type":"HyperFlowSigmas","inputs":{"model":["1",0],"steps":6},"_meta":{"title":"HyperFlow Sigmas (4 / 6 / 8 steps)"}},"7":{"class_type":"KSamplerSelect","inputs":{"sampler_name":"euler"},"_meta":{"title":"Sampler (euler)"}},"8":{"class_type":"RandomNoise","inputs":{"noise_seed":42},"_meta":{"title":"Seed"}},"9":{"class_type":"BasicGuider","inputs":{"model":["1",0],"conditioning":["5",0]},"_meta":{"title":"Guider (CFG 1, no negative prompt)"}},"10":{"class_type":"SamplerCustomAdvanced","inputs":{"noise":["8",0],"guider":["9",0],"sampler":["7",0],"sigmas":["6",0],"latent_image":["5",1]},"_meta":{"title":"Sampler"}},"11":{"class_type":"VAEDecode","inputs":{"samples":["10",0],"vae":["3",0]},"_meta":{"title":"Decode video"}},"12":{"class_type":"VAEDecodeAudio","inputs":{"samples":["10",0],"vae":["4",0]},"_meta":{"title":"Decode audio"}},"13":{"class_type":"CreateVideo","inputs":{"images":["11",0],"fps":24,"audio":["12",0],"bit_depth":"auto","color_space":"sRGB","chroma_subsampling":"auto","codec":"none"},"_meta":{"title":"Video + audio, 24 fps"}},"14":{"class_type":"SaveVideo","inputs":{"video":["13",0],"filename_prefix":"hyperflow/i2v","format":"mp4","codec":"auto"},"_meta":{"title":"Save MP4 (output/hyperflow/)"}},"20":{"class_type":"LoadImage","inputs":{"image":"<<FRAME>>"},"_meta":{"title":"First frame"}}}`;

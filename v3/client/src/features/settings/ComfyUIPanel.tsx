@@ -78,7 +78,7 @@ export default function ComfyUIPanel() {
 
         <label className="block">
           <span className="mb-0.5 block text-[10px] uppercase tracking-wide text-[hsl(var(--fg-muted))]">
-            H3 图生视频工作流（API 格式，占位符 {'<<FRAME>>'} / {'<<PROMPT>>'}）
+            H3 图生视频工作流（API 格式，占位符 {'<<FRAME>>'} / {'<<PROMPT>>'} / {'<<LENGTH>>'}）
           </span>
           <textarea
             value={cfg.videoWorkflow}
@@ -88,6 +88,11 @@ export default function ComfyUIPanel() {
             className={`${inputCls} leading-5`}
             aria-label="ComfyUI 工作流 JSON"
           />
+          {!cfg.videoWorkflow.trim() && (
+            <span className="mt-1 block text-[10px] text-[hsl(var(--accent))]">
+              ✅ 当前使用内置 HyperFlow H3 Flash i2v 默认模板（视频+音轨，时长随镜头 durationSec 自动换算帧数）
+            </span>
+          )}
         </label>
 
         <div className="flex items-center gap-2">

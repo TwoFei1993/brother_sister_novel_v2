@@ -8,7 +8,11 @@
  *   视频 "<<FRAME>>"=分帧图文件名 "<<PROMPT>>"=镜头提示词
  *   生图 "<<PROMPT>>"/"<<WIDTH>>"/"<<HEIGHT>>"/"<<SEED>>"（空模板=用内置 Z-Image-Turbo 默认）
  */
-import { Z_IMAGE_TURBO_DEFAULT_WORKFLOW, QWEN_EDIT_2511_WORKFLOW } from './comfyDefaultWorkflow';
+import {
+  Z_IMAGE_TURBO_DEFAULT_WORKFLOW,
+  QWEN_EDIT_2511_WORKFLOW,
+  HYPERFLOW_I2V_DEFAULT_WORKFLOW,
+} from './comfyDefaultWorkflow';
 
 const CFG_KEY = 'v3-comfyui-config';
 
@@ -70,6 +74,17 @@ export async function pingComfy(url: string): Promise<{ ok: boolean; detail?: st
 /** 生图实际生效的 workflow 文本（用户自定义优先，空则内置默认） */
 export function effectiveImageWorkflow(cfg: ComfyuiConfig): string {
   return cfg.imageWorkflow.trim() || Z_IMAGE_TURBO_DEFAULT_WORKFLOW;
+}
+
+/** 视频实际生效的 workflow 文本（用户自定义优先，空则内置 H3 Flash i2v 默认） */
+export function effectiveVideoWorkflow(cfg: ComfyuiConfig): string {
+  return cfg.videoWorkflow.trim() || HYPERFLOW_I2V_DEFAULT_WORKFLOW;
+}
+
+/** 镜头秒数 → 生成帧数（24fps，snap 到模型 17k+5 帧网格；官方表达式为 Python % 语义，JS 需补正负数取模） */
+export function framesForDuration(sec: number): number {
+  const raw = Math.max(5, Math.round(sec * 24));
+  return raw + ((((5 - (raw % 17)) % 17) + 17) % 17);
 }
 
 export interface VideoGenProgress {
@@ -197,12 +212,14 @@ export interface ComfyVideoResult {
   elapsedSec: number;
 }
 
-/** 视频完整流程：上传分帧图 → 注入 → 提交 → 轮询 → 下载 mp4 blob（onProgress 打印机式进度） */
+/** 视频完整流程：上传分帧图 → 注入（帧图/提示词/时长帧数）→ 提交 → 轮询 → 下载 mp4 blob */
 export async function generateVideoOnComfy(
   cfg: ComfyuiConfig,
   frameBlob: Blob,
   prompt: string,
   onProgress: (p: VideoGenProgress) => void,
+  /** 镜头时长秒（缺省 5s）——换算为帧数注入 <<LENGTH>>（模板无该占位符则静默跳过） */
+  durationSec?: number,
 ): Promise<ComfyVideoResult> {
   const base = cfg.url.replace(/\/$/, '');
   const t0 = Date.now();
@@ -214,8 +231,12 @@ export async function generateVideoOnComfy(
 
   const blob = await runWorkflow(
     base,
-    cfg.videoWorkflow,
-    { '<<FRAME>>': frameName, '<<PROMPT>>': prompt },
+    effectiveVideoWorkflow(cfg),
+    {
+      '<<FRAME>>': frameName,
+      '<<PROMPT>>': prompt,
+      '<<LENGTH>>': String(framesForDuration(durationSec ?? 5)),
+    },
     20 * 60 * 1000,
     tick,
   );
@@ -231,6 +252,8 @@ export interface ComfyImageParams {
   seed: number;
   /** 参考图 blob（分镜参考生图通道）：上传 ComfyUI 后注入 <<REF>>；传值时走 Qwen-Edit-2511 workflow */
   refBlob?: Blob;
+  /** 场景图 blob（可选，分镜参考通道）：注入 <<SCENE_REF>>（image2）——与定妆照双重锁定，跨帧场景一致 */
+  sceneRefBlob?: Blob;
   /** 指定 workflow（默认 Z-Image-Turbo；'qwen-edit-2511' = 分镜参考通道） */
   workflow?: 'qwen-edit-2511';
 }
@@ -241,11 +264,15 @@ export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImag
   if (params.workflow === 'qwen-edit-2511') {
     if (!params.refBlob) throw new Error('参考生图缺少定妆照（refBlob）');
     const refName = await uploadImage(base, params.refBlob, 'ref.png');
-    return runWorkflow(base, QWEN_EDIT_2511_WORKFLOW, {
+    const placeholders: Record<string, string> = {
       '<<PROMPT>>': params.prompt,
       '<<REF>>': refName,
       '<<SEED>>': String(params.seed),
-    }, 15 * 60 * 1000);
+    };
+    if (params.sceneRefBlob) {
+      placeholders['<<SCENE_REF>>'] = await uploadImage(base, params.sceneRefBlob, 'scene-ref.png');
+    }
+    return runWorkflow(base, QWEN_EDIT_2511_WORKFLOW, placeholders, 15 * 60 * 1000);
   }
   return runWorkflow(base, effectiveImageWorkflow(cfg), {
     '<<PROMPT>>': params.prompt,
