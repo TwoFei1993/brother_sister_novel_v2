@@ -6,7 +6,7 @@
  * - gridParts 帧描述可编辑（改完重roll 该帧生效）
  */
 import { useState } from 'react';
-import { Download, Grid2X2, RefreshCw } from 'lucide-react';
+import { Clapperboard, Download, Grid2X2, RefreshCw } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
@@ -19,9 +19,13 @@ interface Props {
   workId: string;
   shot: DuanjuShot;
   project: DuanjuProject;
+  /** 挑帧生视频：用第 idx 帧做首帧走本地视频通道（质量把控——人审后选最满意的帧） */
+  onPickFrame?: (idx: number) => void;
+  /** 挑帧生成进行中（禁用全部挑帧按钮） */
+  pickBusy?: boolean;
 }
 
-export default function FramesGrid({ workId, shot, project }: Props) {
+export default function FramesGrid({ workId, shot, project, onPickFrame, pickBusy }: Props) {
   const { patch } = useDuanjuStore();
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +140,18 @@ export default function FramesGrid({ workId, shot, project }: Props) {
                     data-testid={`frame-reroll-${i}`}
                   >
                     <RefreshCw className="h-3 w-3" aria-hidden />
+                  </button>
+                )}
+                {f && onPickFrame && (
+                  <button
+                    type="button"
+                    onClick={() => onPickFrame(i - 1)}
+                    disabled={pickBusy === true || busy !== null}
+                    title={`用第 ${i} 帧做首帧生成视频（挑帧——四帧里选最满意的画面）`}
+                    className="absolute bottom-1 left-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity hover:bg-black/75 focus:opacity-100 group-hover:opacity-100 disabled:opacity-30"
+                    data-testid={`frame-pick-${i}`}
+                  >
+                    <Clapperboard className="h-3 w-3" aria-hidden />
                   </button>
                 )}
               </div>

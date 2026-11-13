@@ -114,7 +114,7 @@ export default function ShotCard({ workId, shot }: Props) {
                 待刷新
               </span>
             )}
-            <FramesGrid workId={workId} shot={shot} project={project} />
+            <FramesGrid workId={workId} shot={shot} project={project} onPickFrame={(i) => void localGen.run({ frameIdx: i })} pickBusy={localGen.state !== null} />
           </div>
           <div className="mt-2.5">
             <ShotTools
