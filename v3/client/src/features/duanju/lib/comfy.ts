@@ -29,6 +29,8 @@ export interface ComfyuiConfig {
   imageWorkflow: string;
   /** 视频画质预设（缺省 high = 1344×768 / 6 步；standard/draft 换取速度） */
   videoQuality?: VideoQualityPreset;
+  /** C1：H3 提示词优化器（AICG3D 插件 /aicg3d/goohai/.../optimize）——注入 <<PROMPT>> 前先过一道六段式结构化 */
+  promptOptimizer?: boolean;
 }
 
 /**
@@ -56,12 +58,44 @@ export function loadComfyConfig(): ComfyuiConfig {
         videoWorkflow: typeof parsed.videoWorkflow === 'string' ? parsed.videoWorkflow : (parsed.workflow ?? ''),
         imageWorkflow: typeof parsed.imageWorkflow === 'string' ? parsed.imageWorkflow : '',
         videoQuality: parsed.videoQuality ?? 'high',
+        promptOptimizer: parsed.promptOptimizer === true,
       };
     }
   } catch {
     /* 损坏即重置 */
   }
-  return { url: defaultUrl(), videoWorkflow: '', imageWorkflow: '', videoQuality: 'high' };
+  return { url: defaultUrl(), videoWorkflow: '', imageWorkflow: '', videoQuality: 'high', promptOptimizer: false };
+}
+
+/**
+ * C1：H3 提示词优化器（AICG3D 插件，与 ComfyUI 同机）。
+ * 六段式结构化 + <d>[Chinese]</d> 对白 + 首尾帧锚点声明；失败静默回退原 prompt（增益非依赖）。
+ * 注意优化器自身需在插件设置里配好 LLM 通道（云端 API 或本地 GGUF）才会生效。
+ */
+export async function optimizePromptOnComfy(
+  cfg: ComfyuiConfig,
+  prompt: string,
+  opts: { duration: number; task?: string } = { duration: 5 },
+): Promise<string> {
+  const base = cfg.url.replace(/\/$/, '');
+  try {
+    const r = await fetch(`${base}/aicg3d/goohai/minimax-h3/prompt-optimizer/optimize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        task: opts.task ?? 'i2va',
+        duration: opts.duration,
+        request_id: `v3-${Date.now()}`,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!r.ok) return prompt;
+    const j = (await r.json()) as { prompt?: string };
+    return typeof j.prompt === 'string' && j.prompt.trim() ? j.prompt : prompt;
+  } catch {
+    return prompt; // 优化器不可用（未装/未配）不阻塞生成
+  }
 }
 
 export function saveComfyConfig(cfg: ComfyuiConfig): void {
@@ -76,6 +110,61 @@ export async function pingComfy(url: string): Promise<{ ok: boolean; detail?: st
   } catch (err) {
     return { ok: false, detail: err instanceof Error ? err.message : '网络错误' };
   }
+}
+
+// ---------- 内存防线（防模型缓存累积撑爆 32G RAM / 12G VRAM） ----------
+
+interface ComfyHeadroom {
+  ramFree: number;
+  vramFree: number;
+}
+
+/** 查 ComfyUI 视角空闲资源（GB）；探不到返回 null（老版本/离线不拦截） */
+async function comfyHeadroom(base: string): Promise<ComfyHeadroom | null> {
+  try {
+    const r = await fetch(`${base}/system_stats`, { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { devices?: Array<{ ram_free?: number; vram_free?: number }> };
+    const d = j.devices?.[0];
+    return d ? { ramFree: (d.ram_free ?? 0) / 1e9, vramFree: (d.vram_free ?? 0) / 1e9 } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 释放 ComfyUI 已缓存的模型权重（RAM + VRAM）——POST /free */
+async function freeComfyModels(base: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${base}/free`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unload_models: true, free_memory: true }),
+      signal: AbortSignal.timeout(10000),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 重任务提交前的内存防线：空闲低于阈值 → 释放模型缓存再复核（返回是否满足）。
+ * 背景：2511(20G)/H3(8.5G)/SeedVR2(3.7G) 权重用完驻留累积，32G RAM 叠加系统进程
+ * 常态只剩 4-5G，三链连续跑会把页面文件顶爆（os error 1455 进程崩溃）——
+ * 紧张时弃缓存换稳定（代价：下次生成重新加载模型，~30s-1min）。
+ */
+export async function ensureComfyHeadroom(
+  base: string,
+  need: { ramGb?: number; vramGb?: number },
+): Promise<boolean> {
+  const short = (h: ComfyHeadroom): boolean =>
+    (need.ramGb !== undefined && h.ramFree < need.ramGb) ||
+    (need.vramGb !== undefined && h.vramFree < need.vramGb);
+  let h = await comfyHeadroom(base);
+  if (!h || !short(h)) return true;
+  await freeComfyModels(base);
+  h = await comfyHeadroom(base);
+  return !h || !short(h);
 }
 
 /** 生图实际生效的 workflow 文本（用户自定义优先，空则内置默认） */
@@ -115,10 +204,16 @@ function netErr(err: unknown): Error {
   return new Error('无法连接本地引擎——请确认已启动（scripts/comfy-start.sh）且设置页地址正确');
 }
 
-/** 上传图片 → ComfyUI input 目录，返回可注入 LoadImage 的文件名（subfolder/name） */
+/** 上传图片 → ComfyUI input 目录，返回可注入 LoadImage 的文件名（subfolder/name）。
+ *  文件名统一加随机后缀（P1 修复）：固定名 + overwrite=true 在并发任务（批量分帧/双镜头生视频）下
+ *  会互相覆盖——A 提交 workflow 时 LoadImage 读到的是 B 刚覆盖的参考图。 */
 async function uploadImage(url: string, blob: Blob, name: string, type = 'image/png'): Promise<string> {
+  const dot = name.lastIndexOf('.');
+  const unique = dot > 0
+    ? `${name.slice(0, dot)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}${name.slice(dot)}`
+    : `${name}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const form = new FormData();
-  form.append('image', new File([blob], name, { type }));
+  form.append('image', new File([blob], unique, { type }));
   form.append('overwrite', 'true');
   let r: Response;
   try {
@@ -306,6 +401,8 @@ export async function submitVideoOnComfy(
   extra?: VideoExtraInputs,
 ): Promise<SubmittedVideoTask> {
   const base = cfg.url.replace(/\/$/, '');
+  // 内存防线：H3 GGUF 8.5G 权重流式加载——RAM 紧张先释放模型缓存（防三链叠加撑爆）
+  await ensureComfyHeadroom(base, { ramGb: 10 });
   const placeholders: Record<string, string> = {
     '<<PROMPT>>': prompt,
     '<<LENGTH>>': String(framesForDuration(durationSec ?? 5)),
@@ -380,6 +477,8 @@ export async function upscaleVideoOnComfy(
   const t0 = Date.now();
   const tick = () => onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
+  // 内存防线：SeedVR2 DiT(3.2G)+VAE+tiled 解码峰值——刚跑完 H3（8.5G 驻留）时必触发释放
+  await ensureComfyHeadroom(base, { vramGb: 5, ramGb: 6 });
   onProgress({ phase: 'uploading', elapsedSec: 0 });
   const videoName = await uploadImage(base, videoBlob, 'to-upscale.mp4', 'video/mp4');
   onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
@@ -414,6 +513,8 @@ export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImag
   const base = cfg.url.replace(/\/$/, '');
   if (params.workflow === 'qwen-edit-2511') {
     if (!params.refBlob) throw new Error('参考生图缺少定妆照（refBlob）');
+    // 内存防线：2511 int8 权重 20G 流式分页——RAM 余量不足先释放（分镜批量重roll 时高频触发）
+    await ensureComfyHeadroom(base, { ramGb: 12 });
     const refName = await uploadImage(base, params.refBlob, 'ref.png');
     const placeholders: Record<string, string> = {
       '<<PROMPT>>': params.prompt,
