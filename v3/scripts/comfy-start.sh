@@ -26,9 +26,10 @@ echo "[comfy] 启动 ComfyUI（$COMFY_DIR）→ 日志 $LOG"
 # PowerShell 只认 Windows 路径，MSYS 风格（/d/...）必须先转换；进程用 Start-Process 完全独立于当前 shell
 # --enable-cors-header *：App 浏览器直连必须（ComfyUI 默认对跨域 Origin 返回 403）
 # --listen 0.0.0.0：手机端直连必须（默认只听 127.0.0.1，局域网设备连不上；Windows 防火墙首次会弹放行确认，选「允许」）
+# --use-sage-attention：SageAttention INT8 量化注意力（视频生成 ~1.5x 提速，画质无损；依赖已装 triton-windows+sageattention）
 COMFY_WIN="$(cygpath -w "$COMFY_DIR")"
 LOG_WIN="$(cygpath -w "$LOG")"
-powershell -NoProfile -Command "Start-Process -FilePath '$COMFY_WIN\python_embeded\python.exe' -ArgumentList '-s','ComfyUI/main.py','--windows-standalone-build','--listen','0.0.0.0','--enable-cors-header','*' -WorkingDirectory '$COMFY_WIN' -WindowStyle Hidden -RedirectStandardOutput '$LOG_WIN' -RedirectStandardError '$LOG_WIN.err'"
+powershell -NoProfile -Command "Start-Process -FilePath '$COMFY_WIN\python_embeded\python.exe' -ArgumentList '-s','ComfyUI/main.py','--windows-standalone-build','--listen','0.0.0.0','--use-sage-attention','--enable-cors-header','*' -WorkingDirectory '$COMFY_WIN' -WindowStyle Hidden -RedirectStandardOutput '$LOG_WIN' -RedirectStandardError '$LOG_WIN.err'"
 
 echo "[comfy] 后台启动中，探活 $BASE_URL ..."
 for i in $(seq 1 90); do
