@@ -7,7 +7,7 @@
 import { useState } from 'react';
 
 import { uploadDuanjuVideo, duanjuFileUrl } from '../api/duanju';
-import { generateVideoOnComfy, loadComfyConfig, type VideoGenProgress } from '../features/duanju/lib/comfy';
+import { generateVideoOnComfy, upscaleVideoOnComfy, loadComfyConfig, type VideoGenProgress } from '../features/duanju/lib/comfy';
 import { buildLocalVideoPrompt } from '../features/duanju/lib/prompts/prompts-storyboard';
 import { useDuanjuStore } from '../features/duanju/store';
 import type { DuanjuShot } from '@shared/duanju';
@@ -72,8 +72,19 @@ export function useLocalVideoGen(workId: string, shot: DuanjuShot) {
         durationSec,
         lastFrameBlob ? { lastFrameBlob } : refBlobs.length > 0 ? { refBlobs } : undefined,
       );
+      // 终稿自动超分上 1080p（试跑不超分——抽卡只要快）；超分失败回退归档原片，不丢成果
+      let finalBlob = blob;
+      if (!opts?.trial) {
+        try {
+          setState({ phase: 'queued', elapsedSec: 0 });
+          const up = await upscaleVideoOnComfy(cfg, blob, setState);
+          finalBlob = up.blob;
+        } catch {
+          setError('超分 1080p 失败——已归档原分辨率版本（可重试或换档）');
+        }
+      }
       const suffix = opts?.trial ? '-trial' : '';
-      const file = new File([blob], `S${shot.index}-local${suffix}.mp4`, { type: 'video/mp4' });
+      const file = new File([finalBlob], `S${shot.index}-local${suffix}.mp4`, { type: 'video/mp4' });
       await uploadDuanjuVideo(workId, shot.id, file);
       await useDuanjuStore.getState().load(workId);
     } catch (err) {

@@ -15,6 +15,7 @@ import {
   HYPERFLOW_T2V_DEFAULT_WORKFLOW,
   HYPERFLOW_FLF2V_DEFAULT_WORKFLOW,
   HYPERFLOW_REF2V_DEFAULT_WORKFLOW,
+  SEEDVR2_UPSCALE_DEFAULT_WORKFLOW,
 } from './comfyDefaultWorkflow';
 
 const CFG_KEY = 'v3-comfyui-config';
@@ -112,9 +113,9 @@ function netErr(err: unknown): Error {
 }
 
 /** 上传图片 → ComfyUI input 目录，返回可注入 LoadImage 的文件名（subfolder/name） */
-async function uploadImage(url: string, blob: Blob, name: string): Promise<string> {
+async function uploadImage(url: string, blob: Blob, name: string, type = 'image/png'): Promise<string> {
   const form = new FormData();
-  form.append('image', new File([blob], name, { type: 'image/png' }));
+  form.append('image', new File([blob], name, { type }));
   form.append('overwrite', 'true');
   let r: Response;
   try {
@@ -274,6 +275,40 @@ export async function generateVideoOnComfy(
   onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
   const blob = await runWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, 20 * 60 * 1000, tick);
+  onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
+  return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
+}
+
+export interface ComfyUpscaleResult {
+  blob: Blob;
+  elapsedSec: number;
+}
+
+/**
+ * 视频超分完整流程：上传 mp4 → SeedVR2（短边 → resolution，保比例，音轨透传）→ 下载 mp4 blob。
+ * 典型：H3 出片 768×1344 → 1080×1890（约 41 秒处理 10 秒片，12GB 显存档参数内置）。
+ */
+export async function upscaleVideoOnComfy(
+  cfg: ComfyuiConfig,
+  videoBlob: Blob,
+  onProgress: (p: VideoGenProgress) => void,
+  resolution = 1080,
+): Promise<ComfyUpscaleResult> {
+  const base = cfg.url.replace(/\/$/, '');
+  const t0 = Date.now();
+  const tick = () => onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
+
+  onProgress({ phase: 'uploading', elapsedSec: 0 });
+  const videoName = await uploadImage(base, videoBlob, 'to-upscale.mp4', 'video/mp4');
+  onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
+
+  const blob = await runWorkflow(
+    base,
+    SEEDVR2_UPSCALE_DEFAULT_WORKFLOW,
+    { '<<VIDEO>>': videoName, '<<RESOLUTION>>': String(resolution) },
+    20 * 60 * 1000,
+    tick,
+  );
   onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
   return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
 }
