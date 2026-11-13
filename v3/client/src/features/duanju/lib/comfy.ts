@@ -12,6 +12,9 @@ import {
   Z_IMAGE_TURBO_DEFAULT_WORKFLOW,
   QWEN_EDIT_2511_WORKFLOW,
   HYPERFLOW_I2V_DEFAULT_WORKFLOW,
+  HYPERFLOW_T2V_DEFAULT_WORKFLOW,
+  HYPERFLOW_FLF2V_DEFAULT_WORKFLOW,
+  HYPERFLOW_REF2V_DEFAULT_WORKFLOW,
 } from './comfyDefaultWorkflow';
 
 const CFG_KEY = 'v3-comfyui-config';
@@ -76,9 +79,19 @@ export function effectiveImageWorkflow(cfg: ComfyuiConfig): string {
   return cfg.imageWorkflow.trim() || Z_IMAGE_TURBO_DEFAULT_WORKFLOW;
 }
 
-/** 视频实际生效的 workflow 文本（用户自定义优先，空则内置 H3 Flash i2v 默认） */
-export function effectiveVideoWorkflow(cfg: ComfyuiConfig): string {
-  return cfg.videoWorkflow.trim() || HYPERFLOW_I2V_DEFAULT_WORKFLOW;
+/** 视频模式（决定内置模板选择；用户自定义模板优先于全部内置） */
+export type VideoWorkflowMode = 'i2v' | 't2v' | 'flf2v' | 'ref2v';
+
+/** 视频实际生效的 workflow 文本：用户自定义优先；内置按模式选（无 extra 时 i2v） */
+export function effectiveVideoWorkflow(cfg: ComfyuiConfig, mode: VideoWorkflowMode = 'i2v'): string {
+  if (cfg.videoWorkflow.trim()) return cfg.videoWorkflow.trim();
+  const byMode: Record<VideoWorkflowMode, string> = {
+    i2v: HYPERFLOW_I2V_DEFAULT_WORKFLOW,
+    t2v: HYPERFLOW_T2V_DEFAULT_WORKFLOW,
+    flf2v: HYPERFLOW_FLF2V_DEFAULT_WORKFLOW,
+    ref2v: HYPERFLOW_REF2V_DEFAULT_WORKFLOW,
+  };
+  return byMode[mode];
 }
 
 /** 镜头秒数 → 生成帧数（24fps，snap 到模型 17k+5 帧网格；官方表达式为 Python % 语义，JS 需补正负数取模） */
@@ -212,35 +225,55 @@ export interface ComfyVideoResult {
   elapsedSec: number;
 }
 
-/** 视频完整流程：上传分帧图 → 注入（帧图/提示词/时长帧数）→ 提交 → 轮询 → 下载 mp4 blob */
+/** 视频生成的额外图输入（决定内置模板：refBlobs→ref2v；lastFrameBlob→flf2v；否则 i2v/t2v） */
+export interface VideoExtraInputs {
+  /** 尾帧图（flf2v：首尾帧控制） */
+  lastFrameBlob?: Blob;
+  /** 参考图 1-2 张（ref2v：角色定妆照） */
+  refBlobs?: Blob[];
+}
+
+/** 视频完整流程：上传分帧图 → 注入（帧图/提示词/时长帧数/额外图）→ 提交 → 轮询 → 下载 mp4 blob */
 export async function generateVideoOnComfy(
   cfg: ComfyuiConfig,
-  frameBlob: Blob,
+  frameBlob: Blob | null,
   prompt: string,
   onProgress: (p: VideoGenProgress) => void,
   /** 镜头时长秒（缺省 5s）——换算为帧数注入 <<LENGTH>>（模板无该占位符则静默跳过） */
   durationSec?: number,
+  extra?: VideoExtraInputs,
 ): Promise<ComfyVideoResult> {
   const base = cfg.url.replace(/\/$/, '');
   const t0 = Date.now();
   const tick = () => onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
   onProgress({ phase: 'uploading', elapsedSec: 0 });
-  const frameName = await uploadImage(base, frameBlob, 'frame.png');
+  const placeholders: Record<string, string> = {
+    '<<PROMPT>>': prompt,
+    '<<LENGTH>>': String(framesForDuration(durationSec ?? 5)),
+    '<<SEED>>': String(Math.floor(Math.random() * 2_147_483_647)),
+  };
+  if (frameBlob) {
+    placeholders['<<FRAME>>'] = await uploadImage(base, frameBlob, 'frame.png');
+  }
+  if (extra?.lastFrameBlob) {
+    placeholders['<<LAST_FRAME>>'] = await uploadImage(base, extra.lastFrameBlob, 'last_frame.png');
+  }
+  if (extra?.refBlobs) {
+    for (let i = 0; i < Math.min(extra.refBlobs.length, 2); i += 1) {
+      placeholders[`<<REF${i + 1}>>`] = await uploadImage(base, extra.refBlobs[i]!, `ref${i + 1}.png`);
+    }
+  }
+  const mode: VideoWorkflowMode = extra?.refBlobs?.length
+    ? 'ref2v'
+    : extra?.lastFrameBlob
+      ? 'flf2v'
+      : frameBlob
+        ? 'i2v'
+        : 't2v';
   onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
-  const blob = await runWorkflow(
-    base,
-    effectiveVideoWorkflow(cfg),
-    {
-      '<<FRAME>>': frameName,
-      '<<PROMPT>>': prompt,
-      '<<LENGTH>>': String(framesForDuration(durationSec ?? 5)),
-      '<<SEED>>': String(Math.floor(Math.random() * 2_147_483_647)),
-    },
-    20 * 60 * 1000,
-    tick,
-  );
+  const blob = await runWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, 20 * 60 * 1000, tick);
   onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
   return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
 }

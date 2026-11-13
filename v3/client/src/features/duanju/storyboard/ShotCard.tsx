@@ -131,6 +131,7 @@ export default function ShotCard({ workId, shot }: Props) {
               localGenAvailable={localGen.available}
               localGenState={localGen.state}
               onLocalGen={() => void localGen.run()}
+              onLocalGenTrial={() => void localGen.run({ trial: true })}
               localGenError={localGen.error}
             />
           </div>

@@ -237,3 +237,18 @@ export function buildVideoPrompt(shot: DuanjuShot, project: DuanjuProject): stri
     `画风：${project.style}，与参考图保持一致`,
   ].join('\n');
 }
+
+/**
+ * 本地 H3 音画一体视频提示词（MiniMax 官方结构化格式）：
+ * 动作+运镜叙述 + <d>[Chinese] 台词</d>（口型同步）+ 声音描述（原生立体声）。
+ * 与「复制视频提示词」（即梦用中文分行格式）互不影响——本地通道专用。
+ */
+export function buildLocalVideoPrompt(shot: Pick<DuanjuShot, 'gridParts' | 'actionStart' | 'actionEnd' | 'cameraMove' | 'staging' | 'dialog' | 'sound'>): string {
+  const action = shot.gridParts.length > 0 ? shot.gridParts[0] : `${shot.actionStart} → ${shot.actionEnd}`;
+  const parts = [
+    `One continuous cinematic vertical shot: ${action}; camera ${shot.cameraMove || 'static'}${shot.staging ? `, ${shot.staging}` : ''}.`,
+    shot.dialog ? `<d>[Chinese] ${shot.dialog}</d>` : '',
+    `Audio: ${shot.sound || 'ambient sound matching the scene, no background music'}.`,
+  ];
+  return parts.filter(Boolean).join(' ');
+}

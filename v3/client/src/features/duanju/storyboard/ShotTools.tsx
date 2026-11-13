@@ -34,6 +34,8 @@ interface Props {
   localGenAvailable: boolean;
   localGenState: LocalGenProgress | null;
   onLocalGen: () => void;
+  /** 抽卡试跑（3 秒/73 帧快速验证动作与口型，满意再出终稿） */
+  onLocalGenTrial: () => void;
 }
 
 const toolCls = 'flex h-8 items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-[11px] text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--fg))]';
@@ -53,6 +55,7 @@ export default function ShotTools({
   localGenAvailable,
   localGenState,
   onLocalGen,
+  onLocalGenTrial,
 }: Props) {
   const jump = (url: string) => () => {
     onCopy();
@@ -71,8 +74,20 @@ export default function ShotTools({
             data-testid="shot-local-gen"
             title="本地 ComfyUI + H3：分帧图作首帧，免费出片"
           >
-            🎬 {localGenState ? `本地生成中（${localGenState.phase === 'uploading' ? '传帧图' : localGenState.phase === 'queued' ? '排队' : localGenState.phase === 'downloading' ? '取片' : '生成'} ${localGenState.elapsedSec}s）` : localGenAvailable ? '本地生成视频（免费）' : '本地生成视频（需先配置引擎）'}
+            🎬 {localGenState ? `本地生成中（${localGenState.phase === 'uploading' ? '传帧图' : localGenState.phase === 'queued' ? '排队' : localGenState.phase === 'downloading' ? '取片' : '生成'} ${localGenState.elapsedSec}s）` : localGenAvailable ? '本地生成视频（免费·音画一体）' : '本地生成视频（需先配置引擎）'}
           </button>
+          {localGenAvailable && (
+            <button
+              type="button"
+              onClick={onLocalGenTrial}
+              disabled={!!localGenState}
+              className="mt-1.5 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-[11px] text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
+              data-testid="shot-local-gen-trial"
+              title="抽卡试跑：3 秒快速验证动作/运镜/口型，满意再出完整终稿——终稿时长越长越贵，先小注试探"
+            >
+              ⚡ 试跑 3 秒（抽卡验证）
+            </button>
+          )}
         </>
       )}
       <button
