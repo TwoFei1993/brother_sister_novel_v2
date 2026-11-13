@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { effectiveVideoWorkflow, framesForDuration } from '../../features/duanju/lib/comfy';
+import { applyVideoQuality, effectiveVideoWorkflow, framesForDuration } from '../../features/duanju/lib/comfy';
 import { HYPERFLOW_I2V_DEFAULT_WORKFLOW } from '../../features/duanju/lib/comfyDefaultWorkflow';
 import type { ComfyuiConfig } from '../../features/duanju/lib/comfy';
 
@@ -74,5 +74,35 @@ describe('framesForDuration（时长→帧数，24fps snap 17k+5）', () => {
       expect(f).toBeGreaterThanOrEqual(prev);
       prev = f;
     }
+  });
+});
+
+describe('applyVideoQuality（画质预设覆盖，默认高）', () => {
+  it('high：不改模板数值（默认即高规格）', () => {
+    const wf = JSON.parse(HYPERFLOW_I2V_DEFAULT_WORKFLOW) as Record<string, { class_type: string; inputs: Record<string, unknown> }>;
+    applyVideoQuality(wf, 'high');
+    const gen = Object.values(wf).find((n) => n.class_type === 'MiniMaxH3ImageToVideo');
+    expect(gen!.inputs.width).toBe(768);
+    expect(gen!.inputs.height).toBe(1344);
+    const sig = Object.values(wf).find((n) => n.class_type === 'HyperFlowSigmas');
+    expect(sig!.inputs.steps).toBe(6);
+  });
+
+  it('draft：尺寸与步数覆盖为抽卡档（竖屏低分辨率）', () => {
+    const wf = JSON.parse(HYPERFLOW_I2V_DEFAULT_WORKFLOW) as Record<string, { class_type: string; inputs: Record<string, unknown> }>;
+    applyVideoQuality(wf, 'draft');
+    const gen = Object.values(wf).find((n) => n.class_type === 'MiniMaxH3ImageToVideo');
+    expect(gen!.inputs.width).toBe(512);
+    expect(gen!.inputs.height).toBe(896);
+    const sig = Object.values(wf).find((n) => n.class_type === 'HyperFlowSigmas');
+    expect(sig!.inputs.steps).toBe(4);
+  });
+
+  it('连接输入（clip/vae）不被覆盖，仅数值字段动', () => {
+    const wf = JSON.parse(HYPERFLOW_I2V_DEFAULT_WORKFLOW) as Record<string, { class_type: string; inputs: Record<string, unknown> }>;
+    applyVideoQuality(wf, 'draft');
+    const gen = Object.values(wf).find((n) => n.class_type === 'MiniMaxH3ImageToVideo');
+    expect(Array.isArray(gen!.inputs.clip)).toBe(true);
+    expect(gen!.inputs.length).toBe('<<LENGTH>>'); // 占位符保持原样
   });
 });

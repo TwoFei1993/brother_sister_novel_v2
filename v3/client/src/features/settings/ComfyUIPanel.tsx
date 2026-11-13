@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
-import { effectiveImageWorkflow, loadComfyConfig, pingComfy, saveComfyConfig } from '../../features/duanju/lib/comfy';
+import { effectiveImageWorkflow, loadComfyConfig, pingComfy, saveComfyConfig, type VideoQualityPreset } from '../../features/duanju/lib/comfy';
 
 const WF_PLACEHOLDER = `在 ComfyUI 界面：Settings → 启用开发者模式 →
 打开你的 H3 图生视频工作流 → Export (API) 导出 JSON →
@@ -93,6 +93,23 @@ export default function ComfyUIPanel() {
               ✅ 当前使用内置 HyperFlow H3 Flash i2v 默认模板（视频+音轨，时长随镜头 durationSec 自动换算帧数）
             </span>
           )}
+        </label>
+
+        <label className="block">
+          <span className="mb-0.5 block text-[10px] uppercase tracking-wide text-[hsl(var(--fg-muted))]">
+            视频画质预设（默认高；抽卡/预演可调快）
+          </span>
+          <select
+            value={cfg.videoQuality ?? 'high'}
+            onChange={(e) => setCfg({ ...cfg, videoQuality: e.target.value as VideoQualityPreset })}
+            className="h-9 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-xs outline-none"
+            aria-label="视频画质预设"
+            data-testid="comfyui-video-quality"
+          >
+            <option value="high">高质量 — 1344×768 / 6 步（约 4.5 分钟每秒视频）</option>
+            <option value="standard">标准 — 1152×640 / 4 步（约 2 分钟每秒视频）</option>
+            <option value="draft">抽卡 — 896×512 / 4 步（约 1 分钟每秒视频）</option>
+          </select>
         </label>
 
         <div className="flex items-center gap-2">

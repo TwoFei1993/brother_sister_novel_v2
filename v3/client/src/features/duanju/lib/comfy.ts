@@ -23,10 +23,12 @@ const CFG_KEY = 'v3-comfyui-config';
 export interface ComfyuiConfig {
   /** ComfyUI 基地址（如 http://192.168.1.10:8188） */
   url: string;
-  /** API 格式图生视频 workflow（占位符 <<FRAME>> / <<PROMPT>>） */
+  /** API 格式图生视频 workflow（占位符 <<FRAME>> / <<PROMPT>> / <<LENGTH>>；空 = 内置 H3 默认） */
   videoWorkflow: string;
   /** API 格式文生图 workflow（占位符 <<PROMPT>>/<<WIDTH>>/<<HEIGHT>>/<<SEED>>；空 = 内置默认） */
   imageWorkflow: string;
+  /** 视频画质预设（缺省 high = 1344×768 / 6 步；standard/draft 换取速度） */
+  videoQuality?: VideoQualityPreset;
 }
 
 /**
@@ -53,12 +55,13 @@ export function loadComfyConfig(): ComfyuiConfig {
         url: typeof parsed.url === 'string' && parsed.url ? parsed.url : defaultUrl(),
         videoWorkflow: typeof parsed.videoWorkflow === 'string' ? parsed.videoWorkflow : (parsed.workflow ?? ''),
         imageWorkflow: typeof parsed.imageWorkflow === 'string' ? parsed.imageWorkflow : '',
+        videoQuality: parsed.videoQuality ?? 'high',
       };
     }
   } catch {
     /* 损坏即重置 */
   }
-  return { url: defaultUrl(), videoWorkflow: '', imageWorkflow: '' };
+  return { url: defaultUrl(), videoWorkflow: '', imageWorkflow: '', videoQuality: 'high' };
 }
 
 export function saveComfyConfig(cfg: ComfyuiConfig): void {
@@ -143,6 +146,32 @@ function injectWorkflow(workflowText: string, placeholders: Record<string, strin
   }
 }
 
+// ---------- 视频画质预设（默认高；用户在设置页切换） ----------
+
+export type VideoQualityPreset = 'high' | 'standard' | 'draft';
+
+/** 预设 → 尺寸/步数覆盖（未匹配字段保持模板原值 = 默认高规格） */
+export const VIDEO_QUALITY_PRESETS: Record<VideoQualityPreset, { width: number; height: number; steps: number }> = {
+  high: { width: 768, height: 1344, steps: 6 }, // 竖屏默认（与分镜帧同尺寸零缩放；官方推荐 6 步）
+  standard: { width: 640, height: 1152, steps: 4 },
+  draft: { width: 512, height: 896, steps: 4 }, // 抽卡预演（低分辨率快验）
+};
+
+/** 画质覆盖（纯函数可测）：找 H3 生成节点改 width/height、Sigmas 节点改 steps */
+export function applyVideoQuality(wf: Record<string, unknown>, preset: VideoQualityPreset): void {
+  const q = VIDEO_QUALITY_PRESETS[preset] ?? VIDEO_QUALITY_PRESETS.high;
+  for (const node of Object.values(wf)) {
+    const cls = (node as { class_type?: string }).class_type ?? '';
+    const inputs = (node as { inputs?: Record<string, unknown> }).inputs;
+    if (!inputs) continue;
+    if (cls.startsWith('MiniMaxH3')) {
+      if (typeof inputs.width === 'number') inputs.width = q.width;
+      if (typeof inputs.height === 'number') inputs.height = q.height;
+    }
+    if (cls === 'HyperFlowSigmas' && typeof inputs.steps === 'number') inputs.steps = q.steps;
+  }
+}
+
 /** 从 /history outputs 任意节点提取文件条目（SaveImage/SaveVideo/VHS_VideoCombine 通吃） */
 function extractOutputFile(entry: { outputs?: Record<string, Record<string, unknown[]>> }): {
   filename: string;
@@ -170,6 +199,7 @@ function extractOutputFile(entry: { outputs?: Record<string, Record<string, unkn
 /**
  * 通用执行：注入 → 提交 → 轮询 → 下载产物 blob。
  * deadlineMs 兜底：生图 5 分钟 / 视频 20 分钟；轮询抖动静默重试。
+ * valuePatch：占位符替换解析后、提交前的数值级覆盖（如画质预设改 width/height/steps）。
  */
 async function runWorkflow(
   base: string,
@@ -177,8 +207,10 @@ async function runWorkflow(
   placeholders: Record<string, string>,
   deadlineMs: number,
   onTick?: () => void,
+  valuePatch?: (wf: Record<string, unknown>) => void,
 ): Promise<Blob> {
   const workflow = injectWorkflow(workflowText, placeholders);
+  valuePatch?.(workflow);
   const clientId = `app-${Math.random().toString(36).slice(2, 10)}`;
   let submit: Response;
   try {
@@ -274,7 +306,9 @@ export async function generateVideoOnComfy(
         : 't2v';
   onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
 
-  const blob = await runWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, 20 * 60 * 1000, tick);
+  const blob = await runWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, 20 * 60 * 1000, tick, (wf) =>
+    applyVideoQuality(wf, cfg.videoQuality ?? 'high'),
+  );
   onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
   return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
 }
