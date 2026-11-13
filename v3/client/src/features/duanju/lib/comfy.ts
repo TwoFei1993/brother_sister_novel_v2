@@ -197,18 +197,15 @@ function extractOutputFile(entry: { outputs?: Record<string, Record<string, unkn
 }
 
 /**
- * 通用执行：注入 → 提交 → 轮询 → 下载产物 blob。
- * deadlineMs 兜底：生图 5 分钟 / 视频 20 分钟；轮询抖动静默重试。
- * valuePatch：占位符替换解析后、提交前的数值级覆盖（如画质预设改 width/height/steps）。
+ * 提交 workflow（阶段一）：注入 → 数值覆盖 → POST /prompt → promptId。
+ * 与轮询拆分的原因：手机长任务跨页面生命周期——prompt_id 持久化后可恢复轮询。
  */
-async function runWorkflow(
+async function submitWorkflow(
   base: string,
   workflowText: string,
   placeholders: Record<string, string>,
-  deadlineMs: number,
-  onTick?: () => void,
   valuePatch?: (wf: Record<string, unknown>) => void,
-): Promise<Blob> {
+): Promise<string> {
   const workflow = injectWorkflow(workflowText, placeholders);
   valuePatch?.(workflow);
   const clientId = `app-${Math.random().toString(36).slice(2, 10)}`;
@@ -228,7 +225,16 @@ async function runWorkflow(
   }
   const { prompt_id: promptId } = (await submit.json()) as { prompt_id: string };
   if (!promptId) throw new Error('任务提交返回异常（无 prompt_id）');
+  return promptId;
+}
 
+/** 轮询 workflow（阶段二）：至完成并下载产物 blob；deadlineMs 从调用时点起算 */
+async function pollWorkflow(
+  base: string,
+  promptId: string,
+  deadlineMs: number,
+  onTick?: () => void,
+): Promise<Blob> {
   const deadline = Date.now() + deadlineMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 3000));
@@ -253,6 +259,23 @@ async function runWorkflow(
   throw new Error('超时未完成——可在 ComfyUI 界面查看任务状态');
 }
 
+/**
+ * 通用执行：注入 → 提交 → 轮询 → 下载产物 blob。
+ * deadlineMs 兜底：生图 5 分钟 / 视频 20 分钟；轮询抖动静默重试。
+ * valuePatch：占位符替换解析后、提交前的数值级覆盖（如画质预设改 width/height/steps）。
+ */
+async function runWorkflow(
+  base: string,
+  workflowText: string,
+  placeholders: Record<string, string>,
+  deadlineMs: number,
+  onTick?: () => void,
+  valuePatch?: (wf: Record<string, unknown>) => void,
+): Promise<Blob> {
+  const promptId = await submitWorkflow(base, workflowText, placeholders, valuePatch);
+  return pollWorkflow(base, promptId, deadlineMs, onTick);
+}
+
 export interface ComfyVideoResult {
   blob: Blob;
   elapsedSec: number;
@@ -266,21 +289,23 @@ export interface VideoExtraInputs {
   refBlobs?: Blob[];
 }
 
-/** 视频完整流程：上传分帧图 → 注入（帧图/提示词/时长帧数/额外图）→ 提交 → 轮询 → 下载 mp4 blob */
-export async function generateVideoOnComfy(
+/** 已提交的视频任务句柄（持久化到 localStorage 后可跨页面生命周期恢复轮询） */
+export interface SubmittedVideoTask {
+  base: string;
+  promptId: string;
+  startedAt: number;
+}
+
+/** 视频任务阶段一：上传图 → 注入 → 提交 → 返回任务句柄（执行在 ComfyUI 侧，手机切出/锁屏不影响） */
+export async function submitVideoOnComfy(
   cfg: ComfyuiConfig,
   frameBlob: Blob | null,
   prompt: string,
-  onProgress: (p: VideoGenProgress) => void,
-  /** 镜头时长秒（缺省 5s）——换算为帧数注入 <<LENGTH>>（模板无该占位符则静默跳过） */
+  /** 镜头时长秒（缺省 5s）——换算为帧数注入 <<LENGTH>> */
   durationSec?: number,
   extra?: VideoExtraInputs,
-): Promise<ComfyVideoResult> {
+): Promise<SubmittedVideoTask> {
   const base = cfg.url.replace(/\/$/, '');
-  const t0 = Date.now();
-  const tick = () => onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
-
-  onProgress({ phase: 'uploading', elapsedSec: 0 });
   const placeholders: Record<string, string> = {
     '<<PROMPT>>': prompt,
     '<<LENGTH>>': String(framesForDuration(durationSec ?? 5)),
@@ -304,13 +329,36 @@ export async function generateVideoOnComfy(
       : frameBlob
         ? 'i2v'
         : 't2v';
-  onProgress({ phase: 'queued', elapsedSec: Math.round((Date.now() - t0) / 1000) });
-
-  const blob = await runWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, 20 * 60 * 1000, tick, (wf) =>
+  const promptId = await submitWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, (wf) =>
     applyVideoQuality(wf, cfg.videoQuality ?? 'high'),
   );
+  return { base, promptId, startedAt: Date.now() };
+}
+
+/** 视频任务阶段二：轮询至完成并下载 mp4 blob（恢复轮询安全——history 幂等，超时从恢复时点起算 20 分钟） */
+export async function pollVideoOnComfy(
+  task: SubmittedVideoTask,
+  onProgress: (p: VideoGenProgress) => void,
+): Promise<ComfyVideoResult> {
+  const t0 = task.startedAt;
+  onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
+  const tick = () => onProgress({ phase: 'generating', elapsedSec: Math.round((Date.now() - t0) / 1000) });
+  const blob = await pollWorkflow(task.base, task.promptId, 20 * 60 * 1000, tick);
   onProgress({ phase: 'done', elapsedSec: Math.round((Date.now() - t0) / 1000) });
   return { blob, elapsedSec: Math.round((Date.now() - t0) / 1000) };
+}
+
+/** 视频完整流程（组合版）：提交 + 轮询。手机端建议改用 submit/poll 拆分版 + localStorage 持久化 */
+export async function generateVideoOnComfy(
+  cfg: ComfyuiConfig,
+  frameBlob: Blob | null,
+  prompt: string,
+  onProgress: (p: VideoGenProgress) => void,
+  durationSec?: number,
+  extra?: VideoExtraInputs,
+): Promise<ComfyVideoResult> {
+  const task = await submitVideoOnComfy(cfg, frameBlob, prompt, durationSec, extra);
+  return pollVideoOnComfy(task, onProgress);
 }
 
 export interface ComfyUpscaleResult {
