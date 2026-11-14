@@ -269,15 +269,17 @@ export function applyVideoQuality(wf: Record<string, unknown>, preset: VideoQual
 }
 
 /**
- * 对白镜头步数下限（P0 音频回血）：H3 低步数下音频是第一牺牲品（社区实测 6 步以下明显降级，
- * 8 步稳）——prompt 含 <d> 台词标签时把 HyperFlowSigmas 步数提到至少 8；纯环境音镜头维持画质档提速。
+ * 步数按对白自动分档（P0 音频回血 + 提速）：H3 低步数下音频是第一牺牲品（社区实测 6 步以下
+ * 明显降级，8 步稳）——prompt 含 <d> 台词标签时步数提到至少 8（音频回血）；纯环境音镜头
+ * 降到 4（HyperFlow 官方支持档，无音频压力——纯画面动作提速 1/3）。
  */
-export function ensureDialogSteps(wf: Record<string, unknown>, minSteps = 8): void {
+export function ensureDialogSteps(wf: Record<string, unknown>, minSteps = 8, silentSteps = 4): void {
   for (const node of Object.values(wf)) {
     const n = node as { class_type?: string; inputs?: Record<string, unknown> };
-    if (n.class_type === 'HyperFlowSigmas' && typeof n.inputs?.steps === 'number' && (n.inputs.steps as number) < minSteps) {
-      (n.inputs.steps as number) = minSteps;
-    }
+    if (n.class_type !== 'HyperFlowSigmas' || typeof n.inputs?.steps !== 'number') continue;
+    const cur = n.inputs.steps as number;
+    if (cur < minSteps) (n.inputs.steps as number) = minSteps;
+    else if (cur > silentSteps) (n.inputs.steps as number) = silentSteps;
   }
 }
 
@@ -442,7 +444,9 @@ export async function submitVideoOnComfy(
         : 't2v';
   const promptId = await submitWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, (wf) => {
     applyVideoQuality(wf, cfg.videoQuality ?? 'high');
-    if (prompt.includes('<d>')) ensureDialogSteps(wf); // 对白镜头步数≥8（音频质量；试跑验口型也需要）
+    // 对白镜头步数≥8（音频质量）；纯环境音镜头降 4（官方支持档，无音频压力提速 1/3）
+    if (prompt.includes('<d>')) ensureDialogSteps(wf, 8, Infinity);
+    else ensureDialogSteps(wf, 0, 4);
   });
   return { base, promptId, startedAt: Date.now() };
 }
