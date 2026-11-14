@@ -91,7 +91,7 @@ async function seedWithShot(app: Express): Promise<Seed> {
     revision: p1.body.revision,
     shots: [{
       id: shotId, episodeId: 'ep1', index: 1, shotSize: '中景', cameraMove: '固定',
-      actionStart: 'a', actionEnd: 'b', staging: 's', dialog: '', sound: '', gridPrompt: 'p',
+      actionStart: 'a', actionEnd: 'b', staging: 's', dialog: '', gridPrompt: 'p',
       characterIds: [], updatedAt: 1,
     }],
   });
@@ -291,7 +291,7 @@ describe('D-删除联动与孤儿引用', () => {
       revision: p.body.revision,
       shots: [{
         id: shotId, episodeId: 'ep1', index: 1, shotSize: '中景', cameraMove: '固定',
-        actionStart: '', actionEnd: '', staging: '', dialog: '', sound: '', gridPrompt: 'p',
+        actionStart: '', actionEnd: '', staging: '', dialog: '', gridPrompt: 'p',
         characterIds: [c1], sceneId: s1, updatedAt: 1,
       }],
     });

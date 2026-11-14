@@ -62,7 +62,7 @@ async function seed(app: Express): Promise<{ workId: string; shotId: string }> {
     revision: p1.body.revision,
     shots: [{
       id: shotId, episodeId: 'ep1', index: 1, shotSize: '中景', cameraMove: '固定',
-      actionStart: '', actionEnd: '', staging: '', dialog: '', sound: '', gridPrompt: 'p',
+      actionStart: '', actionEnd: '', staging: '', dialog: '', gridPrompt: 'p',
       characterIds: [], updatedAt: 1,
     }],
   });

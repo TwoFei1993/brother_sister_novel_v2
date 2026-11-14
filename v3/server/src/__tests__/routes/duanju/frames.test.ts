@@ -94,7 +94,7 @@ async function seed(app: Express, shotsOverride?: Record<string, unknown>): Prom
     shots: [
       {
         id: shotId, episodeId: 'ep1', index: 1, shotSize: '中景', cameraMove: '固定',
-        actionStart: 'a', actionEnd: 'b', staging: 's', dialog: '', sound: '',
+        actionStart: 'a', actionEnd: 'b', staging: 's', dialog: '',
         gridParts: ['起', '承', '转', '合'], gridPrompt: 'p', frames: [],
         characterIds: [], updatedAt: 1,
         ...shotsOverride,
