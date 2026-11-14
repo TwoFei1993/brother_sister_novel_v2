@@ -8,6 +8,7 @@ import {
   activeStates,
   buildFramePrompt,
   buildGridPrompt,
+  buildStoryboardMessages,
   parseStoryboard,
   propAnchorLine,
   validateStoryboardIssues,
@@ -510,5 +511,18 @@ describe('validateStoryboardIssues（A4 机检）', () => {
 
   it('有台词的镜头标了 speaker 才零警告', () => {
     expect(validateStoryboardIssues([makeShot({ gridParts: ['x'.repeat(50)], dialog: '快跑！', speaker: '小满' })])).toEqual([]);
+  });
+});
+
+describe('T8 机制锚注入（#6）', () => {
+  it('选中机制 → user 消息含机制块与标题；未选 → 无机制块', () => {
+    const withMech = buildStoryboardMessages('梗概', '剧本', [char], [scene], [], [
+      { title: '威胁接力反转', summary: '威胁逐级移交，反转在最后一环收口。' },
+    ]);
+    const user = String(withMech[1]!.content);
+    expect(user).toContain('本集叙事机制锚');
+    expect(user).toContain('◆ 威胁接力反转');
+    const noMech = buildStoryboardMessages('梗概', '剧本', [char], [scene], []);
+    expect(String(noMech[1]!.content)).not.toContain('本集叙事机制锚');
   });
 });

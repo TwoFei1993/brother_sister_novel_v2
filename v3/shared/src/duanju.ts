@@ -156,21 +156,28 @@ export const DuanjuEpisodeSchema = z.strictObject({
   index: z.number().int().positive(),
   title: z.string(),
   synopsis: z.string(),
+  /** 本集叙事机制（T8 机制库 id，≤2）：拆镜头时注入系统提示词作叙事锚（反转钩/人物旅程/微表情等 284 选） */
+  mechanisms: z.array(z.string()).max(2).optional(),
 });
 export type DuanjuEpisode = z.infer<typeof DuanjuEpisodeSchema>;
 
 /** 生成依据快照（生成发起时点的上游态）：与 script/characters/scenes 当前 updatedAt 逐项比对推导 stale。
  *  快照时机（P2 修复）：优先用生成前态（client/server 各自提供 hint）——生成期间上游变更不再被「生成后快照」洗白 */
-export const BuiltFromSchema = z.strictObject({
-  scriptAt: tsSchema.optional(),
+export interface BuiltFrom {
+  scriptAt?: number;
   /** characterId → 该角色当时的 updatedAt */
-  charAt: z.record(z.string(), tsSchema).optional(),
+  charAt?: Record<string, number>;
   /** sceneId → 该场景当时的 updatedAt */
-  sceneAt: z.record(z.string(), tsSchema).optional(),
+  sceneAt?: Record<string, number>;
   /** 帧级独立快照（P2 修复：单帧重roll只刷新该帧，不再洗白其余帧）——key=帧号 1-4 */
+  frameSnapshots?: Record<string, BuiltFrom>;
+}
+export const BuiltFromSchema: z.ZodType<BuiltFrom> = z.strictObject({
+  scriptAt: tsSchema.optional(),
+  charAt: z.record(z.string(), tsSchema).optional(),
+  sceneAt: z.record(z.string(), tsSchema).optional(),
   frameSnapshots: z.record(z.string(), z.lazy(() => BuiltFromSchema)).optional(),
 });
-export type BuiltFrom = z.infer<typeof BuiltFromSchema>;
 
 /** 分帧产物：index 1-4 对应 gridParts 顺位；rolls = 该帧累计重roll 次数（成本统计） */
 export const ShotFrameSchema = z.strictObject({

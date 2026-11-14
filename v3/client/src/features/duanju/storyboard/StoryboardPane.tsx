@@ -16,6 +16,7 @@ import { storyboardHealth } from '../lib/stale';
 import ShotCard from './ShotCard';
 import BatchBar from './BatchBar';
 import VideoBatchBar from './VideoBatchBar';
+import MechanismPicker from './MechanismPicker';
 
 /** 提交拆镜头时记录目标集（onDone/恢复路径定位 patch 目标；切出回来仍可定位） */
 const splitEpKey = (workId: string): string => `v3-storyboard-split-ep-${workId}`;
@@ -119,6 +120,13 @@ export default function StoryboardPane({ workId }: { workId: string }) {
     setError(null);
     const prefs = useSettingsStore.getState().llmPrefs;
     localStorage.setItem(splitEpKey(workId), episode.id);
+    // T8 机制锚（本集选定 ≤2 条）：解析成 title+summary 注入拆镜头（id 来自 public/duanju-mechanisms.json）
+    const mechIds = episode.mechanisms ?? [];
+    const mechanisms = (
+      await fetch('/duanju-mechanisms.json')
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+    )?.items?.filter((m: { id: string }) => mechIds.includes(m.id)) ?? [];
     await bg.submit({
       source: prefs.source,
       model: prefs.model,
@@ -128,6 +136,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
         project!.characters,
         project!.scenes,
         project!.props,
+        mechanisms,
       ),
       thinking: false,
       params: { max_tokens: 32000 },
@@ -212,6 +221,21 @@ export default function StoryboardPane({ workId }: { workId: string }) {
           aria-label="项目视觉签名"
         />
       </div>
+
+      {/* T8 叙事机制锚（#6）：本集 ≤2 条机制注入拆镜头（284 选，public/duanju-mechanisms.json） */}
+      {episode && (
+        <div className="mb-3 max-w-2xl">
+          <MechanismPicker
+            episode={episode}
+            onPick={(ids) => {
+              const episodes = (useDuanjuStore.getState().project?.episodes ?? []).map((ep) =>
+                ep.id === episode.id ? { ...ep, mechanisms: ids.length > 0 ? ids : undefined, } : ep,
+              );
+              void useDuanjuStore.getState().patch(workId, { episodes });
+            }}
+          />
+        </div>
+      )}
 
       {error && (
         <p className="mb-3 text-xs text-[hsl(var(--danger))]" role="alert">

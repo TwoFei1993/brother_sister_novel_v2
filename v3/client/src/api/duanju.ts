@@ -85,6 +85,7 @@ function comfySizeFor(kind: GenerateImageInput['kind'], aspectRatio?: string): {
 async function generateFrameWithRef(
   workId: string,
   input: GenerateImageInput,
+  genHint?: unknown,
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
@@ -119,6 +120,7 @@ async function generateFrameWithRef(
     frameIndex: input.frameIndex,
     prompt: input.prompt,
     source: 'comfy',
+    builtFromHint: genHint,
   });
 }
 
@@ -130,6 +132,7 @@ async function generateFrameWithRef(
 async function generateCharacterSheetLocal(
   workId: string,
   input: GenerateImageInput,
+  genHint?: unknown,
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
@@ -149,7 +152,7 @@ async function generateCharacterSheetLocal(
     upKind,
     input.refId,
     portraitFile,
-    { prompt: input.prompt, source: 'comfy' },
+    { prompt: input.prompt, source: 'comfy', builtFromHint: genHint },
   );
   // ② 版式合成图随后归档（人看的完整设定图）
   const blob = await composeCharacterSheet(portraitBlob, triViewBlob);
@@ -157,6 +160,7 @@ async function generateCharacterSheetLocal(
   const { project: afterSheet } = await uploadDuanjuImageFile(workId, upKind, input.refId, file, {
     prompt: input.prompt,
     source: 'comfy',
+    builtFromHint: genHint,
   });
   // ②' 正面全身单图归档（2511 三参考档 image2——锁身体/服装；裁自三视图原图中间格，零生成成本）
   //     prompt 带【正面全身】前缀供 frameBodyRefImage 识别
@@ -166,6 +170,7 @@ async function generateCharacterSheetLocal(
     await uploadDuanjuImageFile(workId, upKind, input.refId, frontFile, {
       prompt: `【正面全身】${input.prompt}`,
       source: 'comfy',
+      builtFromHint: genHint,
     });
   } catch {
     /* 裁剪失败不阻塞设定图产出——分镜回退双参考 */
@@ -183,11 +188,38 @@ async function generateCharacterSheetLocal(
  * 生图单点收口（5 个调用场景共用）：comfy 通道浏览器直连本地 ComfyUI（免费秒级），
  * 生成 blob 经回流端点归档落库；云端通道走 server API（原路径不动，作降级选项）。
  */
+
+/** P2 修复：发起生成时（浏览器侧）的上游态快照 hint——动态 import 防循环依赖 */
+async function upstreamHintAtStart(shotId?: string): Promise<unknown> {
+  if (!shotId) return undefined;
+  const { useDuanjuStore } = await import('../features/duanju/store');
+  const p = useDuanjuStore.getState().project;
+  if (!p) return undefined;
+  const shot = p.shots.find((sh) => sh.id === shotId);
+  if (!shot) return undefined;
+  return {
+    scriptAt: p.script.updatedAt,
+    charAt: Object.fromEntries(
+      shot.characterIds
+        .map((cid) => {
+          const c = p.characters.find((x) => x.id === cid);
+          return c ? [cid, c.updatedAt] : null;
+        })
+        .filter((e): e is [string, number] => e !== null),
+    ),
+    sceneAt: shot.sceneId
+      ? { [shot.sceneId]: p.scenes.find((x) => x.id === shot.sceneId)?.updatedAt ?? 0 }
+      : {},
+  };
+}
+
 export async function generateDuanjuImage(
   workId: string,
   input: GenerateImageInput,
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const provider = input.provider ?? useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy';
+  // 生成前一次性取上游态（本函数所有生成路径共用；comfy 分流的上传带回、server 端写入帧级快照）
+  const genHint = await upstreamHintAtStart(input.refId);
   if (provider !== 'comfy') {
     // 云端路径：把有效 provider 显式带给 server；本地专用字段 strictObject 前剥离
     const { sheetSplit: _split, refImagePath: _ref, sceneRefPath: _sceneRef, ...cloudInput } = input;
@@ -197,10 +229,10 @@ export async function generateDuanjuImage(
     );
   }
   if (input.kind === 'character' && input.sheetSplit) {
-    return generateCharacterSheetLocal(workId, input);
+    return generateCharacterSheetLocal(workId, input, genHint);
   }
   if (input.kind === 'frame' && input.refImagePath) {
-    return generateFrameWithRef(workId, input);
+    return generateFrameWithRef(workId, input, genHint);
   }
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
@@ -216,6 +248,7 @@ export async function generateDuanjuImage(
     frameIndex: input.frameIndex,
     prompt: input.prompt,
     source: 'comfy',
+    builtFromHint: genHint,
   });
 }
 
@@ -249,10 +282,12 @@ export async function uploadDuanjuImageFile(
   kind: 'character' | 'outfit' | 'scene' | 'frame',  // P2：与 server upload 枚举对齐（'shot' 仅 generate 端点的旧整图模式）
   refId: string,
   file: File,
-  opts?: { frameIndex?: number; prompt?: string; source?: 'comfy' },
+  opts?: { frameIndex?: number; prompt?: string; source?: 'comfy'; builtFromHint?: unknown },
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const form = new FormData();
   form.append('kind', kind);
+  // P2 修复：comfy 通道生成在浏览器进行——随上传带回「发起生成时」的上游态（生成期间上游变更不再被洗白）
+  if (opts?.builtFromHint) form.append('builtFromHint', JSON.stringify(opts.builtFromHint));
   form.append('refId', refId);
   form.append('file', file);
   if (opts?.frameIndex) form.append('frameIndex', String(opts.frameIndex));

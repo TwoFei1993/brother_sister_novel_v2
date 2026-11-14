@@ -54,19 +54,40 @@ async function resolveRefPath(id: string, refId: string, refImageId: string): Pr
   return null;
 }
 
-/** BuiltFrom 快照：以「本次生成所依据的上游态」为准（shot 整图与 frame 共用） */
-function snapshotBuiltFrom(project: DuanjuProject, shot: import('@shared/duanju').DuanjuShot): void {
+/** 计算单份快照（纯函数）：优先用生成前态 hint（P2 修复：生成期间上游变更不再被洗白），缺省当前态 */
+function buildSnapshot(
+  project: DuanjuProject,
+  shot: import('@shared/duanju').DuanjuShot,
+  hint?: { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> },
+): import('@shared/duanju').BuiltFrom {
   const charAt: Record<string, number> = {};
   for (const cid of shot.characterIds) {
-    const c = project.characters.find((x) => x.id === cid);
-    if (c) charAt[cid] = c.updatedAt;
+    const hinted = hint?.charAt?.[cid];
+    if (hinted !== undefined) charAt[cid] = hinted;
+    else {
+      const c = project.characters.find((x) => x.id === cid);
+      if (c) charAt[cid] = c.updatedAt;
+    }
   }
   const sceneAt: Record<string, number> = {};
   if (shot.sceneId) {
-    const s = project.scenes.find((x) => x.id === shot.sceneId);
-    if (s) sceneAt[s.id] = s.updatedAt;
+    const hinted = hint?.sceneAt?.[shot.sceneId];
+    if (hinted !== undefined) sceneAt[shot.sceneId] = hinted;
+    else {
+      const s = project.scenes.find((x) => x.id === shot.sceneId);
+      if (s) sceneAt[s.id] = s.updatedAt;
+    }
   }
-  shot.builtFrom = { scriptAt: project.script.updatedAt, charAt, sceneAt };
+  return { scriptAt: hint?.scriptAt ?? project.script.updatedAt, charAt, sceneAt };
+}
+
+/** 镜级快照写入（保留既有 frameSnapshots） */
+function snapshotBuiltFrom(
+  project: DuanjuProject,
+  shot: import('@shared/duanju').DuanjuShot,
+  hint?: { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> },
+): void {
+  shot.builtFrom = { ...buildSnapshot(project, shot, hint), frameSnapshots: shot.builtFrom?.frameSnapshots };
 }
 
 /** spendLog 追加 + cap（成本仪表盘事实源） */
@@ -83,6 +104,7 @@ async function attachImage(
   image: StoredImage,
   frameIndex?: number,
   spendNote?: string,
+  hint?: { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> },
 ): Promise<DuanjuProject> {
   return withWorkLock(id, async () => {
     const project = await readJson<DuanjuProject>(duanjuFile(id));
@@ -117,10 +139,21 @@ async function attachImage(
           ...frames.filter((f) => f.index !== frameIndex),
           { index: frameIndex, image, rolls: (prev?.rolls ?? -1) + 1 },
         ].sort((a, b) => a.index - b.index);
+        // P2 修复：帧级独立快照——单帧重roll只刷该帧，不再洗白其余帧的 stale；
+        // 首帧落地时初始化镜级快照，后续帧仅写自己的 frameSnapshots 条目
+        const snap = buildSnapshot(project, shot, hint);
+        if ((shot.frames?.length ?? 0) <= 1) {
+          shot.builtFrom = { ...snap, frameSnapshots: { [String(frameIndex)]: snap } };
+        } else {
+          shot.builtFrom = {
+            ...shot.builtFrom,
+            frameSnapshots: { ...shot.builtFrom?.frameSnapshots, [String(frameIndex)]: snap },
+          };
+        }
       } else {
         shot.gridImage = image; // 旧整图模式（兼容保留）
+        snapshotBuiltFrom(project, shot, hint);
       }
-      snapshotBuiltFrom(project, shot);
       shot.updatedAt = now;
     }
     appendSpend(project, kind, refId, spendNote ?? (frameIndex ? `frame-${frameIndex}` : undefined));
@@ -185,7 +218,26 @@ export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
       createdAt: Date.now(),
       originUrl: stored.originUrl,
     };
-    const project = await attachImage(id, input.kind, input.refId, image, input.frameIndex);
+    // P2 修复：hint 用生成前态（pre 无锁快读于生成之前）——生成期间上游变更不再被洗白
+    const preShot = pre.shots.find((sh) => sh.id === input.refId);
+    const hint = preShot
+      ? {
+          scriptAt: pre.script.updatedAt,
+          charAt: Object.fromEntries(
+            preShot.characterIds
+              .map((cid) => {
+                const c = pre.characters.find((x) => x.id === cid);
+                return c ? [cid, c.updatedAt] : null;
+              })
+              .filter((e): e is [string, number] => e !== null),
+          ),
+          sceneAt: preShot.sceneId ? (() => {
+            const sc = pre.scenes.find((x) => x.id === preShot.sceneId);
+            return sc ? { [sc.id]: sc.updatedAt } : {};
+          })() : {},
+        }
+      : undefined;
+    const project = await attachImage(id, input.kind, input.refId, image, input.frameIndex, undefined, hint);
     res.json({ image, project });
   } catch (err) {
     if (err instanceof ImageError) {
@@ -301,7 +353,13 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     // source=comfy（本地免费生图）→ 记账备注标注「本地免费」，成本仪表盘豁免估算
     const spendNote = source === 'comfy' ? `本地免费${frameIndex ? ` frame-${frameIndex}` : ''}` : undefined;
     try {
-      const project = await attachImage(id, kind, refId, image, frameIndex, spendNote);
+      // P2 修复：comfy 通道的生成在浏览器进行——client 随上传带回「发起生成时」的上游态 hint
+      const hintRaw = req.body?.builtFromHint;
+      const hint =
+        hintRaw && typeof hintRaw === 'object'
+          ? (hintRaw as { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> })
+          : undefined;
+      const project = await attachImage(id, kind, refId, image, frameIndex, spendNote, hint);
       res.status(201).json({ image, project });
     } catch (err) {
       // P2 修复：归档失败（404 实体不存在等）回滚刚落的盘文件，不留无引用孤儿

@@ -52,15 +52,21 @@ export function buildStoryboardMessages(
   characters: DuanjuCharacter[],
   scenes: DuanjuScene[],
   props?: Array<Pick<DuanjuProp, 'name' | 'spec'>>,
+  /** T8 叙事机制锚（本集选定的机制 title+summary，≤2）——拆镜头时作为叙事纪律注入 */
+  mechanisms?: Array<{ title: string; summary: string }>,
 ): GenerateMessage[] {
   const charList = characters.map((c) => `- ${c.name}：${c.profile}`).join('\n') || '（无角色，按剧本人名）';
   const sceneList = scenes.map((s) => `- ${s.name}：${s.spec}`).join('\n') || '（无场景清单，按剧本场景自由命名）';
   const propList = (props ?? []).map((p) => `- ${p.name}：${p.spec}`).join('\n') || '（无道具清单）';
+  const mechLines = (mechanisms ?? []).map((m) => `◆ ${m.title}：${m.summary}`).join('\n');
+  const mechBlock = mechLines
+    ? `\n\n本集叙事机制锚（拆镜头时把该机制的节拍感落实到镜头序列的起承转合，取机制骨架不逐字照搬）：\n${mechLines}`
+    : '';
   return [
     { role: 'system', content: STORYBOARD_SYSTEM },
     {
       role: 'user',
-      content: `本集梗概：${episodeSynopsis}\n\n角色清单：\n${charList}\n\n场景清单：\n${sceneList}\n\n道具清单：\n${propList}\n\n剧本原文：\n${scriptText}`,
+      content: `本集梗概：${episodeSynopsis}\n\n角色清单：\n${charList}\n\n场景清单：\n${sceneList}\n\n道具清单：\n${propList}${mechBlock}\n\n剧本原文：\n${scriptText}`,
     },
   ];
 }
