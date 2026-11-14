@@ -11,7 +11,7 @@ import { Clapperboard, Download, Grid2X2, RefreshCw } from 'lucide-react';
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
-import { buildFramePrompt, frameRefImage, frameBodyRefImage, frameSceneImage } from '../lib/prompts/prompts-storyboard';
+import { buildFramePrompt, planFrameRefs } from '../lib/prompts/prompts-storyboard';
 import { downloadFrameGrid, missingFrames } from '../lib/cost/frameGrid';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
 
@@ -44,20 +44,24 @@ export default function FramesGrid({ workId, shot, project, onPickFrame, pickBus
     // silent：批量补帧模式——busy 由外层 generateMissing 全程持有，帧结束不清（防间隙并发）
     if (!silent) setBusy(frameIndex);
     setError(null);
-    const refImagePath = frameRefImage(shot, project);
-    const sceneRefPath = frameSceneImage(shot, project);
-    const bodyRefPath = frameBodyRefImage(shot, project);
+    const plan = planFrameRefs(shot, project);
     try {
       await generateDuanjuImage(workId, {
         kind: 'frame',
         refId: shot.id,
         frameIndex,
-        prompt: buildFramePrompt(shot, frameIndex, project, refImagePath ? { refMode: true, triRef: !!bodyRefPath } : {}),
+        prompt: buildFramePrompt(shot, frameIndex, project, plan?.refImagePath
+          ? { refMode: true, triRef: plan.mode === 'tri', ...(plan.duo ? { duoRef: plan.duo } : {}) }
+          : {}),
         aspectRatio: '9:16', // 竖屏短剧视频规格（1080×1920 9:16），首帧图生视频免裁切
         provider: imageProviderForApi(),
-        // 定妆照参考通道：出场角色有主参考图时走 Qwen-Edit-2511（跨帧角色一致；有正面全身升三参考）
-        ...(refImagePath
-          ? { refImagePath, ...(bodyRefPath ? { bodyRefPath } : {}), ...(sceneRefPath ? { sceneRefPath } : {}) }
+        // 定妆照参考通道（Qwen-Edit-2511）：双人（A+B 特写）/ 三参考（特写+正面）/ 双参考——planFrameRefs 统一判定
+        ...(plan?.refImagePath
+          ? {
+              refImagePath: plan.refImagePath,
+              ...(plan.secondRefPath ? { bodyRefPath: plan.secondRefPath } : {}),
+              ...(plan.sceneRefPath ? { sceneRefPath: plan.sceneRefPath } : {}),
+            }
           : {}),
       });
       await useDuanjuStore.getState().load(workId);

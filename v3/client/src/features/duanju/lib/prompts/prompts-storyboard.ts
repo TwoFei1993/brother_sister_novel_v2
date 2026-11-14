@@ -265,6 +265,58 @@ export function frameBodyRefImage(shot: DuanjuShot, project: DuanjuProject): str
   return undefined;
 }
 
+/** 角色主参考（refImageId 指向的特写单图） */
+function charAnchorImage(c: DuanjuCharacter | undefined): string | undefined {
+  if (!c) return undefined;
+  return c.sheetImages.find((i) => i.id === c.refImageId)?.path;
+}
+
+export type FrameRefMode = 'duo' | 'tri' | 'ref';
+
+export interface FrameRefPlan {
+  /** image1 恒=主角色（或双人 A）定妆照特写 */
+  refImagePath: string;
+  /** image2：duo=B 角色特写 / tri=正面全身；ref 无 */
+  secondRefPath?: string;
+  /** 场景图：duo/tri 占 image3，ref 占 image2 */
+  sceneRefPath?: string;
+  mode: FrameRefMode;
+  duo?: { aName: string; bName: string };
+}
+
+/**
+ * 帧参考档位统一规划（调用点单点收口——替代散装 helper 组合判断）：
+ * 双人（前两个出场角色都有定妆照）> 三参考（单人+有正面全身）> 双参考（单人特写+场景）。
+ */
+export function planFrameRefs(shot: DuanjuShot, project: DuanjuProject): FrameRefPlan | undefined {
+  const chars = shot.characterIds
+    .map((cid) => project.characters.find((c) => c.id === cid))
+    .filter((c): c is DuanjuCharacter => !!c);
+  const sceneRefPath = frameSceneImage(shot, project);
+  const [a, b] = chars;
+  const aImg = charAnchorImage(a);
+  // 双人：两个角色都有主参考特写——同框对话戏双脸锁定
+  if (chars.length >= 2 && aImg && charAnchorImage(b)) {
+    return {
+      refImagePath: aImg,
+      secondRefPath: charAnchorImage(b),
+      sceneRefPath,
+      mode: 'duo',
+      duo: { aName: a!.name, bName: b!.name },
+    };
+  }
+  if (aImg) {
+    const body = frameBodyRefImage(shot, project);
+    return {
+      refImagePath: aImg,
+      ...(body ? { secondRefPath: body } : {}),
+      sceneRefPath,
+      mode: body ? 'tri' : 'ref',
+    };
+  }
+  return sceneRefPath ? { refImagePath: '', sceneRefPath, mode: 'ref' } : undefined;
+}
+
 /** 角色在指定集生效中的状态清单（P2-11：fromEpisode 缺省=全程；按集过滤注入） */
 export function activeStates(
   char: Pick<DuanjuCharacter, 'states'>,
@@ -296,7 +348,7 @@ export function buildFramePrompt(
   shot: DuanjuShot,
   frameIndex: number,
   project: DuanjuProject,
-  opts: { refMode?: boolean; triRef?: boolean } = {},
+  opts: { refMode?: boolean; triRef?: boolean; duoRef?: { aName: string; bName: string } } = {},
 ): string {
   const chars = shot.characterIds
     .map((cid) => project.characters.find((c) => c.id === cid))
@@ -318,20 +370,24 @@ export function buildFramePrompt(
     .join('；');
   const sig = project.visualSignature?.trim() ? `\n${project.visualSignature.trim()}` : '';
   // 参考通道（2511）：第一句=动词式改动指令（构图/场景），保留清单降为分条段。
-  // 三参考档（triRef）：图1=特写脸 / 图2=正面全身 / 图3=场景——身份、身体、空间三重锁定
+  // 档位：duoRef 双人（图1=A特写/图2=B特写/图3=场景）；triRef 三参考（图1=特写脸/图2=正面全身/图3=场景）；ref 双参考（图1=特写/图2=场景）
   if (opts.refMode) {
-    const faceImg = opts.triRef ? '图1' : '图1';
+    const duo = opts.duoRef;
     const bodyImg = '图2';
-    const sceneImg = opts.triRef ? '图3' : '图2';
+    const sceneImg = opts.triRef || duo ? '图3' : '图2';
     return [
       chars.length > 0
-        ? opts.triRef
-          ? `把${faceImg}（脸部特写）与${bodyImg}（正面全身）中的${chars.map((c) => c.name).join('、')}放进${sceneImg}的场景里，按新机位重新取景构图，生成一张全新的画面：`
-          : `把图1中的${chars.map((c) => c.name).join('、')}放进图2的场景里，按新机位重新取景构图，生成一张全新的画面：`
+        ? duo
+          ? `把图1的${duo.aName}与图2的${duo.bName}（各自的脸部特写）放进${sceneImg}的场景里，两人同框互动，按新机位重新取景构图，生成一张全新的画面：`
+          : opts.triRef
+            ? `把图1（脸部特写）与${bodyImg}（正面全身）中的${chars.map((c) => c.name).join('、')}放进${sceneImg}的场景里，按新机位重新取景构图，生成一张全新的画面：`
+            : `把图1中的${chars.map((c) => c.name).join('、')}放进图2的场景里，按新机位重新取景构图，生成一张全新的画面：`
         : `参照${sceneImg}的场景环境重新构图，生成一张全新的画面：`,
       `【画面内容】${desc}——只画这一个动作瞬间。`,
       chars.length > 0
-        ? `【人物保持】${chars.map((c) => c.name).join('、')}的长相五官与发型${opts.triRef ? `（严格依${faceImg}）` : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
+        ? duo
+          ? `【人物保持】${duo.aName}的长相五官与发型严格依图1、${duo.bName}的长相五官与发型严格依图2，两人的体型服装与身姿完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
+          : `【人物保持】${chars.map((c) => c.name).join('、')}的长相五官与发型${opts.triRef ? '（严格依图1）' : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
         : '',
       '【手部细节】若画面含手部：双手与手指结构自然完整，袖口与手腕自然衔接。',
       propLine,
