@@ -7,7 +7,8 @@
 import { useMemo, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
-import { buildVideoPrompt } from '../lib/prompts/prompts-storyboard';
+import { duanjuFileUrl } from '../../../api/duanju';
+import { buildVideoPrompt } from '../lib/prompts/prompts-video';
 import { buildScriptMd, buildScriptTxt, downloadText } from '../lib/exportScript';
 import AssetGallery from './AssetGallery';
 import EpisodePlayer from './EpisodePlayer';
@@ -17,6 +18,28 @@ export default function ExportPane({ workId }: { workId: string }) {
   const { project } = useDuanjuStore();
   const [epIndex, setEpIndex] = useState(1);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [mergedPath, setMergedPath] = useState<string | null>(null);
+  const [mergedInfo, setMergedInfo] = useState('');
+
+  /** 整集成片合成（server ffmpeg：拼接 + 1080×1890 统一 + 台词字幕烧录 + 响度统一） */
+  async function mergeEpisode(): Promise<void> {
+    if (!episode || merging) return;
+    setMerging(true);
+    setMergedPath(null);
+    try {
+      const r = await fetch(`/api/works/${workId}/duanju/merge/${episode.id}`, { method: 'POST' });
+      const j = (await r.json()) as { ok?: boolean; path?: string; error?: string; shots?: number; durationSec?: number; subtitles?: number };
+      if (!r.ok || !j.ok || !j.path) throw new Error(j.error ?? `合成失败（HTTP ${r.status}）`);
+      setMergedPath(j.path);
+      setMergedInfo(`${j.shots} 镜 · ${Math.floor((j.durationSec ?? 0) / 60)}分${(j.durationSec ?? 0) % 60}秒 · ${j.subtitles} 条字幕`);
+    } catch (err) {
+      setMergedInfo(err instanceof Error ? err.message : '合成失败');
+      setMergedPath('');
+    } finally {
+      setMerging(false);
+    }
+  }
 
   const episode = useMemo(
     () => project?.episodes.find((e) => e.index === epIndex) ?? null,
@@ -110,6 +133,23 @@ export default function ExportPane({ workId }: { workId: string }) {
           >
             ▶️ 整集连播检查衔接（{withVideo} 个成品）
           </button>
+          <button
+            type="button"
+            onClick={() => void mergeEpisode()}
+            disabled={merging || withVideo === 0}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
+            data-testid="export-merge"
+          >
+            {merging ? '🎞 合成中（拼接+字幕+响度统一，约 1-2 分钟）…' : `🎞 合成整集成片（${withVideo} 个成品 · 自动字幕）`}
+          </button>
+          {mergedPath && (
+            <div className="rounded-lg border border-[hsl(var(--border-soft))] p-3">
+              <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]">
+                ✅ 成片就绪（{mergedInfo}）——下载后可直接发布
+              </p>
+              <video src={duanjuFileUrl(workId, mergedPath)} controls playsInline className="aspect-[9/16] max-h-[70vh] w-full rounded-lg bg-black" data-testid="merged-video" />
+            </div>
+          )}
         </div>
       )}
 

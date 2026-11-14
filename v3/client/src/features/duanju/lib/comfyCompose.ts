@@ -39,3 +39,21 @@ export async function composeCharacterSheet(portrait: Blob, triView: Blob): Prom
   if (!blob) throw new Error('设定图合成失败：canvas 导出异常');
   return blob;
 }
+
+/**
+ * 从三视图原图（1344×1024，内含左中右三个全身）裁中间格——正面全身单图。
+ * 2511 三参考档的 image2（锁身体/服装）：零生成成本（canvas 裁剪），归档后 prompt 带【正面全身】前缀。
+ */
+export async function cropFrontView(triView: Blob): Promise<Blob> {
+  const img = await blobToBitmap(triView);
+  const w = Math.round(img.width / 3);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('正面全身裁剪失败：canvas 不可用');
+  ctx.drawImage(img, w, 0, w, img.height, 0, 0, w, img.height); // 中间格
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('正面全身裁剪失败'))), 'image/png'),
+  );
+}

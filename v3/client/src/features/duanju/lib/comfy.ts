@@ -11,6 +11,7 @@
 import {
   Z_IMAGE_TURBO_DEFAULT_WORKFLOW,
   QWEN_EDIT_2511_WORKFLOW,
+  QWEN_EDIT_2511_TRI_WORKFLOW,
   HYPERFLOW_I2V_DEFAULT_WORKFLOW,
   HYPERFLOW_T2V_DEFAULT_WORKFLOW,
   HYPERFLOW_FLF2V_DEFAULT_WORKFLOW,
@@ -267,6 +268,19 @@ export function applyVideoQuality(wf: Record<string, unknown>, preset: VideoQual
   }
 }
 
+/**
+ * 对白镜头步数下限（P0 音频回血）：H3 低步数下音频是第一牺牲品（社区实测 6 步以下明显降级，
+ * 8 步稳）——prompt 含 <d> 台词标签时把 HyperFlowSigmas 步数提到至少 8；纯环境音镜头维持画质档提速。
+ */
+export function ensureDialogSteps(wf: Record<string, unknown>, minSteps = 8): void {
+  for (const node of Object.values(wf)) {
+    const n = node as { class_type?: string; inputs?: Record<string, unknown> };
+    if (n.class_type === 'HyperFlowSigmas' && typeof n.inputs?.steps === 'number' && (n.inputs.steps as number) < minSteps) {
+      (n.inputs.steps as number) = minSteps;
+    }
+  }
+}
+
 /** 从 /history outputs 任意节点提取文件条目（SaveImage/SaveVideo/VHS_VideoCombine 通吃） */
 function extractOutputFile(entry: { outputs?: Record<string, Record<string, unknown[]>> }): {
   filename: string;
@@ -426,9 +440,10 @@ export async function submitVideoOnComfy(
       : frameBlob
         ? 'i2v'
         : 't2v';
-  const promptId = await submitWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, (wf) =>
-    applyVideoQuality(wf, cfg.videoQuality ?? 'high'),
-  );
+  const promptId = await submitWorkflow(base, effectiveVideoWorkflow(cfg, mode), placeholders, (wf) => {
+    applyVideoQuality(wf, cfg.videoQuality ?? 'high');
+    if (prompt.includes('<d>')) ensureDialogSteps(wf); // 对白镜头步数≥8（音频质量；试跑验口型也需要）
+  });
   return { base, promptId, startedAt: Date.now() };
 }
 
@@ -502,7 +517,9 @@ export interface ComfyImageParams {
   seed: number;
   /** 参考图 blob（分镜参考生图通道）：上传 ComfyUI 后注入 <<REF>>；传值时走 Qwen-Edit-2511 workflow */
   refBlob?: Blob;
-  /** 场景图 blob（可选，分镜参考通道）：注入 <<SCENE_REF>>（image2）——与定妆照双重锁定，跨帧场景一致 */
+  /** 正面全身单图 blob（可选，三参考档）：注入 <<BODY_REF>>（image2）——身体/服装与定妆照一致；传入即用三参考模板 */
+  bodyRefBlob?: Blob;
+  /** 场景图 blob（可选，分镜参考通道）：注入 <<SCENE_REF>>——与定妆照双重锁定，跨帧场景一致（双参考档 image2 / 三参考档 image3） */
   sceneRefBlob?: Blob;
   /** 指定 workflow（默认 Z-Image-Turbo；'qwen-edit-2511' = 分镜参考通道） */
   workflow?: 'qwen-edit-2511';
@@ -521,10 +538,19 @@ export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImag
       '<<REF>>': refName,
       '<<SEED>>': String(params.seed),
     };
+    if (params.bodyRefBlob) {
+      placeholders['<<BODY_REF>>'] = await uploadImage(base, params.bodyRefBlob, 'body-ref.png');
+    }
     if (params.sceneRefBlob) {
       placeholders['<<SCENE_REF>>'] = await uploadImage(base, params.sceneRefBlob, 'scene-ref.png');
     }
-    return runWorkflow(base, QWEN_EDIT_2511_WORKFLOW, placeholders, 15 * 60 * 1000);
+    // 有正面全身 → 三参考模板（脸+身体+场景）；存量角色无正面图回退双参考
+    return runWorkflow(
+      base,
+      params.bodyRefBlob ? QWEN_EDIT_2511_TRI_WORKFLOW : QWEN_EDIT_2511_WORKFLOW,
+      placeholders,
+      15 * 60 * 1000,
+    );
   }
   return runWorkflow(base, effectiveImageWorkflow(cfg), {
     '<<PROMPT>>': params.prompt,

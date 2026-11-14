@@ -7,7 +7,7 @@
  *   同源 <img> 不污染画布，toBlob 可直接导出。
  */
 import type { GenerateImageInput } from '../../../../api/duanju';
-import { buildFramePrompt, frameRefImage, frameSceneImage } from '../prompts/prompts-storyboard';
+import { buildFramePrompt, frameRefImage, frameBodyRefImage, frameSceneImage } from '../prompts/prompts-storyboard';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
 
 /** 缺失帧号列表（无任何帧时 = 1-4 全部） */
@@ -27,17 +27,18 @@ export function buildFrameTasks(
     if ((s.frames?.length ?? 0) === 0 && s.gridImage) continue; // 旧整图完成态：跳过
     const ref = frameRefImage(s, project);
     const sceneRef = frameSceneImage(s, project);
+    const bodyRef = frameBodyRefImage(s, project);
     for (const i of missingFrames(s)) {
       out.push({
         input: {
           kind: 'frame',
           refId: s.id,
           frameIndex: i,
-          prompt: buildFramePrompt(s, i, project, ref ? { refMode: true } : {}),
+          prompt: buildFramePrompt(s, i, project, ref ? { refMode: true, triRef: !!bodyRef } : {}),
           aspectRatio: '9:16', // 竖屏短剧视频规格（1080×1920 9:16），首帧图生视频免裁切
           ...(provider ? { provider } : {}),
           // 定妆照参考通道（Qwen-Edit-2511）：出场角色有主参考图时启用
-          ...(ref ? { refImagePath: ref, ...(sceneRef ? { sceneRefPath: sceneRef } : {}) } : {}),
+          ...(ref ? { refImagePath: ref, ...(bodyRef ? { bodyRefPath: bodyRef } : {}), ...(sceneRef ? { sceneRefPath: sceneRef } : {}) } : {}),
         },
         label: `镜头 ${s.index} · F${i}`,
       });
@@ -79,8 +80,12 @@ export async function composeFrameGrid(frameUrls: string[], size = 2048): Promis
   ];
   imgs.forEach((img, i) => {
     const [x, y] = cells[i];
-    // cover 裁切：正方形帧填满正方形单元
-    ctx.drawImage(img, x, y, cell - gaps * 2, cell - gaps * 2);
+    // cover 裁切（P1 修复）：源图按短边居中裁出正方形再缩放填满单元——
+    // 9:16 竖帧直接 drawImage 会被非等比拉宽 ~1.78 倍
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth - side) / 2;
+    const sy = (img.naturalHeight - side) / 2;
+    ctx.drawImage(img, sx, sy, side, side, x, y, cell - gaps * 2, cell - gaps * 2);
   });
   return canvas.toDataURL('image/png');
 }

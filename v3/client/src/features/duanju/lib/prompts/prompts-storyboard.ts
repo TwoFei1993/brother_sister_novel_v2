@@ -1,10 +1,11 @@
 /**
- * 分镜环节 prompt 库（共识 D7/D8 / 资料第 5-6 课）
+ * 分镜环节 prompt 库（共识 D7/D8 / 资料第 5-6 课；A3/A4 升级 2026-11-14）
  *
- * - buildStoryboardMessages：AI 按集拆镜头（输出 Shot[] JSON，含四格画面描述）
+ * - buildStoryboardMessages：AI 按集拆镜头（输出 Shot[] JSON，含四格画面描述 + 段末状态）
  * - parseStoryboard：容错解析 + 角色/场景名 → id 映射
+ * - validateStoryboardIssues：拆镜头结果机检（时长带宽/否定式/字数——纯规则零成本）
  * - buildGridPrompt：四宫格生图 prompt 组装器（外观锚点∪场景∪画风∪四格）
- * - buildVideoPrompt：即梦视频提示词（独立画板/衔接/站位/景别/声音）
+ * 视频提示词在 prompts-video.ts（即梦版 + 本地 H3 v2）
  */
 import type { GenerateMessage } from '../../../../api/llm';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
@@ -19,11 +20,20 @@ const STORYBOARD_SYSTEM = `你是短剧分镜师。把给定某集剧本拆成�
  "actionStart":"动作起点","actionEnd":"动作终点","staging":"人物站位",
  "dialog":"台词(无则空串)","durationSec": 预估时长秒(4-15整数),"sound":"声音要求(环境音/动作声/对白声)",
  "gridParts":["第1格画面","第2格画面","第3格画面","第4格画面"],
+ "endState":"本镜最后一帧画面(谁+在哪+姿态+道具状态)",
+ "hookType":"钩子类型(reveal揭示/reversal反转/callback回收/suspense悬念/chase追逐/visual-joke视觉笑点/tender情感/expression-beat表情节拍,纯过场留空串)",
  "characters":["出场角色名(须来自角色清单)"],"scene":"场景名(须来自场景清单,可空)"}
 要求：
-1. durationSec 按镜头节奏估（总和无须精确等于集时长）；一集 6-12 镜头；动作起终点可视化（写具体动作而非心理描写）。
-2. gridParts 四格为同一镜头连续动作的四个瞬间，每格只放一个核心动作；每格 40-80 字、写全四要素：
+1. durationSec 按镜头节奏估：动作密集镜头 5-8 秒、特写/反应镜头 4-5 秒、单镜不超过 15 秒；
+   一集 6-12 镜头；重要角色同框不超过 3 人；动作起终点可视化（写具体动作而非心理描写）。
+2. 每镜一个核心动作；动作描述按时序写：当前状态→动作发生→环境反应→动作结果；一句话只写一个变化。
+   抽象情绪词（震惊/紧张/愤怒）必须换成可观察细节（瞳孔收缩/手指扣紧桌沿/下颌绷紧）；禁写「和之前一样」类元话语。
+3. gridParts 四格为同一镜头连续动作的四个瞬间，每格只放一个核心动作；每格 40-80 字、写全四要素：
    谁（人物+表情情绪）｜在哪（环境与光线细节）｜做什么（具体动作与力势）｜画面感（构图与光影）——每格都要能直接当生图提示词用。
+   每格停在「下一秒即将变化」的瞬间（将转身未转、手将落未落、话将出未出）——已完成的动作没有运动起点。
+4. 对白写完整句；镜头切分优先落在：一句话说完、情绪完成、视线改变、人物关系变化明确处。
+5. endState 是跨镜衔接锚点：写下一镜可直接以此开场的定格画面，禁用「严格继承上一镜」套话。
+6. hookType 标注本镜的叙事钩子；每 3 个连续镜头至少 1 个 reveal/reversal/callback，首镜与末镜必带强钩子（完播率钩）。
 好例子（同镜头第 2 格，照这个具体程度写）：
 "李薇在昏黄路灯下的湿滑巷口猛地转身，风衣下摆甩起水珠；她眉头紧锁张嘴嘶吼，握手机的手指节泛白；逆光剪影，霓虹在湿地面映出冷蓝反光。"`;
 
@@ -55,6 +65,8 @@ interface RawShot {
   dialog?: unknown;
   sound?: unknown;
   gridParts?: unknown;
+  endState?: unknown;
+  hookType?: unknown;
   characters?: unknown;
   scene?: unknown;
 }
@@ -97,6 +109,8 @@ export function parseStoryboard(
         dialog: str(x.dialog),
         sound: str(x.sound),
         gridParts: parts,
+        endState: str(x.endState) || undefined,
+        hookType: str(x.hookType) || undefined,
         gridPrompt: '',
         frames: [],
         characterIds,
@@ -105,6 +119,41 @@ export function parseStoryboard(
       };
     })
     .map((shot) => ({ ...shot, gridPrompt: buildGridPrompt(shot, shot.gridParts, project) }));
+}
+
+/**
+ * 拆镜头结果机检（A4，参照 H3 官方 H1-H12 的可自动化子集）。
+ * 纯规则零成本；返回人话警告列表（空 = 通过）。不阻塞写入——供 UI 提示与调试。
+ */
+export function validateStoryboardIssues(shots: DuanjuShot[]): string[] {
+  const issues: string[] = [];
+  shots.forEach((s, i) => {
+    const tag = `S${s.index ?? i + 1}`;
+    if (s.durationSec !== undefined && (s.durationSec < 4 || s.durationSec > 15)) {
+      issues.push(`${tag} 时长 ${s.durationSec}s 超出 4-15s 建议带宽（单镜超 15s 生成慢且易漂）`);
+    }
+    (s.gridParts ?? []).forEach((p, j) => {
+      const len = p.length;
+      if (len > 0 && (len < 20 || len > 120)) issues.push(`${tag} 第 ${j + 1} 格 ${len} 字，超出 20-120 字带宽`);
+    });
+    if (/无背景音乐|不要|禁止|勿/.test(s.sound ?? '')) {
+      issues.push(`${tag} 声音字段含否定式表述——视频模型对否定不敏感，请改为正向描述（如「只有环境音与脚步声」）`);
+    }
+  });
+  // 钩子密度自检（B1）：每 3 个连续镜头至少 1 个强钩子（reveal/reversal/callback），首末镜必带
+  const STRONG = ['reveal', 'reversal', 'callback'];
+  const hooks = shots.map((s) => s.hookType ?? '');
+  for (let i = 0; i + 2 < hooks.length; i++) {
+    if (!hooks.slice(i, i + 3).some((h) => STRONG.includes(h))) {
+      issues.push(`S${shots[i + 2]?.index ?? i + 3} 前 3 镜无强钩子（reveal/reversal/callback）——完播率风险，建议补一个`);
+      i += 2;
+    }
+  }
+  if (hooks.length > 1) {
+    if (!STRONG.includes(hooks[0]!)) issues.push('首镜未带强钩子——开场留人位，建议 reveal 或 reversal');
+    if (!STRONG.includes(hooks.at(-1)!)) issues.push('末镜未带强钩子——建议 callback 回收或悬念钩下集');
+  }
+  return issues;
 }
 
 /** AI 输出的四格描述按 index 对应（parse 内部用） */
@@ -135,7 +184,7 @@ export function buildGridPrompt(shot: DuanjuShot, gridParts: string[], project: 
     `第2格：${parts[1] ?? ''}`,
     `第3格：${parts[2] ?? ''}`,
     `第4格：${parts[3] ?? ''}`,
-    '要求：每格只放一个核心动作，动作连贯，画面风格统一，无文字水印',
+    '要求：每格只放一个核心动作，动作连贯，画面风格统一；四格机位与取景要有可见变化（轻微推进/视角偏移/景别收紧），不要四格完全同构图；无文字水印',
   ]
     .filter(Boolean)
     .join('\n');
@@ -174,13 +223,24 @@ export function frameSceneImage(shot: DuanjuShot, project: DuanjuProject): strin
   return imgs.length > 0 ? imgs[imgs.length - 1].path : undefined;
 }
 
-/** 单帧生图 prompt（详细版）：导演视角分段——主体瞬间 / 人物锚点 / 场景光线 / 镜头语言 / 画质
- *  opts.refMode=true 时为参考生图通道精简版：外貌交给定妆照，prompt 只保留名字+情绪与场景/镜头指令 */
+/** 正面全身单图路径（三参考档 image2——锁身体/服装）：归档时 prompt 带【正面全身】前缀标记。 */
+export function frameBodyRefImage(shot: DuanjuShot, project: DuanjuProject): string | undefined {
+  for (const cid of shot.characterIds) {
+    const c = project.characters.find((x) => x.id === cid);
+    const img = c?.sheetImages.find((i) => i.prompt.startsWith('【正面全身】'));
+    if (img) return img.path;
+  }
+  return undefined;
+}
+
+/** 单帧生图 prompt v2（2026-11-14 生图对比学习升级）：
+ *  普通模式增「未完成瞬间 + 恰好 N 名 + 相邻帧机位微变化 + 光线继承 + 环境动态」；
+ *  refMode 改动词式第一句（改图模型只听第一句）+ 逐项保留清单 + 手部细节句（工作流 2026.11.4 实测句式） */
 export function buildFramePrompt(
   shot: DuanjuShot,
   frameIndex: number,
   project: DuanjuProject,
-  opts: { refMode?: boolean } = {},
+  opts: { refMode?: boolean; triRef?: boolean } = {},
 ): string {
   const chars = shot.characterIds
     .map((cid) => project.characters.find((c) => c.id === cid))
@@ -189,66 +249,49 @@ export function buildFramePrompt(
   const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
   const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
   const composition = SHOT_COMPOSITION[shot.shotSize] ?? `${shot.shotSize}景别，人物主体清晰`;
-  // 参考通道（2511 编辑指令式——社区实证：编辑模型必须用「保留+改变+机位」指令动词结构，
-  // 纯描述式会被参考图构图锁死导致四帧雷同；短场景级指令优于冗长描述）
+  const exactN = chars.length > 0 ? `画面中恰好出现 ${chars.length} 名角色，每名角色只出现一次。` : '';
+  const outfitLine = chars
+    .filter((c) => c.currentOutfit)
+    .map((c) => `${c.name}身穿${c.currentOutfit}`)
+    .join('；');
+  const sig = project.visualSignature?.trim() ? `\n${project.visualSignature.trim()}` : '';
+  // 参考通道（2511）：第一句=动词式改动指令（构图/场景），保留清单降为分条段。
+  // 三参考档（triRef）：图1=特写脸 / 图2=正面全身 / 图3=场景——身份、身体、空间三重锁定
   if (opts.refMode) {
+    const faceImg = opts.triRef ? '图1' : '图1';
+    const bodyImg = '图2';
+    const sceneImg = opts.triRef ? '图3' : '图2';
     return [
       chars.length > 0
-        ? `保持图1中${chars.map((c) => c.name).join('、')}的外貌完全一致（毛色/五官/体型/服装一项都不改），将角色置于图2的场景环境中（空间布局/光源色调/关键道具与图2保持一致），改变取景与构图，生成一张全新的画面：`
-        : '参照图2的场景环境（布局/光源/道具保持一致），生成一张全新的画面：',
-      `【画面内容】${desc}`,
-      scene ? `【场景补充】${scene.name}：${scene.spec}` : '',
-      `【机位指令】${composition}——重新构图取景（不要沿用图1的取景角度）`,
-      `${stylePrefix(project.style)}，${shot.staging}。画质要求：细节丰富，光影真实，无文字水印`,
+        ? opts.triRef
+          ? `把${faceImg}（脸部特写）与${bodyImg}（正面全身）中的${chars.map((c) => c.name).join('、')}放进${sceneImg}的场景里，按新机位重新取景构图，生成一张全新的画面：`
+          : `把图1中的${chars.map((c) => c.name).join('、')}放进图2的场景里，按新机位重新取景构图，生成一张全新的画面：`
+        : `参照${sceneImg}的场景环境重新构图，生成一张全新的画面：`,
+      `【画面内容】${desc}——只画这一个动作瞬间。`,
+      chars.length > 0
+        ? `【人物保持】${chars.map((c) => c.name).join('、')}的长相五官与发型${opts.triRef ? `（严格依${faceImg}）` : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
+        : '',
+      '【手部细节】若画面含手部：双手与手指结构自然完整，袖口与手腕自然衔接。',
+      scene ? `【场景保持】空间布局、主光方向与色温、关键道具及其位置与${sceneImg}保持一致。` : '',
+      `【机位指令】${composition}——不沿用参考图的取景角度。`,
+      `${stylePrefix(project.style)}，${shot.staging}。画质要求：细节丰富，光影真实。`,
     ]
       .filter(Boolean)
-      .join('\n');
+      .join('\n') + sig;
   }
   const charsLine = chars.length > 0
-    ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}）`).join('；')}——与同镜头其他帧同一人物形象完全一致`
+    ? `【出场人物】${chars.map((c) => `${c.name}（${c.profile}${c.currentOutfit ? `，身穿${c.currentOutfit}` : ''}）`).join('；')}——与同镜头其他帧同一人物形象完全一致。${exactN}`
     : '【无人物】纯场景帧';
   return [
     `${stylePrefix(project.style)}，电影感单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
-    `【画面主体】${desc}——只画这一个动作瞬间，动作的力势与人物情绪要鲜明`,
+    `【画面主体】${desc}——只画这一个动作瞬间，画面停在「下一秒即将发生变化」的时刻，不画成动作已完全结束的定格`,
     charsLine,
     scene ? `【场景与光线】${scene.name}（${scene.spec}）——按场景的光影基调与时间氛围渲染，人物与环境光交互自然` : '',
-    `【镜头语言】${composition}（${shot.shotSize}）；人物位置：${shot.staging}`,
-    '画质要求：细节丰富，光影真实，构图稳定横平竖直，无文字水印',
+    `【镜头语言】${composition}（${shot.shotSize}）；人物位置：${shot.staging}；本帧机位相对相邻帧轻微变化（推进/偏移/景别收紧），相邻两帧不得完全同构图`,
+    '【环境动态】把场景中 1-2 个自然运动元素画进画面：风吹发丝与衣摆、水面波纹、雾气流动、光斑变化、雨丝、蒸汽。',
+    '【光线继承】主光方向、色温、明暗对比与同镜头其他帧保持一致。',
+    '画质要求：细节丰富，光影真实，构图稳定横平竖直。',
   ]
     .filter(Boolean)
-    .join('\n');
-}
-
-// ---------- 即梦视频提示词（D8：镜头卡一键复制） ----------
-
-export function buildVideoPrompt(shot: DuanjuShot, project: DuanjuProject): string {
-  const chars = shot.characterIds
-    .map((cid) => project.characters.find((c) => c.id === cid))
-    .filter((c): c is DuanjuCharacter => !!c)
-    .map((c) => c.name);
-  const scene = shot.sceneId ? project.scenes.find((s) => s.id === shot.sceneId) : undefined;
-  return [
-    `以分镜参考图按顺序生成视频（图生视频，画板/图片顺序即时间顺序）`,
-    `人物：${chars.join('、') || '（按图）'}；场景：${scene?.name ?? '按图'}`,
-    `景别：${shot.shotSize}；运镜：${shot.cameraMove}；站位：${shot.staging}`,
-    `动作：从「${shot.actionStart}」到「${shot.actionEnd}」，动作自然衔接`,
-    shot.dialog ? `对白：「${shot.dialog}」` : '无对白',
-    `声音：${shot.sound || '环境音与动作声，无背景音乐'}`,
-    `画风：${project.style}，与参考图保持一致`,
-  ].join('\n');
-}
-
-/**
- * 本地 H3 音画一体视频提示词（MiniMax 官方结构化格式）：
- * 动作+运镜叙述 + <d>[Chinese] 台词</d>（口型同步）+ 声音描述（原生立体声）。
- * 与「复制视频提示词」（即梦用中文分行格式）互不影响——本地通道专用。
- */
-export function buildLocalVideoPrompt(shot: Pick<DuanjuShot, 'gridParts' | 'actionStart' | 'actionEnd' | 'cameraMove' | 'staging' | 'dialog' | 'sound'>): string {
-  const action = shot.gridParts.length > 0 ? shot.gridParts[0] : `${shot.actionStart} → ${shot.actionEnd}`;
-  const parts = [
-    `One continuous cinematic vertical shot: ${action}; camera ${shot.cameraMove || 'static'}${shot.staging ? `, ${shot.staging}` : ''}.`,
-    shot.dialog ? `<d>[Chinese] ${shot.dialog}</d>` : '',
-    `Audio: ${shot.sound || 'ambient sound matching the scene, no background music'}.`,
-  ];
-  return parts.filter(Boolean).join(' ');
+    .join('\n') + sig;
 }

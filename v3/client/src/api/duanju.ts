@@ -7,7 +7,7 @@
 import { apiFetch } from './client';
 import type { DuanjuPatch, DuanjuProject, StoredImage } from '@shared/duanju';
 import { generateImageOnComfy, loadComfyConfig } from '../features/duanju/lib/comfy';
-import { composeCharacterSheet } from '../features/duanju/lib/comfyCompose';
+import { composeCharacterSheet, cropFrontView } from '../features/duanju/lib/comfyCompose';
 import { characterSheetSplitPrompts } from '../features/duanju/lib/prompts/prompts-image';
 import { useSettingsStore } from '../stores/settings';
 
@@ -48,6 +48,8 @@ export interface GenerateImageInput {
   sheetSplit?: { style: string; name: string; profile: string };
   /** 角色定妆照路径（分镜参考生图通道用：comfy+frame 时走 Qwen-Image-Edit-2511 参考图编辑） */
   refImagePath?: string;
+  /** 正面全身单图路径（三参考档 image2——锁身体/服装；角色无此图时自动回退双参考） */
+  bodyRefPath?: string;
   /** 场景图路径（分镜参考通道 image2：镜头关联场景的最新场景图，跨帧场景一致） */
   sceneRefPath?: string;
 }
@@ -62,8 +64,10 @@ export function imageProviderForApi(): GenerateImageInput['provider'] {
   return 'comfy';
 }
 
-/** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏 */
-function comfySizeFor(kind: GenerateImageInput['kind']): { width: number; height: number } {
+/** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏；
+ *  大头照锚点 4:5 竖版 1152×1440（32 对齐）——单视图不触发 2×2 铺排先验 */
+function comfySizeFor(kind: GenerateImageInput['kind'], aspectRatio?: string): { width: number; height: number } {
+  if (aspectRatio === '4:5') return { width: 1152, height: 1440 };
   return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
 }
 
@@ -81,11 +85,17 @@ async function generateFrameWithRef(
   const refRes = await fetch(duanjuFileUrl(workId, input.refImagePath!));
   if (!refRes.ok) throw new Error(`定妆照读取失败（HTTP ${refRes.status}）——角色需先生成设定图`);
   const refBlob = await refRes.blob();
-  // 场景图（可选）：镜头关联场景有图则双参考注入（image2）
+  // 场景图（可选）：镜头关联场景有图则注入（双参考档 image2 / 三参考档 image3）
   let sceneRefBlob: Blob | undefined;
   if (input.sceneRefPath) {
     const sceneRes = await fetch(duanjuFileUrl(workId, input.sceneRefPath));
     if (sceneRes.ok) sceneRefBlob = await sceneRes.blob();
+  }
+  // 正面全身单图（可选，三参考档）：有则 image2 锁身体/服装——身份+身体+场景三重锁定
+  let bodyRefBlob: Blob | undefined;
+  if (input.bodyRefPath) {
+    const bodyRes = await fetch(duanjuFileUrl(workId, input.bodyRefPath));
+    if (bodyRes.ok) bodyRefBlob = await bodyRes.blob();
   }
   const blob = await generateImageOnComfy(cfg, {
     prompt: input.prompt,
@@ -93,6 +103,7 @@ async function generateFrameWithRef(
     height: 0,
     seed: Math.floor(Math.random() * 2_147_483_647),
     refBlob,
+    bodyRefBlob,
     sceneRefBlob,
     workflow: 'qwen-edit-2511',
   });
@@ -139,6 +150,18 @@ async function generateCharacterSheetLocal(
     prompt: input.prompt,
     source: 'comfy',
   });
+  // ②' 正面全身单图归档（2511 三参考档 image2——锁身体/服装；裁自三视图原图中间格，零生成成本）
+  //     prompt 带【正面全身】前缀供 frameBodyRefImage 识别
+  try {
+    const frontBlob = await cropFrontView(triViewBlob);
+    const frontFile = new File([frontBlob], 'comfy-front.png', { type: 'image/png' });
+    await uploadDuanjuImageFile(workId, input.kind, input.refId, frontFile, {
+      prompt: `【正面全身】${input.prompt}`,
+      source: 'comfy',
+    });
+  } catch {
+    /* 裁剪失败不阻塞设定图产出——分镜回退双参考 */
+  }
   // ③ 主参考显式指向特写单图（server 首图逻辑只在 refImageId 为空时生效，覆盖不了存量）
   const cur = afterSheet;
   const characters = cur.characters.map((c) =>
@@ -173,7 +196,7 @@ export async function generateDuanjuImage(
   }
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
-  const { width, height } = comfySizeFor(input.kind);
+  const { width, height } = comfySizeFor(input.kind, input.aspectRatio);
   const blob = await generateImageOnComfy(cfg, {
     prompt: input.prompt,
     width,
