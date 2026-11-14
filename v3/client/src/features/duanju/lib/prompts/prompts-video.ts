@@ -103,11 +103,10 @@ export function buildLocalVideoPrompt(
   // 说话人绑定（P0-3）：(S1) + 声线描述 + 开口自然停顿（P0-5：H3 首帧开口延迟 1.3-2.4s）
   if (shot.dialog) {
     const speaker = shot.speaker?.trim() || chars[0]?.name || '';
-    const voiceHint = chars.length > 0
-      ? ` (S1), ${speaker} on-screen, mouth visibly articulating the words`
-      : '';
     if (speaker) {
-      lines.push(`${speaker}${voiceHint} speaks after a brief natural pause from the opening state: <d>[Chinese] ${shot.dialog}</d>`);
+      lines.push(
+        `${speaker} (S1), on-screen, mouth visibly articulating the words, speaks after a brief natural pause from the opening state: <d>[Chinese] ${shot.dialog}</d>`,
+      );
     } else {
       lines.push(`<d>[Chinese] ${shot.dialog}</d>`);
     }
