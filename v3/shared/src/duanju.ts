@@ -93,6 +93,8 @@ export const DuanjuCharacterSchema = z.strictObject({
   sheetImages: z.array(StoredImageSchema),
   /** 主参考图 id：分帧参考通道 image1（建议指向大头照锚点——脸最稳）；server 读该图转 Data URL */
   refImageId: idSchema.nullable().optional(),
+  /** 短剧配音音色（minimax voiceId，如 female-shaonv）——成片合成时该角色台词用固定音色 TTS（跨镜头一致） */
+  voiceId: z.string().optional(),
   /** 流水线创建时刻（307e617 起写入；schema 此前未认导致 PATCH 被 strictObject 拒——e2e 实跑暴露） */
   createdAt: tsSchema.optional(),
   updatedAt: tsSchema,

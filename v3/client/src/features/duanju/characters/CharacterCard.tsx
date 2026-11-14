@@ -13,6 +13,7 @@ import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
 import { anchorPortraitPrompt, characterSheetPrompt } from '../lib/prompts/prompts-image';
 import { buildOutfitMessages } from '../lib/prompts/prompts-outfit';
+import { MINIMAX_VOICES } from '../../../lib/tts/voice-catalog';
 import { rebuildCharacterProfileMessages } from '../lib/characterExtract';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import type { DuanjuCharacter } from '@shared/duanju';
@@ -295,6 +296,23 @@ export default function CharacterCard({ workId, character }: Props) {
           className={`${inputCls} mt-1.5`}
           aria-label="当前穿着"
         />
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className="shrink-0 text-[11px] text-[hsl(var(--fg-muted))]">配音音色</span>
+          <select
+            defaultValue={character.voiceId ?? ''}
+            onChange={(e) => void save({ voiceId: e.target.value || undefined })}
+            className="h-8 min-w-0 flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none"
+            aria-label="配音音色"
+            title="成片合成时该角色台词的 TTS 音色（minimax，跨镜头一致）——单人台词镜头自动生效；留空用 H3 生成原声"
+          >
+            <option value="">（不配音——用生成原声）</option>
+            {MINIMAX_VOICES.map((v) => (
+              <option key={v.voice} value={v.voice}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </details>
 
       {error && (
