@@ -16,7 +16,7 @@ import { dataDir } from '../core/paths';
 import { assertSafeId, worksDir, wrap } from '../works/works';
 
 const ZHIPU_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-const QC_MODEL = 'glm-4v-flash';
+const QC_MODEL = 'glm-4.6v'; // 用户资源包适用型号（glm-4v-flash 已 429）
 const MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 
 const qcSchema = z.strictObject({
