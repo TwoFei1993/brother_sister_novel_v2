@@ -57,9 +57,11 @@ export default function ShotTools({
   onLocalGen,
   onLocalGenTrial,
 }: Props) {
+  // P2 修复：先同步 window.open（保住 user activation——异步后 open 会被拦弹窗），复制在其后完成
+  // （clipboard 写不需要 activation；原先 copy 的动态 import 抢走激活链导致「复制失败但页已开」）
   const jump = (url: string) => () => {
-    onCopy();
     window.open(url, '_blank', 'noreferrer');
+    onCopy();
   };
 
   return (

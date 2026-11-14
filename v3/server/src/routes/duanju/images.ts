@@ -16,7 +16,7 @@ import type { RequestHandler } from 'express';
 import { z } from 'zod';
 
 import multer from 'multer';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { HttpError, zodBody } from '../../middleware/validate';
 import { withWorkLock } from '../../middleware/writer';
 import { readJson, writeJsonAtomic } from '../../storage/store';
@@ -30,7 +30,7 @@ import { workImagesDir } from '../../services/image';
 // ---------- POST：生成并转存 ----------
 
 const genSchema = z.strictObject({
-  kind: z.enum(['character', 'scene', 'shot', 'frame']),
+  kind: z.enum(['character', 'outfit', 'scene', 'shot', 'frame']),
   refId: z.string().min(1),
   prompt: z.string().min(1).max(1500),
   aspectRatio: z.string().optional(),
@@ -78,7 +78,7 @@ function appendSpend(project: DuanjuProject, kind: SpendEntry['kind'], refId: st
 /** 持锁落图：character/scene 追加；shot 替换 gridImage（旧模式）；frame 挂/换帧 + rolls+1。spendNote 覆盖记账备注（本地免费图标注豁免成本估算） */
 async function attachImage(
   id: string,
-  kind: 'character' | 'scene' | 'shot' | 'frame',
+  kind: 'character' | 'outfit' | 'scene' | 'shot' | 'frame',
   refId: string,
   image: StoredImage,
   frameIndex?: number,
@@ -94,6 +94,12 @@ async function attachImage(
       // readJson 不走 zod（.default 不生效）——旧版数据缺数组字段时兜底，防已花钱的图归档失败（P2 修复）
       (char.sheetImages ??= []).push(image);
       if (!char.refImageId) char.refImageId = image.id; // 首图自动设为主参考图
+      char.updatedAt = now;
+    } else if (kind === 'outfit') {
+      // 服装库白底商品图（B5 闭环）：挂角色 outfitImages
+      const char = project.characters.find((c) => c.id === refId);
+      if (!char) throw new HttpError(404, '角色不存在');
+      (char.outfitImages ??= []).push(image);
       char.updatedAt = now;
     } else if (kind === 'scene') {
       const scene = project.scenes.find((s) => s.id === refId);
@@ -224,9 +230,16 @@ export const serveDuanjuFile: RequestHandler = async (req, res, next) => {
     // 视频播放需要 Range（206 分段）；图片直接 200 全量
     const range = req.headers.range;
     if (range && ext === 'mp4') {
-      const m = range.match(/bytes=(\d+)-(\d*)/);
+      // P2 修复：多 range（含逗号）不拆解——按 RFC 回 200 全量（浏览器播放器不发多 range，curl 才会）
+      const m = range.includes(',') ? null : range.match(/bytes=(\d+)-(\d*)/);
       if (m) {
         const start = Number(m[1]);
+        // P2 修复：start 越界回 416（原先负 Content-Length + createReadStream 抛错 → 500）
+        if (start >= info.size) {
+          res.status(416).setHeader('Content-Range', `bytes */${info.size}`);
+          res.end();
+          return;
+        }
         const end = Math.min(m[2] ? Number(m[2]) : info.size - 1, info.size - 1);
         res.status(206);
         res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`);
@@ -260,7 +273,7 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const id = req.params.id;
     assertSafeId(id);
     const file = req.file;
-    const kind = String(req.body?.kind ?? '') as 'character' | 'scene' | 'frame';
+    const kind = String(req.body?.kind ?? '') as 'character' | 'outfit' | 'scene' | 'frame';
     const refId = String(req.body?.refId ?? '');
     const source = String(req.body?.source ?? '');
     const prompt = String(req.body?.prompt ?? '') || '(外部生图上传)';
@@ -270,8 +283,8 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const ext = IMAGE_MIME[file.mimetype];
     if (!ext) throw new HttpError(400, `不支持的图片类型 ${file.mimetype}（支持 png/jpg/webp）`);
     if (file.size < 1024) throw new HttpError(400, '图片内容异常（过小）');
-    if (kind !== 'character' && kind !== 'scene' && kind !== 'frame') {
-      throw new HttpError(400, 'kind 须为 character / scene / frame');
+    if (kind !== 'character' && kind !== 'outfit' && kind !== 'scene' && kind !== 'frame') {
+      throw new HttpError(400, 'kind 须为 character / outfit / scene / frame');
     }
     if (kind === 'frame' && !frameIndex) throw new HttpError(400, 'kind=frame 时 frameIndex 必填（1-4）');
 
@@ -287,8 +300,14 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     };
     // source=comfy（本地免费生图）→ 记账备注标注「本地免费」，成本仪表盘豁免估算
     const spendNote = source === 'comfy' ? `本地免费${frameIndex ? ` frame-${frameIndex}` : ''}` : undefined;
-    const project = await attachImage(id, kind, refId, image, frameIndex, spendNote);
-    res.status(201).json({ image, project });
+    try {
+      const project = await attachImage(id, kind, refId, image, frameIndex, spendNote);
+      res.status(201).json({ image, project });
+    } catch (err) {
+      // P2 修复：归档失败（404 实体不存在等）回滚刚落的盘文件，不留无引用孤儿
+      await unlink(join(dir, name)).catch(() => {});
+      throw err;
+    }
   } catch (err) {
     next(err);
   }

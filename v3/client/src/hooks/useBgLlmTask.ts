@@ -112,32 +112,47 @@ export function useBgLlmTask(slot: string, onDone: (text: string) => void, onErr
     [clearSlot],
   );
 
-  /** 恢复轮询（mount/visibilitychange 时由 pane 调用）：slot 有未完成任务 → 继续轮询 */
+  /** 恢复轮询（mount/visibilitychange 时由 pane 调用）：slot 有未完成任务 → 继续轮询。
+   *  P2 修复：pollingRef 防双通道并发（mount resume 与 visibilitychange resume 各起一条循环 → onDone 调两次） */
+  const pollingRef = useRef(false);
   const resume = useCallback((): void => {
+    if (pollingRef.current) return;
     const taskId = localStorage.getItem(slotKey(slot));
     if (!taskId) return;
+    pollingRef.current = true;
     void (async () => {
-      let j: { status?: string; text?: string; error?: string };
       try {
-        j = await apiFetch<{ status: string; text?: string; error?: string }>(`/api/llm/tasks/${taskId}`);
-      } catch {
-        return; // 网络抖动——下次可见时再试
-      }
-      if (!mountedRef.current) return;
-      if (j.status === 'done') {
-        clearSlot();
-        setState({ status: 'done', text: j.text, label: undefined });
-        onDoneRef.current(j.text ?? '');
-      } else if (j.status === 'running') {
-        setState({ status: 'running' });
-        void poll(taskId, slot);
-      } else if (j.status === 'failed' || j.status === 'lost' || j.status === 'expired') {
-        clearSlot();
-        setState({ status: j.status as 'failed' | 'lost' | 'expired', error: j.error, label: undefined });
+        let j: { status?: string; text?: string; error?: string };
+        try {
+          j = await apiFetch<{ status: string; text?: string; error?: string }>(`/api/llm/tasks/${taskId}`);
+        } catch {
+          return; // 网络抖动——下次可见时再试
+        }
+        if (!mountedRef.current) return;
+        if (j.status === 'done') {
+          clearSlot();
+          setState({ status: 'done', text: j.text, label: undefined });
+          onDoneRef.current(j.text ?? '');
+        } else if (j.status === 'running') {
+          setState({ status: 'running' });
+          await poll(taskId, slot);
+        } else if (j.status === 'failed' || j.status === 'lost' || j.status === 'expired') {
+          clearSlot();
+          setState({ status: j.status as 'failed' | 'lost' | 'expired', error: j.error, label: undefined });
+        }
+      } finally {
+        pollingRef.current = false;
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slot]);
+
+  // P2 修复：挂载置 true / 卸载置 false——StrictMode 双挂载下第二次 mount 必须重置回 true，
+  // 否则首轮 cleanup 已置 false，轮询守卫直接短路（e2e 实测踩过）
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // 移动端切回 App 时立即续轮询（iOS/Android 后台冻结会暂停轮询定时器——
   // visibilitychange visible 是系统恢复信号，此时检查 slot 任务状态补上进度）

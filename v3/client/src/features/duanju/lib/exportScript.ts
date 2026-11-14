@@ -47,25 +47,25 @@ export function buildScriptMd(project: DuanjuProject, episode: DuanjuEpisode, sh
     '',
     '## 时间轴分镜',
     '',
-    '| 时间码 | 镜头 | 景别 | 运镜 | 时长 | 人物 | 站位 | 动作 | 台词 | 声音 |',
+    '| 时间码 | 镜头 | 景别 | 运镜 | 时长 | 人物 | 站位 | 动作 | 台词 | 钩子 |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const seg of timeline) {
     const { shot, start, end, estimated } = seg;
     lines.push(
-      `| ${tc(start)}-${tc(end)}${estimated ? '*' : ''} | S${String(shot.index).padStart(2, '0')} | ${esc(shot.shotSize)} | ${esc(shot.cameraMove)} | ${shot.durationSec ?? DEFAULT_SEC}s | ${esc(castOf(shot, project))} | ${esc(shot.staging)} | ${esc(`${shot.actionStart} → ${shot.actionEnd}`)} | ${esc(shot.dialog)} | ${esc(shot.sound)} |`,
+      `| ${tc(start)}-${tc(end)}${estimated ? '*' : ''} | S${String(shot.index).padStart(2, '0')} | ${esc(shot.shotSize)} | ${esc(shot.cameraMove)} | ${shot.durationSec ?? DEFAULT_SEC}s | ${esc(castOf(shot, project))} | ${esc(shot.staging)} | ${esc(`${shot.actionStart} → ${shot.actionEnd}`)} | ${esc(shot.dialog)} |钩子:${shot.hookType ?? '—'} |`,
     );
   }
   lines.push('', '## 分镜详述', '');
   for (const seg of timeline) {
     const s = seg.shot;
     lines.push(
-      `### S${String(s.index).padStart(2, '0')}〔${tc(seg.start)}-${tc(seg.end)}〕${s.shotSize}·${s.cameraMove}`,
+      `### S${String(s.index).padStart(2, '0')}〔${tc(seg.start)}-${tc(seg.end)}〕${s.shotSize}·${s.cameraMove}${s.hookType ? `·钩子:${s.hookType}` : ''}`,
       '',
       `- **动作**：${s.actionStart} → ${s.actionEnd}`,
       s.dialog ? `- **台词**：「${s.dialog}」` : '- **台词**：（无）',
-      `- **声音**：${s.sound || '环境音'}`,
       s.staging ? `- **站位**：${s.staging}` : '',
+      s.endState ? `- **段末状态**（下镜开场衔接）：${s.endState}` : '',
       '',
       s.gridPrompt ? `> 生图提示词：${s.gridPrompt.replace(/\n/g, ' ')}` : '',
       '',
@@ -89,11 +89,11 @@ export function buildScriptTxt(project: DuanjuProject, episode: DuanjuEpisode, s
     const s = seg.shot;
     out.push(
       `▣ S${String(s.index).padStart(2, '0')}　${tc(seg.start)} - ${tc(seg.end)}（${s.durationSec ?? DEFAULT_SEC}秒${seg.estimated ? '·估' : ''}）`,
-      `　　${s.shotSize}｜${s.cameraMove}｜人物：${castOf(s, project) || '—'}`,
+      `　　${s.shotSize}｜${s.cameraMove}｜人物：${castOf(s, project) || '—'}${s.hookType ? `｜钩子:${s.hookType}` : ''}`,
       s.staging ? `　　站位：${s.staging}` : '',
       `　　动作：${s.actionStart} → ${s.actionEnd}`,
       s.dialog ? `　　台词：「${s.dialog}」` : '',
-      `　　声音：${s.sound || '环境音'}`,
+      s.endState ? `　　段末状态：${s.endState}` : '',
       '',
     );
   }

@@ -101,7 +101,13 @@ export const mergeDuanjuEpisode: RequestHandler = async (req, res, next) => {
           ? [`subtitles=filename=subs.srt:force_style='FontName=Microsoft YaHei,FontSize=11,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=1,Outline=2,MarginV=40'`]
           : []),
       ].join(','),
-      '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', // 响度统一（各镜头环境音量差异抹平）
+      '-af', [
+        // C3 音频后处理：H3 生成音频开头常见短爆音（插件 clean_generated_audio_start 同源问题）——
+        // 头尾 30ms 对称微淡入淡出（areverse 技巧），几乎不可闻但消掉爆音点击
+        'afade=t=in:d=0.03',
+        'areverse,afade=t=in:d=0.03,areverse',
+        'loudnorm=I=-16:TP=-1.5:LRA=11', // 响度统一（各镜头环境音量差异抹平）
+      ].join(','),
       '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
       '-c:a', 'aac', '-b:a', '192k',
       basename(outFile),

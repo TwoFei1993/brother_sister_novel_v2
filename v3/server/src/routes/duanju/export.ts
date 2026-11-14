@@ -26,7 +26,6 @@ function shotRow(shot: DuanjuShot, videoPrompt: string): string {
     esc(shot.staging),
     esc(`${shot.actionStart} → ${shot.actionEnd}`),
     esc(shot.dialog),
-    esc(shot.sound),
     esc(videoPrompt.replace(/\n/g, ' ')),
   ].join(' | ');
 }
@@ -47,7 +46,15 @@ export const exportDuanjuEpisode: RequestHandler = async (req, res, next) => {
 
     const archive = new ZipArchive({ zlib: { level: 6 } });
     archive.on('error', () => {
+      // P2 修复：中止打包并掐断响应流——已 pipe 的 archiver 继续写会污染 JSON 错误响应
+      try { archive.abort(); } catch { /* 已中止 */ }
+      res.destroy();
       if (!res.headersSent) res.status(500).json({ error: '打包失败' });
+    });
+    // P2 修复：客户端中断下载时中止打包（原先服务器仍读完全部图片流）
+    let finalized = false;
+    res.on('close', () => {
+      if (!finalized) { try { archive.abort(); } catch { /* 已中止 */ } }
     });
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(
@@ -71,6 +78,7 @@ export const exportDuanjuEpisode: RequestHandler = async (req, res, next) => {
         if (existsSync(file)) archive.append(createReadStream(file), { name: `${base}.png` });
       }
     }
+    finalized = true;
     await archive.finalize();
   } catch (err) {
     next(err);
@@ -89,7 +97,6 @@ function videoPromptOf(shot: DuanjuShot, project: DuanjuProject): string {
     `景别：${shot.shotSize}；运镜：${shot.cameraMove}；站位：${shot.staging}`,
     `动作：从「${shot.actionStart}」到「${shot.actionEnd}」，动作自然衔接`,
     shot.dialog ? `对白：「${shot.dialog}」` : '无对白',
-    `声音：${shot.sound || '环境音与动作声，无背景音乐'}`,
     `画风：${project.style}，与参考图保持一致`,
   ].join('\n');
 }

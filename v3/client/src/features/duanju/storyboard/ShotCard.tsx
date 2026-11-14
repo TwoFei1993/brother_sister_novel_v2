@@ -11,6 +11,8 @@ import { useDuanjuStore } from '../store';
 import { uploadDuanjuVideo, duanjuFileUrl } from '../../../api/duanju';
 import { parseStaging } from '../lib/cost/stagingMap';
 import { isShotStale } from '../lib/stale';
+import { estimateVideoMinutes } from '../lib/videoProduce';
+import { loadComfyConfig } from '../lib/comfy';
 import type { DuanjuShot } from '@shared/duanju';
 import FramesGrid from './FramesGrid';
 import ShotTools from './ShotTools';
@@ -161,7 +163,7 @@ export default function ShotCard({ workId, shot }: Props) {
                 max={120}
                 value={shot.durationSec ?? 8}
                 onChange={(e) => void save({ durationSec: Math.max(1, Math.min(120, Number(e.target.value) || 8)) })}
-                title="预估时长——剧本导出时间轴依据"
+                title={`预估时长——剧本导出时间轴依据；本地生成预计 ~${estimateVideoMinutes(shot.durationSec ?? 8, loadComfyConfig().videoQuality ?? 'high')} 分钟（当前画质档）`}
                 className={specInput}
               />
             </Field>
@@ -234,10 +236,12 @@ export default function ShotCard({ workId, shot }: Props) {
                 className={inputCls}
               />
             </Field>
-            <Field label="声音要求">
+            <Field label="台词说话人">
               <input
-                defaultValue={shot.sound}
-                onBlur={(e) => e.target.value !== shot.sound && void save({ sound: e.target.value })}
+                defaultValue={shot.speaker ?? ''}
+                placeholder="缺省=出场首角色"
+                onBlur={(e) => e.target.value !== (shot.speaker ?? '') && void save({ speaker: e.target.value || undefined })}
+                title="H3 说话人绑定 (S1) 的数据源（并行轮 drama-skills P0-3）"
                 className={inputCls}
               />
             </Field>
@@ -253,12 +257,40 @@ export default function ShotCard({ workId, shot }: Props) {
             </div>
           )}
 
-          <div className="mt-2">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_7rem]">
             <Field label="台词">
               <input
                 defaultValue={shot.dialog}
                 onBlur={(e) => e.target.value !== shot.dialog && void save({ dialog: e.target.value })}
                 placeholder="（无则留空）"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="说话人">
+              <select
+                value={shot.speaker ?? ''}
+                onChange={(e) => void save({ speaker: e.target.value || undefined })}
+                className={inputCls}
+                aria-label="说话人"
+              >
+                <option value="">（自动）</option>
+                {project.characters
+                  .filter((c) => shot.characterIds.includes(c.id))
+                  .map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="mt-2">
+            <Field label="画内文字">
+              <input
+                defaultValue={shot.onScreenText ?? ''}
+                onBlur={(e) => e.target.value !== (shot.onScreenText ?? '') && void save({ onScreenText: e.target.value || undefined })}
+                placeholder="手机屏幕/招牌/纸条上需逐字可读的文字（无则留空）"
                 className={inputCls}
               />
             </Field>

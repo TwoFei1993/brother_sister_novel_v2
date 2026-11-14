@@ -10,12 +10,14 @@ import {
   pollVideoOnComfy,
   submitVideoOnComfy,
   loadComfyConfig,
-  optimizePromptOnComfy,
+  optimizePromptCached,
   upscaleVideoOnComfy,
+  framesForDuration,
   type SubmittedVideoTask,
   type VideoGenProgress,
+  type VideoQualityPreset,
 } from './comfy';
-import { buildLocalVideoPrompt } from './prompts/prompts-video';
+import { buildLocalVideoPrompt, styleGuardOf } from './prompts/prompts-video';
 import { pickFramePath } from './framePick';
 import { useDuanjuStore } from '../store';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
@@ -109,12 +111,21 @@ export async function produceShotVideo(
   const chars = (shot.characterIds ?? [])
     .map((cid) => project.characters.find((c) => c.id === cid))
     .filter((c): c is NonNullable<typeof c> => !!c)
-    .map((c) => ({ name: c.name, profile: c.profile }));
+    .map((c) => ({ name: c.name, profile: c.profile, lockPhrase: c.lockPhrase }));
   const prev = project.shots.find((s) => s.episodeId === shot.episodeId && s.index === shot.index - 1);
-  let prompt = buildLocalVideoPrompt(shot, chars, { hasLastFrame: lastFrameBlob !== null, prevEndState: prev?.endState });
+  let prompt = buildLocalVideoPrompt(shot, chars, {
+    hasLastFrame: lastFrameBlob !== null,
+    prevEndState: prev?.endState,
+    textToVideo: frameBlob === null,
+    styleGuard: styleGuardOf(project.style),
+  });
   const durationSec = trial ? 3 : (shot.durationSec ?? 5);
   if (cfg.promptOptimizer) {
-    prompt = await optimizePromptOnComfy(cfg, prompt, { duration: durationSec, task: lastFrameBlob ? 'fl2va' : 'i2va' });
+    // 快赢 1+2：缓存复用 + 来源可见（优化器失效不再静默——用户能发现该去修插件配置）
+    const opt = await optimizePromptCached(cfg, prompt, { duration: durationSec, task: lastFrameBlob ? 'fl2va' : 'i2va' });
+    prompt = opt.text;
+    if (opt.source === 'fallback') onWarn('提示词优化器未生效（插件未配 LLM 通道或不可达）——已用模板版，可到设置页检查');
+    else onWarn(`✓ 提示词已经 AICG3D 优化器六段式升级（${opt.source === 'cache' ? '缓存' : '在线'}）`);
   }
   const task = await submitVideoOnComfy(cfg, frameBlob, prompt, durationSec, lastFrameBlob ? { lastFrameBlob } : undefined);
   writeSlot(workId, shot.id, task, trial);
@@ -123,6 +134,15 @@ export async function produceShotVideo(
 }
 
 // ---------- 整集队列（P1-5：只补缺失 + 断点续跑 + 单镜失败不阻塞） ----------
+
+/** 每帧生成耗时估算（秒/帧，实测：high 73帧≈4min、standard 减半、draft 再减半）——快赢 5：时长→预计耗时 */
+const SEC_PER_FRAME: Record<VideoQualityPreset, number> = { high: 3.3, standard: 1.8, draft: 1.0 };
+
+/** 本地生成预计耗时（分钟，含超分 +1~3min 余量归入取整）；仅提示用，不承诺精确 */
+export function estimateVideoMinutes(sec: number, quality: VideoQualityPreset = 'high'): number {
+  const frames = framesForDuration(sec);
+  return Math.max(1, Math.round((frames * SEC_PER_FRAME[quality]) / 60));
+}
 
 /** 待出片清单：本集内无成品（finalVideo 空）且有分镜帧的镜头——幂等，中断重跑自动跳过已完成 */
 export function buildVideoTasks(shots: DuanjuShot[]): DuanjuShot[] {

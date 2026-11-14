@@ -6,11 +6,12 @@ import { extractJsonArray } from './json-extract';
 
 const SYSTEM = `你是短剧角色设计师。从剧本中提取全部有名有姓/有戏份的角色，输出角色档案。
 只输出 JSON 数组，不要 markdown 代码块、不要解释。每项：
-{"name": "角色名", "profile": "外观档案（80-150字，逐项写全）：年龄性别身份｜发型发色（长度/造型）｜瞳色｜脸型五官特征｜体型身高｜服装（款式/颜色/材质）｜标志性配饰｜气质神态"}
+{"name": "角色名", "profile": "外观档案（80-150字，逐项写全）：年龄性别身份｜发型发色（长度/造型）｜瞳色｜脸型五官特征｜体型身高｜服装（款式/颜色/材质）｜标志性配饰｜气质神态", "lockPhrase": "英文连续性锁面：跨镜不变外观的最小名词短语（发型+瞳色+服装主色形制+1-2 个标志性特征，15-30 个英文单词，不含动作/表情/剧情）"}
 要求：
 1. 生图模型看不到剧本——档案必须自足完整，每个角色照搬下面的字段顺序写全，缺一处生图就会跑偏；
 2. 剧本可推断处写死，推断不出的按题材合理补全并保持该角色前后一致；
 3. **动物/机器人角色也算，且档案开头必须明确声明形态**——真实动物写「一只真实形态的{品种}{动物}（非拟人、非卡通）」并写全品种/毛色花纹/眼睛/体型；拟人或机器人角色同理写明形态与材质；群演路人不提取。
+4. lockPhrase 是该角色档案的外观压缩版（视频模型走英文提示词，中文描述每帧被转述会漂移；锁面短语逐字复用零漂移），例："long silver braid, amber eyes, navy school uniform with white collar, small mole under left eye"。
 好例子（照这个具体程度写）：
 "28岁女程序员，身形清瘦。深棕色齐肩直发微乱微湿，浅棕色瞳，薄框银边眼镜，鹅蛋脸眉眼清秀但眼下有熬夜青黑；身高162cm偏瘦；深藏青色连帽外套配白衬衫与深灰直筒裤，黑色帆布鞋；总挎一台贴满贴纸的旧电脑包，指节因常年敲键盘偏粗；气质疲惫而警觉。"`;
 
@@ -37,6 +38,7 @@ export function buildCharacterExtractMessages(
 export interface ExtractedCharacter {
   name: string;
   profile: string;
+  lockPhrase?: string;
 }
 
 /**
@@ -80,9 +82,13 @@ export function parseCharacterExtract(raw: string): ExtractedCharacter[] | null 
   if (!arr) return null;
   return arr
     .filter(
-      (x): x is { name: string; profile?: string } =>
+      (x): x is { name: string; profile?: string; lockPhrase?: string } =>
         typeof x === 'object' && x !== null && typeof (x as { name?: unknown }).name === 'string',
     )
-    .map((x) => ({ name: x.name, profile: typeof x.profile === 'string' ? x.profile : '' }))
+    .map((x) => ({
+      name: x.name,
+      profile: typeof x.profile === 'string' ? x.profile : '',
+      lockPhrase: typeof x.lockPhrase === 'string' && x.lockPhrase.trim() ? x.lockPhrase.trim() : undefined,
+    }))
     .filter((x) => x.name.trim());
 }

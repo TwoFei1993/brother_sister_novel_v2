@@ -34,7 +34,7 @@ export async function patchDuanju(
 // ---------- 生图（Phase 2，共识 D1/D6） ----------
 
 export interface GenerateImageInput {
-  kind: 'character' | 'scene' | 'shot' | 'frame';
+  kind: 'character' | 'outfit' | 'scene' | 'shot' | 'frame';
   refId: string;
   prompt: string;
   aspectRatio?: string;
@@ -66,8 +66,15 @@ export function imageProviderForApi(): GenerateImageInput['provider'] {
 
 /** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏；
  *  大头照锚点 4:5 竖版 1152×1440（32 对齐）——单视图不触发 2×2 铺排先验 */
+/** P2-12：upload 端点 kind 枚举不含 'shot'（旧整图模式）——收窄并给人话报错 */
+function assertUploadKind(kind: GenerateImageInput['kind']): 'character' | 'outfit' | 'scene' | 'frame' {
+  if (kind === 'shot') throw new Error('旧整图模式已由分帧替代——分镜请按帧生成');
+  return kind;
+}
+
 function comfySizeFor(kind: GenerateImageInput['kind'], aspectRatio?: string): { width: number; height: number } {
   if (aspectRatio === '4:5') return { width: 1152, height: 1440 };
+  if (kind === 'outfit') return { width: 1024, height: 1024 }; // 白底商品图方图
   return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
 }
 
@@ -108,7 +115,7 @@ async function generateFrameWithRef(
     workflow: 'qwen-edit-2511',
   });
   const file = new File([blob], 'comfy-frame.png', { type: blob.type || 'image/png' });
-  return uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
+  return uploadDuanjuImageFile(workId, assertUploadKind(input.kind), input.refId, file, {
     frameIndex: input.frameIndex,
     prompt: input.prompt,
     source: 'comfy',
@@ -135,10 +142,11 @@ async function generateCharacterSheetLocal(
     generateImageOnComfy(cfg, { prompt: triView, width: 1344, height: 1024, seed: seed() }),
   ]);
   // ① 特写单图先归档（单主体干净图——分镜参考通道的定妆照）
+  const upKind = assertUploadKind(input.kind);
   const portraitFile = new File([portraitBlob], 'comfy-portrait.png', { type: 'image/png' });
   const { image: portraitImg, project: afterPortrait } = await uploadDuanjuImageFile(
     workId,
-    input.kind,
+    upKind,
     input.refId,
     portraitFile,
     { prompt: input.prompt, source: 'comfy' },
@@ -146,7 +154,7 @@ async function generateCharacterSheetLocal(
   // ② 版式合成图随后归档（人看的完整设定图）
   const blob = await composeCharacterSheet(portraitBlob, triViewBlob);
   const file = new File([blob], 'comfy-sheet.png', { type: 'image/png' });
-  const { project: afterSheet } = await uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
+  const { project: afterSheet } = await uploadDuanjuImageFile(workId, upKind, input.refId, file, {
     prompt: input.prompt,
     source: 'comfy',
   });
@@ -155,7 +163,7 @@ async function generateCharacterSheetLocal(
   try {
     const frontBlob = await cropFrontView(triViewBlob);
     const frontFile = new File([frontBlob], 'comfy-front.png', { type: 'image/png' });
-    await uploadDuanjuImageFile(workId, input.kind, input.refId, frontFile, {
+    await uploadDuanjuImageFile(workId, upKind, input.refId, frontFile, {
       prompt: `【正面全身】${input.prompt}`,
       source: 'comfy',
     });
@@ -204,7 +212,7 @@ export async function generateDuanjuImage(
     seed: Math.floor(Math.random() * 2_147_483_647),
   });
   const file = new File([blob], 'comfy.png', { type: blob.type || 'image/png' });
-  return uploadDuanjuImageFile(workId, input.kind, input.refId, file, {
+  return uploadDuanjuImageFile(workId, assertUploadKind(input.kind), input.refId, file, {
     frameIndex: input.frameIndex,
     prompt: input.prompt,
     source: 'comfy',
@@ -238,7 +246,7 @@ export async function uploadDuanjuVideo(
 /** 外部生图回流（豆包/即梦 web 免费生成后上传归档为设定图/场景图；亦承接本地 ComfyUI 产物归档） */
 export async function uploadDuanjuImageFile(
   workId: string,
-  kind: 'character' | 'scene' | 'shot' | 'frame',
+  kind: 'character' | 'outfit' | 'scene' | 'frame',  // P2：与 server upload 枚举对齐（'shot' 仅 generate 端点的旧整图模式）
   refId: string,
   file: File,
   opts?: { frameIndex?: number; prompt?: string; source?: 'comfy' },

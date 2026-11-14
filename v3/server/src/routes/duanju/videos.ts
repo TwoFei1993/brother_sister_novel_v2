@@ -6,7 +6,7 @@
  * 持锁更新 shot.finalVideo。播放走已有 files 路由（mp4 Range 206 已支持）。
  */
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Router, type RequestHandler } from 'express';
 import multer from 'multer';
@@ -55,24 +55,40 @@ export const uploadDuanjuVideo: RequestHandler = async (req, res, next) => {
     await writeFile(join(dir, name), file.buffer);
 
     const path = `duanju/videos/${name}`;
-    const project = await withWorkLock(id, async (): Promise<DuanjuProject> => {
-      const cur = await readJson<DuanjuProject>(duanjuFile(id));
-      if (!cur) throw new HttpError(404, '短剧项目不存在');
-      const shot = cur.shots.find((s) => s.id === shotId);
-      if (!shot) throw new HttpError(404, '镜头不存在');
-      shot.finalVideo = { path, uploadedAt: Date.now() };
-      shot.updatedAt = Date.now();
-      cur.updatedAt = Date.now();
-      cur.revision += 1;
-      await writeJsonAtomic(duanjuFile(id), cur);
-      return cur;
-    });
-    res.status(201).json({ path, project });
+    try {
+      const project = await withWorkLock(id, async (): Promise<DuanjuProject> => {
+        const cur = await readJson<DuanjuProject>(duanjuFile(id));
+        if (!cur) throw new HttpError(404, '短剧项目不存在');
+        const shot = cur.shots.find((s) => s.id === shotId);
+        if (!shot) throw new HttpError(404, '镜头不存在');
+        shot.finalVideo = { path, uploadedAt: Date.now() };
+        shot.updatedAt = Date.now();
+        cur.updatedAt = Date.now();
+        cur.revision += 1;
+        await writeJsonAtomic(duanjuFile(id), cur);
+        return cur;
+      });
+      res.status(201).json({ path, project });
+    } catch (err) {
+      // P2 修复：归档失败回滚盘文件（百 MB 级视频不留孤儿）
+      await unlink(join(dir, name)).catch(() => {});
+      throw err;
+    }
   } catch (err) {
     next(err);
   }
 };
 
 export function mountDuanjuVideos(router: Router): void {
-  router.post('/works/:id/duanju/videos', upload.single('file'), wrap(uploadDuanjuVideo));
+  // P2 修复：视频上传并发闸（multer 内存存储 100MB/请求——多路并发上传内存峰值叠加）
+  let inflight = 0;
+  router.post('/works/:id/duanju/videos', (req, res, next) => {
+    if (inflight >= 3) {
+      res.status(429).json({ error: '上传繁忙（≥3 路并发）——请稍候再试' });
+      return;
+    }
+    inflight += 1;
+    res.on('close', () => { inflight -= 1; });
+    next();
+  }, upload.single('file'), wrap(uploadDuanjuVideo));
 }

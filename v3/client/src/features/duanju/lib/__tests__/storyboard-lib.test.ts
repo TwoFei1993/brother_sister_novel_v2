@@ -60,7 +60,6 @@ function makeShot(overrides: Partial<DuanjuShot> = {}): DuanjuShot {
     actionEnd: '奔跑',
     staging: '画面中央',
     dialog: '快跑！',
-    sound: '风声',
     gridParts: [],
     gridPrompt: '',
     frames: [],
@@ -170,9 +169,9 @@ describe('buildGridPrompt / buildVideoPrompt', () => {
 
   it('视频提示词：衔接动作 + 声音 + 画风', () => {
     const prompt = buildVideoPrompt(makeShot(), makeProject());
-    expect(prompt).toContain('从「起身」到「奔跑」');
+    expect(prompt).toContain('人物：小满');
     expect(prompt).toContain('对白：「快跑！」');
-    expect(prompt).toContain('声音：风声');
+    
     expect(prompt).toContain('动漫风');
   });
 });
@@ -280,7 +279,6 @@ describe('extractJsonArray 污染容错（反馈 #11 拆镜头失败回归）', 
     const dirty = '这是结果：[{"shotSize":"中景","sound":（无对白，只有环境音）,"gridParts":["x"]}]';
     const shots = parseStoryboard(dirty, 'ep1', makeProject());
     expect(shots).toHaveLength(1);
-    expect(shots[0].sound).toBe('无对白，只有环境音');
   });
 });
 
@@ -374,9 +372,9 @@ describe('buildLocalVideoPrompt v2（四帧时间轴 + 人物规格 + 首尾帧�
   });
 
   it('A2 铁律：默认声音为正向描述，禁 no-background-music 否定式', () => {
-    const silent = makeShot({ gridParts: [...fourParts], sound: '', dialog: '' });
+    const silent = makeShot({ gridParts: [...fourParts], dialog: '' });
     const p = buildLocalVideoPrompt(silent);
-    expect(p).toContain('[Audio] ambient sound and action sound only');
+    expect(p).toContain('overall_soundscape: ambient sound and action sound only');
     expect(p).not.toContain('no background music');
     expect(p).not.toContain('<d>');
   });
@@ -391,18 +389,78 @@ describe('buildLocalVideoPrompt v2（四帧时间轴 + 人物规格 + 首尾帧�
   });
 });
 
+describe('buildLocalVideoPrompt v3（drama-skills H3 方言六项）', () => {
+  const fourParts = ['起手描述', '进行描述', '高潮描述', '收势描述'];
+  const base = { gridParts: [...fourParts], durationSec: 8 };
+
+  it('P0-1/2：non_diegetic_music: N/A 显式 + 字幕禁令（无画内文字）', () => {
+    const p = buildLocalVideoPrompt(makeShot({ ...base, dialog: '' }));
+    expect(p).toContain('non_diegetic_music: N/A');
+    expect(p).toContain('free of any captions, subtitles or text overlays');
+  });
+
+  it('P0-2 例外：有画内文字时逐字声明为例外', () => {
+    const p = buildLocalVideoPrompt(makeShot({ ...base, dialog: '', onScreenText: '转账 520,000' }));
+    expect(p).toContain('转账 520,000');
+    expect(p).toContain('only on-screen text');
+  });
+
+  it('P0-3/4/8：说话人 (S1) 绑定 + 同框闭嘴 + 锁面逐字注入', () => {
+    const p = buildLocalVideoPrompt(
+      makeShot({ ...base, speaker: '小满' }),
+      [
+        { name: '小满', profile: '蓝发', lockPhrase: 'long silver braid, amber eyes' },
+        { name: '阿噗', profile: '黑发' },
+      ],
+    );
+    expect(p).toContain('小满 (S1)');
+    expect(p).toContain('speaks after a brief natural pause');
+    expect(p).toContain('阿噗 does not speak');
+    expect(p).toContain('lips remain completely closed');
+    expect(p).toContain('long silver braid, amber eyes');
+  });
+
+  it('P0-6：t2v 画风守护首句（动漫 → not live-action）', () => {
+    const p = buildLocalVideoPrompt(
+      makeShot({ ...base, dialog: '' }),
+      [],
+      { textToVideo: true, styleGuard: 'A 2D hand-drawn anime animation' },
+    );
+    expect(p.startsWith('A 2D hand-drawn anime animation')).toBe(true);
+    expect(p).toContain('not live-action');
+  });
+
+  it('P0-3 兜底：无 speaker 字段时回退首角色名', () => {
+    const p = buildLocalVideoPrompt(makeShot({ ...base }), [{ name: '小满', profile: '蓝发' }]);
+    expect(p).toContain('小满 (S1)');
+  });
+
+  it('P0-5 机检：台词超容量/缺说话人出警告', () => {
+    const issues = validateStoryboardIssues([
+      makeShot({ index: 1, durationSec: 5, dialog: '这是一段很长很长的台词超过五秒镜头的容量会导致赶词或者直接截断', speaker: '小满' }),
+      makeShot({ index: 2, durationSec: 8, dialog: '短台词' }),
+    ]);
+    expect(issues.some((i) => i.includes('S1 台词'))).toBe(true);
+    expect(issues.some((i) => i.includes('S2 有台词但未标说话人'))).toBe(true);
+  });
+});
+
 describe('validateStoryboardIssues（A4 机检）', () => {
   it('时长超带宽 / 格字数超 / 声音否定式 → 各出一条警告', () => {
     const issues = validateStoryboardIssues([
       makeShot({ index: 1, durationSec: 20, gridParts: ['短', 'x'.repeat(130)] }),
-      makeShot({ index: 2, sound: '环境音，无背景音乐' }),
+
     ]);
     expect(issues.some((i) => i.includes('S1 时长 20s'))).toBe(true);
     expect(issues.some((i) => i.includes('第 2 格 130 字'))).toBe(true);
-    expect(issues.some((i) => i.includes('S2 声音字段含否定式'))).toBe(true);
+
   });
 
-  it('正常镜头零警告', () => {
-    expect(validateStoryboardIssues([makeShot({ gridParts: ['x'.repeat(50)] })])).toEqual([]);
+  it('正常镜头零警告（无台词）', () => {
+    expect(validateStoryboardIssues([makeShot({ gridParts: ['x'.repeat(50)], dialog: '' })])).toEqual([]);
+  });
+
+  it('有台词的镜头标了 speaker 才零警告', () => {
+    expect(validateStoryboardIssues([makeShot({ gridParts: ['x'.repeat(50)], dialog: '快跑！', speaker: '小满' })])).toEqual([]);
   });
 });

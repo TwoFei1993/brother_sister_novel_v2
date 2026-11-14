@@ -87,7 +87,11 @@ export async function apiFetch<T = unknown>(path: string, opts: ApiFetchOptions 
   }
   let res: Response;
   try {
-    res = await fetch(path, { ...init, credentials: 'include' });
+    // P2 修复：默认 10 分钟兜底超时（TCP 黑洞/代理挂起时任务永久占用队列并发）；
+    // 调用方显式传 signal 时以调用方为准
+    const timeout = AbortSignal.timeout(10 * 60_000);
+    const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+    res = await fetch(path, { ...init, credentials: 'include', signal });
   } catch (err) {
     if (isAbort(err)) throw err;
     throw new ApiError(0, '无法连接服务器，请检查网络', 'network');

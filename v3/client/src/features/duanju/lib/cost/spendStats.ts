@@ -26,7 +26,7 @@ export function spendStats(project: DuanjuProject): SpendStats {
   // 本地 ComfyUI 免费图（note 标注「本地免费」）不计成本账，张数单独统计展示
   const freeLog = all.filter((e) => (e.note ?? '').includes('本地免费'));
   const log = all.filter((e) => !(e.note ?? '').includes('本地免费'));
-  const byKind: Record<SpendEntry['kind'], number> = { character: 0, scene: 0, shot: 0, frame: 0 };
+  const byKind: Record<SpendEntry['kind'], number> = { character: 0, outfit: 0, scene: 0, shot: 0, frame: 0 };
   const counts = new Map<string, number>();
   for (const e of log) {
     byKind[e.kind] += 1;

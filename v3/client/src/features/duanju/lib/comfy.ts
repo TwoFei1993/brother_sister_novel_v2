@@ -99,6 +99,46 @@ export async function optimizePromptOnComfy(
   }
 }
 
+/** 优化结果来源（可见性提示用）：optimized=本次在线优化 / cache=命中缓存 / fallback=回退模板版 */
+export type OptimizedSource = 'optimized' | 'cache' | 'fallback';
+
+/** djb2 字符串 hash（缓存 key：内容不变则不重复调 LLM——重 roll 抽卡高频场景省钱省时） */
+function djb2(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+const OPT_CACHE_PREFIX = 'v3-opt-cache-';
+
+/**
+ * 带缓存的优化（快赢 1+2）：同 prompt+task+duration 直接复用上次结果；
+ * 返回来源供 UI 提示「✓ 已六段式优化 / ⤵ 模板版回退」——优化器失效不再静默。
+ */
+export async function optimizePromptCached(
+  cfg: ComfyuiConfig,
+  prompt: string,
+  opts: { duration: number; task?: string } = { duration: 5 },
+): Promise<{ text: string; source: OptimizedSource }> {
+  const key = `${OPT_CACHE_PREFIX}${djb2(`${opts.task ?? 'i2va'}|${opts.duration}|${prompt}`)}`;
+  try {
+    const cached = localStorage.getItem(key);
+    if (cached) return { text: cached, source: 'cache' };
+  } catch {
+    /* localStorage 不可用则直调 */
+  }
+  const text = await optimizePromptOnComfy(cfg, prompt, opts);
+  const source: OptimizedSource = text !== prompt ? 'optimized' : 'fallback';
+  if (source === 'optimized') {
+    try {
+      localStorage.setItem(key, text);
+    } catch {
+      /* 存不进就算了 */
+    }
+  }
+  return { text, source };
+}
+
 export function saveComfyConfig(cfg: ComfyuiConfig): void {
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
 }
@@ -347,17 +387,30 @@ async function pollWorkflow(
   onTick?: () => void,
 ): Promise<Blob> {
   const deadline = Date.now() + deadlineMs;
+  // P2 修复：history 连续缺失计数——ComfyUI 重启丢队列/history 被清时提前报「任务丢失」而非傻等 20 分钟
+  let missingStreak = 0;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 3000));
     onTick?.();
     let entry: { status?: { completed?: boolean; status_str?: string }; outputs?: Record<string, Record<string, unknown[]>> };
+    let inHistory = false;
     try {
       const r = await fetch(`${base}/history/${promptId}`, { signal: AbortSignal.timeout(10_000) });
       const j = (await r.json()) as Record<string, typeof entry>;
-      entry = j?.[promptId] ?? {};
+      entry = j?.[promptId];
+      inHistory = entry !== undefined;
+      if (!inHistory) entry = {};
     } catch {
       continue; // 单次轮询抖动静默重试
     }
+    if (!inHistory) {
+      missingStreak += 1;
+      if (missingStreak >= 20) {
+        throw new Error('任务从引擎队列消失（可能引擎重启或 history 被清）——请重新生成');
+      }
+      continue;
+    }
+    missingStreak = 0;
     if (entry.status?.status_str === 'error') throw new Error('ComfyUI 生成失败（详见 ComfyUI 界面日志）');
     if (entry.status?.completed || entry.status?.status_str === 'success') {
       const { filename, subfolder, type } = extractOutputFile(entry);

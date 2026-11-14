@@ -18,7 +18,8 @@ const STORYBOARD_SYSTEM = `你是短剧分镜师。把给定某集剧本拆成�
 只输出 JSON 数组，不要 markdown 代码块、不要解释。每项：
 {"shotSize":"景别(远景/全景/中景/近景/特写)","cameraMove":"运镜(固定/推/拉/摇/移/跟)",
  "actionStart":"动作起点","actionEnd":"动作终点","staging":"人物站位",
- "dialog":"台词(无则空串)","durationSec": 预估时长秒(4-15整数),"sound":"声音要求(环境音/动作声/对白声)",
+ "dialog":"台词(无则空串)","speaker":"说话人角色名(dialog为空则空串)","onScreenText":"画内文字内容(手机屏幕/招牌/纸条等需逐字可读的文字,无则空串)",
+ "durationSec": 预估时长秒(4-15整数),"sound":"声音要求(环境音/动作声/对白声)",
  "gridParts":["第1格画面","第2格画面","第3格画面","第4格画面"],
  "endState":"本镜最后一帧画面(谁+在哪+姿态+道具状态)",
  "hookType":"钩子类型(reveal揭示/reversal反转/callback回收/suspense悬念/chase追逐/visual-joke视觉笑点/tender情感/expression-beat表情节拍,纯过场留空串)",
@@ -31,9 +32,16 @@ const STORYBOARD_SYSTEM = `你是短剧分镜师。把给定某集剧本拆成�
 3. gridParts 四格为同一镜头连续动作的四个瞬间，每格只放一个核心动作；每格 40-80 字、写全四要素：
    谁（人物+表情情绪）｜在哪（环境与光线细节）｜做什么（具体动作与力势）｜画面感（构图与光影）——每格都要能直接当生图提示词用。
    每格停在「下一秒即将变化」的瞬间（将转身未转、手将落未落、话将出未出）——已完成的动作没有运动起点。
-4. 对白写完整句；镜头切分优先落在：一句话说完、情绪完成、视线改变、人物关系变化明确处。
-5. endState 是跨镜衔接锚点：写下一镜可直接以此开场的定格画面，禁用「严格继承上一镜」套话。
-6. hookType 标注本镜的叙事钩子；每 3 个连续镜头至少 1 个 reveal/reversal/callback，首镜与末镜必带强钩子（完播率钩）。
+   转身/出画类动作：对应格画「转身进行到一半」的姿态（侧身 45-90 度、迈出一半），不画转身完成后的背面——视频模型对提示词里的转身方向不敏感，靠起始帧的朝向决定。
+4. 对白写完整句；speaker 必须是 characters 里的角色名——多角色镜视频生成靠它绑定口型与声线。
+   对白预算：中文台词约 4 字/秒，镜头前 2 秒是开口等待——台词字数超过 (durationSec-2)*4 必须拆镜或申请更长时长，不许硬塞。
+   镜头切分优先落在：一句话说完、情绪完成、视线改变、人物关系变化明确处。
+5. 同一场拆成多镜时共用一套空间逻辑：staging 以场景固定地标写方位（如「桌子左侧/门口/窗边」），
+   相邻镜头保持同一轴线（人物左右关系与朝向不翻转）——A 在 B 左侧，则所有镜头里 A 都在 B 左侧。
+6. endState 是跨镜衔接锚点：写下一镜可直接以此开场的定格画面，禁用「严格继承上一镜」套话。
+7. onScreenText 只写画面内真实出现的文字（手机聊天、转账金额、招牌、纸条内容逐字抄录）；
+   剧本提到「手机显示」「屏幕上写着」时必须提取，不凭空编造。
+8. hookType 标注本镜的叙事钩子；每 3 个连续镜头至少 1 个 reveal/reversal/callback，首镜与末镜必带强钩子（完播率钩）。
 好例子（同镜头第 2 格，照这个具体程度写）：
 "李薇在昏黄路灯下的湿滑巷口猛地转身，风衣下摆甩起水珠；她眉头紧锁张嘴嘶吼，握手机的手指节泛白；逆光剪影，霓虹在湿地面映出冷蓝反光。"`;
 
@@ -66,6 +74,8 @@ interface RawShot {
   sound?: unknown;
   gridParts?: unknown;
   endState?: unknown;
+  speaker?: unknown;
+  onScreenText?: unknown;
   hookType?: unknown;
   characters?: unknown;
   scene?: unknown;
@@ -107,7 +117,8 @@ export function parseStoryboard(
         actionEnd: str(x.actionEnd),
         staging: str(x.staging),
         dialog: str(x.dialog),
-        sound: str(x.sound),
+        speaker: str(x.speaker) || undefined,
+        onScreenText: str(x.onScreenText) || undefined,
         gridParts: parts,
         endState: str(x.endState) || undefined,
         hookType: str(x.hookType) || undefined,
@@ -136,8 +147,19 @@ export function validateStoryboardIssues(shots: DuanjuShot[]): string[] {
       const len = p.length;
       if (len > 0 && (len < 20 || len > 120)) issues.push(`${tag} 第 ${j + 1} 格 ${len} 字，超出 20-120 字带宽`);
     });
-    if (/无背景音乐|不要|禁止|勿/.test(s.sound ?? '')) {
-      issues.push(`${tag} 声音字段含否定式表述——视频模型对否定不敏感，请改为正向描述（如「只有环境音与脚步声」）`);
+    // 对白预算（drama-skills P0-5）：H3 中文约 4.1 可发声字/秒，首帧模式开口延迟 1.3-2.4s 取 2s 中值
+    const dialog = s.dialog ?? '';
+    const speakable = dialog.replace(/[，。！？、…—\s,!?."'「」『』：""]+/g, '').length;
+    if (speakable > 0 && s.durationSec !== undefined) {
+      const capacity = Math.floor((s.durationSec - 2) * 4.1);
+      if (capacity > 0 && speakable > capacity) {
+        issues.push(`${tag} 台词 ${speakable} 字超出 ${s.durationSec}s 镜头容量（约 ${capacity} 字——开口等待 2s + 4字/秒），会赶词或尾句截断；建议拆镜、加时长或精简台词`);
+      } else if (capacity <= 0) {
+        issues.push(`${tag} 台词 ${speakable} 字但时长仅 ${s.durationSec}s（开口等待后无发声窗口）——必须加时长或拆镜`);
+      }
+    }
+    if (dialog.trim() && !s.speaker) {
+      issues.push(`${tag} 有台词但未标说话人——视频口型/声线绑定需要 speaker，请在镜头卡补填`);
     }
   });
   // 钩子密度自检（B1）：每 3 个连续镜头至少 1 个强钩子（reveal/reversal/callback），首末镜必带
@@ -245,6 +267,7 @@ export function buildFramePrompt(
   const chars = shot.characterIds
     .map((cid) => project.characters.find((c) => c.id === cid))
     .filter((c): c is DuanjuCharacter => !!c);
+  const locks = chars.map((c) => c.lockPhrase?.trim()).filter((v): v is string => !!v);
   const scene = shot.sceneId ? project.scenes.find((s) => s.id === shot.sceneId) : undefined;
   const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
   const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
@@ -272,6 +295,8 @@ export function buildFramePrompt(
         ? `【人物保持】${chars.map((c) => c.name).join('、')}的长相五官与发型${opts.triRef ? `（严格依${faceImg}）` : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
         : '',
       '【手部细节】若画面含手部：双手与手指结构自然完整，袖口与手腕自然衔接。',
+      locks.length > 0 ? `【连续性锁】${locks.join('; ')} —— 逐字保持，一项不改` : '',
+      shot.onScreenText?.trim() ? `【画内文字】画面中逐字显示：「${shot.onScreenText.trim()}」——文字清晰可读、无错字、无多余文字` : '',
       scene ? `【场景保持】空间布局、主光方向与色温、关键道具及其位置与${sceneImg}保持一致。` : '',
       `【机位指令】${composition}——不沿用参考图的取景角度。`,
       `${stylePrefix(project.style)}，${shot.staging}。画质要求：细节丰富，光影真实。`,
@@ -284,10 +309,12 @@ export function buildFramePrompt(
     : '【无人物】纯场景帧';
   return [
     `${stylePrefix(project.style)}，电影感单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
-    `【画面主体】${desc}——只画这一个动作瞬间，画面停在「下一秒即将发生变化」的时刻，不画成动作已完全结束的定格`,
+    `【画面主体】${desc}——只画这一个动作瞬间，画面停在「下一秒即将发生变化」的时刻，不画成动作已完全结束的定格${/转身|回身|转过头|出画/.test(desc) ? '；若动作为转身/出画，画转身进行到一半的侧身姿态（不画转身完成后的背面）' : ''}`,
     charsLine,
     scene ? `【场景与光线】${scene.name}（${scene.spec}）——按场景的光影基调与时间氛围渲染，人物与环境光交互自然` : '',
     `【镜头语言】${composition}（${shot.shotSize}）；人物位置：${shot.staging}；本帧机位相对相邻帧轻微变化（推进/偏移/景别收紧），相邻两帧不得完全同构图`,
+    locks.length > 0 ? `【连续性锁】${locks.join('; ')} —— 逐字保持，一项不改` : '',
+    shot.onScreenText?.trim() ? `【画内文字】画面中${/手机|屏幕|聊天|短信/.test(shot.onScreenText) ? '的手机/电子屏幕' : '的实体表面'}逐字显示：「${shot.onScreenText.trim()}」——文字清晰可读、无错字、无多余文字` : '',
     '【环境动态】把场景中 1-2 个自然运动元素画进画面：风吹发丝与衣摆、水面波纹、雾气流动、光斑变化、雨丝、蒸汽。',
     '【光线继承】主光方向、色温、明暗对比与同镜头其他帧保持一致。',
     '画质要求：细节丰富，光影真实，构图稳定横平竖直。',

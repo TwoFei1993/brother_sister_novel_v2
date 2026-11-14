@@ -40,8 +40,9 @@ export default function FramesGrid({ workId, shot, project, onPickFrame, pickBus
   };
 
   /** 生成/重roll 单帧；成功返回 true（补帧串行时用返回值判断是否继续） */
-  async function generateFrame(frameIndex: number): Promise<boolean> {
-    setBusy(frameIndex);
+  async function generateFrame(frameIndex: number, silent = false): Promise<boolean> {
+    // silent：批量补帧模式——busy 由外层 generateMissing 全程持有，帧结束不清（防间隙并发）
+    if (!silent) setBusy(frameIndex);
     setError(null);
     const refImagePath = frameRefImage(shot, project);
     const sceneRefPath = frameSceneImage(shot, project);
@@ -65,16 +66,23 @@ export default function FramesGrid({ workId, shot, project, onPickFrame, pickBus
       setError(err instanceof Error ? err.message : '生成失败，请重试');
       return false;
     } finally {
-      setBusy(null);
+      if (!silent) setBusy(null);
     }
   }
 
   /** 补齐缺失帧（串行，失败即停——避免连环烧钱） */
   async function generateMissing(): Promise<void> {
+    if (busy !== null) return;
     const fresh = useDuanjuStore.getState().project?.shots.find((s) => s.id === shot.id) ?? shot;
-    for (const i of missingFrames(fresh)) {
-      const ok = await generateFrame(i);
-      if (!ok) break;
+    // P2 修复：循环全程占住 busy 哨兵——原先每帧 finally 复位，间隙里重roll/补帧按钮可点 → 并发生成同帧双倍扣费
+    setBusy(-1); // -1 = 批量补帧哨兵（不对应具体帧，仅占用 busy 防并发）
+    try {
+      for (const i of missingFrames(fresh)) {
+        const ok = await generateFrame(i, true);
+        if (!ok) break;
+      }
+    } finally {
+      setBusy(null);
     }
   }
 

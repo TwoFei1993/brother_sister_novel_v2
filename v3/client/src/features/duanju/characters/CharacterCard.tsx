@@ -12,6 +12,7 @@ import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
 import { anchorPortraitPrompt, characterSheetPrompt } from '../lib/prompts/prompts-image';
+import { buildOutfitMessages } from '../lib/prompts/prompts-outfit';
 import { rebuildCharacterProfileMessages } from '../lib/characterExtract';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import type { DuanjuCharacter } from '@shared/duanju';
@@ -31,6 +32,48 @@ export default function CharacterCard({ workId, character }: Props) {
   const profileBg = useBgLlmTask(`char-profile-${workId}-${character.id}`, (text) => {
     void save({ profile: text.trim() });
   }, (msg) => setError(msg));
+
+  /** 服装库 AI 生成（B5 闭环）：LLM 出 N 套白底商品图 prompt → 写 outfits → 逐套本地生图入 outfitImages */
+  const [outfitBusy, setOutfitBusy] = useState(false);
+  const outfitBg = useBgLlmTask(`char-outfit-${workId}-${character.id}`, async (raw) => {
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      setError('服装库生成失败（模型未返回清单），请重试');
+      return;
+    }
+    await save({ outfits: lines, outfitImages: [] });
+    setOutfitBusy(true);
+    try {
+      // 逐套生图（Z-Image 秒级；LLM 输出行即完整生图 prompt——白底陈列规范已在 system 内）
+      for (const line of lines) {
+        await generateDuanjuImage(workId, { kind: 'outfit', refId: character.id, prompt: line, provider: imageProviderForApi() });
+      }
+      await useDuanjuStore.getState().load(workId);
+    } catch (err) {
+      setError(err instanceof Error ? `服装图部分失败：${err.message}` : '服装图生成失败');
+    } finally {
+      setOutfitBusy(false);
+    }
+  }, (msg) => setError(msg));
+
+  function generateOutfits(): void {
+    const busy = outfitBg.state?.status === 'submitting' || outfitBg.state?.status === 'running';
+    if (busy || outfitBusy) return;
+    if (!character.name.trim() || !character.profile.trim()) {
+      setError('先填角色名和外观锚点（服装设计的依据）');
+      return;
+    }
+    setError(null);
+    const prefs = useSettingsStore.getState().llmPrefs;
+    outfitBg.submit({
+      source: prefs.source,
+      model: prefs.model,
+      messages: buildOutfitMessages(project!.style, character.name, character.profile, 6),
+      thinking: false,
+      params: { max_tokens: 2000 },
+      label: `服装库·${character.name}`,
+    });
+  }
 
   if (!project) return null;
 
@@ -180,18 +223,65 @@ export default function CharacterCard({ workId, character }: Props) {
         aria-label="角色档案"
       />
 
-      {/* 服装库（B5 轻量版）：每行一套；currentOutfit 为空时 profile 内服装描述兜底 */}
+      {/* 连续性锁面（drama-skills P1-8）：跨镜不变外观的最小英文名词短语，逐字注入每帧/视频 prompt——字符串级一致防转述漂移 */}
+      <input
+        defaultValue={character.lockPhrase ?? ''}
+        onBlur={(e) => {
+          const v = e.target.value.trim();
+          if (v !== (character.lockPhrase ?? '')) void save({ lockPhrase: v || undefined });
+        }}
+        placeholder="连续性锁面（英文短语，如 long silver braid, amber eyes, navy school uniform）——逐字注入所有帧与视频提示词"
+        className={`${inputCls} mt-2 font-mono text-xs`}
+        aria-label="连续性锁面"
+        data-testid="char-lock-phrase"
+      />
+
+      {/* 服装库（B5 闭环）：AI 生成清单+白底商品图 → 点选一套设当前穿着 */}
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-[hsl(var(--fg-muted))]">
-          服装库（{character.outfits?.length ?? 0} 套）{character.currentOutfit ? ` · 当前：${character.currentOutfit}` : ''}
+          服装库（{character.outfits?.length ?? 0} 套）{character.currentOutfit ? ` · 当前：${character.currentOutfit.slice(0, 18)}${character.currentOutfit.length > 18 ? '…' : ''}` : ''}
         </summary>
+        <button
+          type="button"
+          onClick={generateOutfits}
+          disabled={outfitBg.state?.status === 'submitting' || outfitBg.state?.status === 'running' || outfitBusy}
+          data-testid="char-gen-outfits"
+          className="mt-1.5 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--accent))] disabled:opacity-40"
+          title="按角色人设 AI 设计 6 套服装（清单+白底商品图，本地免费）"
+        >
+          <WandSparkles className="h-3 w-3" aria-hidden />
+          {outfitBg.state?.status === 'submitting' || outfitBg.state?.status === 'running'
+            ? 'AI 设计服装中…（可切出）'
+            : outfitBusy
+              ? '生成服装图中…'
+              : '✨ AI 设计 6 套服装'}
+        </button>
+        {(character.outfitImages?.length ?? 0) > 0 && (
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {character.outfitImages!.map((img, i) => (
+              <button
+                key={img.id}
+                type="button"
+                onClick={() => void save({ currentOutfit: character.outfits?.[i] ?? character.currentOutfit })}
+                title={character.outfits?.[i] ?? `第 ${i + 1} 套`}
+                className={`h-24 w-24 shrink-0 overflow-hidden rounded-lg border ${
+                  character.currentOutfit && character.outfits?.[i] === character.currentOutfit
+                    ? 'border-[hsl(var(--accent))] ring-1 ring-[hsl(var(--accent))]'
+                    : 'border-[hsl(var(--border-soft))]'
+                }`}
+              >
+                <img src={duanjuFileUrl(workId, img.path)} alt={`服装 ${i + 1}`} className="h-full w-full object-contain" />
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           defaultValue={(character.outfits ?? []).join('\n')}
           onBlur={(e) => {
             const next = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean);
             if (next.join('\n') !== (character.outfits ?? []).join('\n')) void save({ outfits: next });
           }}
-          placeholder={'每行一套服装（分帧生图时注入）：\n白色立领衬衫＋深灰百褶裙＋黑色乐福鞋\n酒红色针织衫＋卡其阔腿裤'}
+          placeholder={'每行一套服装（分帧生图时注入；也可手写后自行生图）：\n白色立领衬衫＋深灰百褶裙＋黑色乐福鞋'}
           rows={3}
           className={`${inputCls} mt-1.5`}
           aria-label="服装库"
@@ -201,7 +291,7 @@ export default function CharacterCard({ workId, character }: Props) {
           onBlur={(e) => {
             if (e.target.value !== (character.currentOutfit ?? '')) void save({ currentOutfit: e.target.value.trim() || undefined });
           }}
-          placeholder="当前穿着（填上面一套的描述，分帧生图注入；空=用档案里的服装描述）"
+          placeholder="当前穿着（点上方图自动填；分帧生图注入；空=用档案里的服装描述）"
           className={`${inputCls} mt-1.5`}
           aria-label="当前穿着"
         />

@@ -85,6 +85,10 @@ export const DuanjuCharacterSchema = z.strictObject({
   outfits: z.array(z.string()).optional(),
   /** 当前穿着的服装描述（outfits 之一或自由文本；分帧生图时注入） */
   currentOutfit: z.string().optional(),
+  /** 服装库白底商品图（AI 批量生成或上传；与 outfits 文本按序对应由用户管理） */
+  outfitImages: z.array(StoredImageSchema).optional(),
+  /** 连续性锁面（drama-skills 对照 P1-8）：跨镜不变外观的最小英文名词短语，逐字注入帧/视频 prompt——字符串级一致，杜绝 LLM 转述漂移 */
+  lockPhrase: z.string().optional(),
   /** 设定图候选（可多张重roll）；主参考图从其中选定 */
   sheetImages: z.array(StoredImageSchema),
   /** 主参考图 id：分帧参考通道 image1（建议指向大头照锚点——脸最稳）；server 读该图转 Data URL */
@@ -113,7 +117,7 @@ export type DuanjuScene = z.infer<typeof DuanjuSceneSchema>;
 /** 生图记账（成本仪表盘事实源）：server 持锁追加，PATCH 白名单不含（客户端只读） */
 export const SpendEntrySchema = z.strictObject({
   ts: tsSchema,
-  kind: z.enum(['character', 'scene', 'shot', 'frame']),
+  kind: z.enum(['character', 'outfit', 'scene', 'shot', 'frame']),
   refId: idSchema,
   /** 附加定位（frame 为 frame-N；shot 整图旧模式无） */
   note: z.string().optional(),
@@ -164,8 +168,10 @@ export const DuanjuShotSchema = z.strictObject({
   /** 人物站位 */
   staging: z.string(),
   dialog: z.string(),
-  /** 声音要求（环境音/动作声/对白声；默认无 BGM） */
-  sound: z.string(),
+  /** 台词说话人（drama-skills P0-3：H3 说话人绑定 (S1) 的数据源；缺省回退出场首角色名） */
+  speaker: z.string().optional(),
+  /** 画内文字（drama-skills P1-10）：手机屏幕/招牌/纸条等须逐字可读的画内内容——帧 prompt 逐字渲染 + 视频 prompt 文字边界例外声明 */
+  onScreenText: z.string().optional(),
   /** 四格画面描述（分帧 prompt 的数据源；AI 拆镜头写入，可编辑改写后重roll） */
   gridParts: z.array(z.string()).max(4).default([]),
   /** 段末状态（A5）：本镜最后一帧画面（谁+在哪+姿态+道具状态）——跨镜衔接锚点，喂给下镜 prompt */

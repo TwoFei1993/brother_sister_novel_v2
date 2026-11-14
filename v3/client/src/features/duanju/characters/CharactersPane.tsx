@@ -58,6 +58,7 @@ export default function CharactersPane({ workId }: { workId: string }) {
               id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               name: c.name,
               profile: c.profile,
+              lockPhrase: c.lockPhrase,
               sheetImages: [],
               refImageId: null,
               updatedAt: Date.now(),
