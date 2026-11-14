@@ -159,13 +159,16 @@ export const DuanjuEpisodeSchema = z.strictObject({
 });
 export type DuanjuEpisode = z.infer<typeof DuanjuEpisodeSchema>;
 
-/** 生成依据快照（server 生图时写入真实时点）：与 script/characters/scenes 当前 updatedAt 逐项比对推导 stale */
+/** 生成依据快照（生成发起时点的上游态）：与 script/characters/scenes 当前 updatedAt 逐项比对推导 stale。
+ *  快照时机（P2 修复）：优先用生成前态（client/server 各自提供 hint）——生成期间上游变更不再被「生成后快照」洗白 */
 export const BuiltFromSchema = z.strictObject({
   scriptAt: tsSchema.optional(),
   /** characterId → 该角色当时的 updatedAt */
   charAt: z.record(z.string(), tsSchema).optional(),
   /** sceneId → 该场景当时的 updatedAt */
   sceneAt: z.record(z.string(), tsSchema).optional(),
+  /** 帧级独立快照（P2 修复：单帧重roll只刷新该帧，不再洗白其余帧）——key=帧号 1-4 */
+  frameSnapshots: z.record(z.string(), z.lazy(() => BuiltFromSchema)).optional(),
 });
 export type BuiltFrom = z.infer<typeof BuiltFromSchema>;
 

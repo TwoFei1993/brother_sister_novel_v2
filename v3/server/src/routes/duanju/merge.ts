@@ -82,11 +82,15 @@ export const mergeDuanjuEpisode: RequestHandler = async (req, res, next) => {
       const dur = await probeDuration(abs, shot.durationSec ?? 5);
       if (shot.dialog.trim()) {
         srtEntries.push({ start: cursor, dur, text: shot.dialog.trim() });
-        // TTS 配音段：台词镜头 + 出场角色恰 1 个且配了音色（音色跨镜头一致——H3 <d> 直出的音色随机）
-        const speaker = shot.characterIds
-          .map((cid) => project.characters.find((c) => c.id === cid))
-          .find((c) => c && c.voiceId);
-        if (shot.characterIds.length <= 1 && speaker?.voiceId) {
+        // TTS 配音段：speaker 字段点名说话角色（多人镜头分角色配音）；无 speaker 回退单角色镜头
+        // 说话角色须已配音色（voiceId）——音色跨镜头一致（H3 <d> 直出的音色随机）
+        const speakerName = shot.speaker?.trim();
+        const speaker = speakerName
+          ? project.characters.find((c) => c.name === speakerName)
+          : shot.characterIds.length === 1
+            ? project.characters.find((c) => c.id === shot.characterIds[0])
+            : undefined;
+        if (speaker?.voiceId) {
           ttsSegs.push({ start: cursor, dur, text: shot.dialog.trim(), voiceId: speaker.voiceId });
         }
       }
