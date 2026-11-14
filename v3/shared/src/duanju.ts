@@ -141,7 +141,7 @@ export type DuanjuScene = z.infer<typeof DuanjuSceneSchema>;
 /** 生图记账（成本仪表盘事实源）：server 持锁追加，PATCH 白名单不含（客户端只读） */
 export const SpendEntrySchema = z.strictObject({
   ts: tsSchema,
-  kind: z.enum(['character', 'outfit', 'scene', 'shot', 'frame']),
+  kind: z.enum(['character', 'outfit', 'scene', 'shot', 'frame', 'prop']),
   refId: idSchema,
   /** 附加定位（frame 为 frame-N；shot 整图旧模式无） */
   note: z.string().optional(),

@@ -145,7 +145,7 @@ describe('spendStats（成本仪表盘）', () => {
     });
     const s = spendStats(project);
     expect(s.logged).toBe(7);
-    expect(s.byKind).toEqual({ character: 2, outfit: 0, scene: 1, shot: 1, frame: 3 });
+    expect(s.byKind).toEqual({ character: 2, outfit: 0, scene: 1, shot: 1, frame: 3, prop: 0 });
     expect(s.rollCount).toBe(2);
     expect(s.estCostYuan).toBe(0.8); // 7 × 0.12，一位小数四舍五入
   });

@@ -30,7 +30,7 @@ import { workImagesDir } from '../../services/image';
 // ---------- POST：生成并转存 ----------
 
 const genSchema = z.strictObject({
-  kind: z.enum(['character', 'outfit', 'scene', 'shot', 'frame']),
+  kind: z.enum(['character', 'outfit', 'scene', 'shot', 'frame', 'prop']),
   refId: z.string().min(1),
   prompt: z.string().min(1).max(1500),
   aspectRatio: z.string().optional(),
@@ -99,7 +99,7 @@ function appendSpend(project: DuanjuProject, kind: SpendEntry['kind'], refId: st
 /** 持锁落图：character/scene 追加；shot 替换 gridImage（旧模式）；frame 挂/换帧 + rolls+1。spendNote 覆盖记账备注（本地免费图标注豁免成本估算） */
 async function attachImage(
   id: string,
-  kind: 'character' | 'outfit' | 'scene' | 'shot' | 'frame',
+  kind: 'character' | 'outfit' | 'scene' | 'shot' | 'frame' | 'prop',
   refId: string,
   image: StoredImage,
   frameIndex?: number,
@@ -128,6 +128,12 @@ async function attachImage(
       if (!scene) throw new HttpError(404, '场景不存在');
       (scene.images ??= []).push(image);
       scene.updatedAt = now;
+    } else if (kind === 'prop') {
+      // C3 道具图通道：落 props[].images + bump updatedAt（帧/视频 prompt 文字锚点之外的可选图参考）
+      const prop = (project.props ?? []).find((x) => x.id === refId);
+      if (!prop) throw new HttpError(404, '道具不存在');
+      (prop.images ??= []).push(image);
+      prop.updatedAt = now;
     } else {
       const shot = project.shots.find((s) => s.id === refId);
       if (!shot) throw new HttpError(404, '镜头不存在');
@@ -178,13 +184,17 @@ export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
         ? '角色不存在'
         : input.kind === 'scene'
           ? '场景不存在'
-          : '镜头不存在';
+          : input.kind === 'prop'
+            ? '道具不存在'
+            : '镜头不存在';
     const exists =
       input.kind === 'character'
         ? pre.characters.some((c) => c.id === input.refId)
         : input.kind === 'scene'
           ? pre.scenes.some((s) => s.id === input.refId)
-          : pre.shots.some((s) => s.id === input.refId);
+          : input.kind === 'prop'
+            ? (pre.props ?? []).some((x) => x.id === input.refId)
+            : pre.shots.some((s) => s.id === input.refId);
     if (!exists) throw new HttpError(404, entity404);
     // ② 参考图解析：character=显式 refImageId 或主参考图；shot/frame=出场首角色的主参考图（多角色余下靠文字锚点）
     let subjectRefPath: string | undefined;
@@ -325,7 +335,7 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const id = req.params.id;
     assertSafeId(id);
     const file = req.file;
-    const kind = String(req.body?.kind ?? '') as 'character' | 'outfit' | 'scene' | 'frame';
+    const kind = String(req.body?.kind ?? '') as 'character' | 'outfit' | 'scene' | 'frame' | 'prop';
     const refId = String(req.body?.refId ?? '');
     const source = String(req.body?.source ?? '');
     const prompt = String(req.body?.prompt ?? '') || '(外部生图上传)';
@@ -335,8 +345,8 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const ext = IMAGE_MIME[file.mimetype];
     if (!ext) throw new HttpError(400, `不支持的图片类型 ${file.mimetype}（支持 png/jpg/webp）`);
     if (file.size < 1024) throw new HttpError(400, '图片内容异常（过小）');
-    if (kind !== 'character' && kind !== 'outfit' && kind !== 'scene' && kind !== 'frame') {
-      throw new HttpError(400, 'kind 须为 character / outfit / scene / frame');
+    if (kind !== 'character' && kind !== 'outfit' && kind !== 'scene' && kind !== 'frame' && kind !== 'prop') {
+      throw new HttpError(400, 'kind 须为 character / outfit / scene / frame / prop');
     }
     if (kind === 'frame' && !frameIndex) throw new HttpError(400, 'kind=frame 时 frameIndex 必填（1-4）');
 

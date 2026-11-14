@@ -34,7 +34,7 @@ export async function patchDuanju(
 // ---------- 生图（Phase 2，共识 D1/D6） ----------
 
 export interface GenerateImageInput {
-  kind: 'character' | 'outfit' | 'scene' | 'shot' | 'frame';
+  kind: 'character' | 'outfit' | 'scene' | 'shot' | 'frame' | 'prop';
   refId: string;
   prompt: string;
   aspectRatio?: string;
@@ -67,14 +67,14 @@ export function imageProviderForApi(): GenerateImageInput['provider'] {
 /** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏；
  *  大头照锚点 4:5 竖版 1152×1440（32 对齐）——单视图不触发 2×2 铺排先验 */
 /** P2-12：upload 端点 kind 枚举不含 'shot'（旧整图模式）——收窄并给人话报错 */
-function assertUploadKind(kind: GenerateImageInput['kind']): 'character' | 'outfit' | 'scene' | 'frame' {
+function assertUploadKind(kind: GenerateImageInput['kind']): 'character' | 'outfit' | 'scene' | 'frame' | 'prop' {
   if (kind === 'shot') throw new Error('旧整图模式已由分帧替代——分镜请按帧生成');
   return kind;
 }
 
 function comfySizeFor(kind: GenerateImageInput['kind'], aspectRatio?: string): { width: number; height: number } {
   if (aspectRatio === '4:5') return { width: 1152, height: 1440 };
-  if (kind === 'outfit') return { width: 1024, height: 1024 }; // 白底商品图方图
+  if (kind === 'outfit' || kind === 'prop') return { width: 1024, height: 1024 }; // 白底商品/道具图方图
   return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
 }
 
@@ -279,7 +279,7 @@ export async function uploadDuanjuVideo(
 /** 外部生图回流（豆包/即梦 web 免费生成后上传归档为设定图/场景图；亦承接本地 ComfyUI 产物归档） */
 export async function uploadDuanjuImageFile(
   workId: string,
-  kind: 'character' | 'outfit' | 'scene' | 'frame',  // P2：与 server upload 枚举对齐（'shot' 仅 generate 端点的旧整图模式）
+  kind: 'character' | 'outfit' | 'scene' | 'frame' | 'prop',  // C3：prop 道具图通道（与 server upload 枚举对齐）
   refId: string,
   file: File,
   opts?: { frameIndex?: number; prompt?: string; source?: 'comfy'; builtFromHint?: unknown },
@@ -297,4 +297,23 @@ export async function uploadDuanjuImageFile(
     `/api/works/${workId}/duanju/images/upload`,
     { method: 'POST', body: form },
   );
+}
+
+// ---------- 分镜帧 VLM 质检（P3：glm-4v 免费档，身份漂移自动哨兵） ----------
+
+export interface QcFrameResult {
+  score: number;
+  verdict: string;
+  issues: string[];
+  raw?: string;
+}
+
+/** 分镜帧 vs 定妆照身份一致性打分（server 调智谱 glm-4v-flash；0-100，<70 建议重roll） */
+export async function qcDuanjuFrame(workId: string, refPath: string, framePath: string): Promise<QcFrameResult> {
+  const r = await apiFetch<QcFrameResult>(`/api/works/${workId}/duanju/qc-frame`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refPath, framePath }),
+  });
+  return r;
 }

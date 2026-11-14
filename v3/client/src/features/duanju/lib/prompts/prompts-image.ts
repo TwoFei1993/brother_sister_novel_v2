@@ -113,3 +113,13 @@ export function characterSheetSplitPrompts(
     triView: characterSheetPrompt(style, name, profile),
   };
 }
+
+/** 道具图 prompt（C3 通道）：白底特写定妆——跨镜道具从文字锚点升级为图参考 */
+export function propImagePrompt(style: string, name: string, spec: string): string {
+  return [
+    `${stylePrefix(style)}，道具定妆图，白底干净背景`,
+    `【道具】${name}：${spec}`,
+    '单一道具居中完整呈现，正面微侧 3/4 视角，关键细节（材质纹理/磨损/纹样）清晰可读',
+    '无人物无文字水印，光影均匀柔和',
+  ].join('，');
+}

@@ -6,11 +6,11 @@
  * - gridParts 帧描述可编辑（改完重roll 该帧生效）
  */
 import { useState } from 'react';
-import { Clapperboard, Download, Grid2X2, RefreshCw } from 'lucide-react';
+import { Clapperboard, Download, Grid2X2, Loader2, RefreshCw, SearchCheck } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
-import { generateDuanjuImage, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
+import { generateDuanjuImage, duanjuFileUrl, qcDuanjuFrame, imageProviderForApi } from '../../../api/duanju';
 import { buildFramePrompt, planFrameRefs } from '../lib/prompts/prompts-storyboard';
 import { downloadFrameGrid, missingFrames } from '../lib/cost/frameGrid';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
@@ -29,6 +29,32 @@ export default function FramesGrid({ workId, shot, project, onPickFrame, pickBus
   const { patch } = useDuanjuStore();
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 帧质检态：'off'（无参考）| 'loading' | 分数；verdicts 存打分理由（悬停徽章看） */
+  const [qc, setQc] = useState<Record<number, 'off' | 'loading' | number>>({});
+  const [verdicts, setVerdicts] = useState<Record<number, string>>({});
+
+  /** VLM 质检：帧 vs 定妆照身份一致分（<70 建议重roll） */
+  async function qcFrame(frameIndex: number): Promise<void> {
+    const plan = planFrameRefs(shot, project);
+    const f = frames.find((x) => x.index === frameIndex);
+    if (!plan?.refImagePath || !f) {
+      setQc((m) => ({ ...m, [frameIndex]: 'off' }));
+      return;
+    }
+    setQc((m) => ({ ...m, [frameIndex]: 'loading' }));
+    try {
+      const r = await qcDuanjuFrame(workId, plan.refImagePath, f.image.path);
+      setQc((m) => ({ ...m, [frameIndex]: r.score }));
+      setVerdicts((m) => ({ ...m, [frameIndex]: `${r.verdict}${r.issues.length > 0 ? `：${r.issues.join('；')}` : ''}` }));
+    } catch (err) {
+      setQc((m) => {
+        const n = { ...m };
+        delete n[frameIndex];
+        return n;
+      });
+      setError(err instanceof Error ? err.message : '质检失败');
+    }
+  }
   const frames = shot.frames ?? [];
   const missing = missingFrames(shot);
   /** 按钮价格文案：本地 ComfyUI 免费标注，云端按 0.12 元/张估算 */
@@ -168,6 +194,29 @@ export default function FramesGrid({ workId, shot, project, onPickFrame, pickBus
                   >
                     <Clapperboard className="h-3 w-3" aria-hidden />
                   </button>
+                )}
+                {f && (
+                  <button
+                    type="button"
+                    onClick={() => void qcFrame(i)}
+                    disabled={qc[i] === 'loading' || qc[i] === 'off'}
+                    title={qc[i] === 'off' ? '本镜无定妆照参考——质检不可用' : `质检第 ${i} 帧：VLM 对比定妆照打身份一致分（<70 建议重roll）`}
+                    className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity hover:bg-black/75 focus:opacity-100 group-hover:opacity-100 disabled:opacity-30"
+                    data-testid={`frame-qc-${i}`}
+                  >
+                    {qc[i] === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <SearchCheck className="h-3 w-3" aria-hidden />}
+                  </button>
+                )}
+                {typeof qc[i] === 'number' && (
+                  <span
+                    className={`absolute left-1 top-1 rounded px-1 py-0.5 text-[9px] font-bold ${
+                      (qc[i] as number) >= 85 ? 'bg-green-600/90' : (qc[i] as number) >= 70 ? 'bg-amber-600/90' : 'bg-red-600/90'
+                    } text-white`}
+                    data-testid={`frame-qc-score-${i}`}
+                    title={verdicts[i] ?? ''}
+                  >
+                    {qc[i]}
+                  </span>
                 )}
               </div>
             );

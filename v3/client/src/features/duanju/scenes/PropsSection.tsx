@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
+import { generateDuanjuImage } from '../../../api/duanju';
+import { propImagePrompt } from '../lib/prompts/prompts-image';
 import type { DuanjuProp } from '@shared/duanju';
 
 const inputCls =
@@ -14,9 +16,29 @@ const inputCls =
 export default function PropsSection({ workId }: { workId: string }) {
   const { project, patch } = useDuanjuStore();
   const [draft, setDraft] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   if (!project) return null;
   const props = project.props ?? [];
+
+  /** C3 道具图通道：本地 comfy 生成白底定妆图（免费，秒级） */
+  async function genImage(p: { id: string; name: string; spec: string }): Promise<void> {
+    if (busyId || !project) return;
+    setBusyId(p.id);
+    try {
+      await generateDuanjuImage(workId, {
+        kind: 'prop',
+        refId: p.id,
+        prompt: propImagePrompt(project.style, p.name, p.spec),
+        provider: 'comfy',
+      });
+      await useDuanjuStore.getState().load(workId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '道具图生成失败');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function add(): Promise<void> {
     const name = draft.trim();
@@ -69,6 +91,16 @@ export default function PropsSection({ workId }: { workId: string }) {
             className={inputCls}
             aria-label="道具锚点"
           />
+          <button
+            type="button"
+            onClick={() => void genImage(p)}
+            disabled={busyId === p.id}
+            title="本地 ComfyUI 生成道具定妆图（白底特写，免费）"
+            className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[hsl(var(--border-soft))] text-[hsl(var(--accent))] disabled:opacity-40"
+            aria-label={'生成道具图 ' + p.name}
+          >
+            {busyId === p.id ? '…' : '🖼'}
+          </button>
           <button
             type="button"
             onClick={() => void remove(p.id)}
