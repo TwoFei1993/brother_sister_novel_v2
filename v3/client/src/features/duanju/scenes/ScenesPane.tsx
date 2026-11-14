@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
-import { sceneImagePrompt } from '../lib/prompts/prompts-image';
+import { sceneImagePrompt } from '../lib/prompts/prompts-scene';
 import { buildSceneExtractMessages, parseSceneExtract, rebuildSceneSpecMessages } from '../lib/sceneExtract';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import { useSettingsStore } from '../../../stores/settings';
@@ -120,7 +120,7 @@ export default function ScenesPane({ workId }: { workId: string }) {
     setBusyId(scene.id);
     setError(null);
     try {
-      const prompt = sceneImagePrompt(project!.style, scene.name, scene.spec);
+      const prompt = sceneImagePrompt(project!.style, scene.name, scene.spec, scene.mode);
       await generateDuanjuImage(workId, { kind: 'scene', refId: scene.id, prompt, aspectRatio: '16:9' });
       await useDuanjuStore.getState().load(workId);
     } catch (err) {
@@ -241,11 +241,29 @@ export default function ScenesPane({ workId }: { workId: string }) {
               onBlur={(e) => {
                 if (e.target.value !== scene.spec) void saveScene(scene.id, { spec: e.target.value });
               }}
-              placeholder="空间结构 / 光影基调 / 关键道具 / 色彩（例：狭小货舱，红色警报灯旋转，管线杂乱，冷金属质感）"
+              placeholder="空间结构 / 光影基调 / 关键道具与屏幕位置 / 色彩（例：狭小货舱，红色警报灯旋转，管线杂乱，冷金属质感；固定地标：舱门在右侧三分之一）"
               rows={2}
               className={`${inputCls} mt-2`}
               aria-label="场景描述"
             />
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="shrink-0 text-xs text-[hsl(var(--fg-muted))]">空间模式</span>
+              <select
+                value={scene.mode ?? ''}
+                onChange={(e) => void saveScene(scene.id, { mode: e.target.value || undefined })}
+                title="决定场景图的空间调度指令（一张图只按一种模式执行）"
+                className="h-8 flex-1 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-1.5 text-[13px] outline-none"
+              >
+                <option value="">自动（广角纵深）</option>
+                <option value="interior-depth">室内纵深</option>
+                <option value="lateral-run">横向延展</option>
+                <option value="one-side-depth">单侧纵深</option>
+                <option value="landmark-far">地标远景</option>
+                <option value="vertical-tower">竖向高耸</option>
+                <option value="nature-frame">自然框景</option>
+                <option value="enclosed">封闭空间</option>
+              </select>
+            </div>
             {scene.images.length > 0 && (
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {scene.images.map((img) => (

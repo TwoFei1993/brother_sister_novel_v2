@@ -11,7 +11,7 @@ import { ImageIcon, Star, Trash2, WandSparkles } from 'lucide-react';
 import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
-import { characterSheetPrompt } from '../lib/prompts/prompts-image';
+import { anchorPortraitPrompt, characterSheetPrompt } from '../lib/prompts/prompts-image';
 import { rebuildCharacterProfileMessages } from '../lib/characterExtract';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import type { DuanjuCharacter } from '@shared/duanju';
@@ -89,6 +89,31 @@ export default function CharacterCard({ workId, character }: Props) {
     }
   }
 
+  /** 大头照锚点（B4）：正脸特写单视图——分帧参考通道 image1 用它脸最稳（三视图整图会摊小脸/拉远景） */
+  async function generateAnchor(): Promise<void> {
+    if (generating || !character.name.trim() || !character.profile.trim()) {
+      if (!character.name.trim() || !character.profile.trim()) setError('先填角色名和外观锚点');
+      return;
+    }
+    setGenerating(true);
+    setError(null);
+    try {
+      const prompt = anchorPortraitPrompt(project!.style, character.name, character.profile);
+      await generateDuanjuImage(workId, {
+        kind: 'character',
+        refId: character.id,
+        prompt,
+        aspectRatio: '4:5',
+        provider: imageProviderForApi(),
+      });
+      await useDuanjuStore.getState().load(workId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成失败，请重试');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   /** 外部生图回流（豆包/即梦免费生成后上传，记入设定图候选） */
   async function onSheetPicked(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0];
@@ -155,6 +180,33 @@ export default function CharacterCard({ workId, character }: Props) {
         aria-label="角色档案"
       />
 
+      {/* 服装库（B5 轻量版）：每行一套；currentOutfit 为空时 profile 内服装描述兜底 */}
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-[hsl(var(--fg-muted))]">
+          服装库（{character.outfits?.length ?? 0} 套）{character.currentOutfit ? ` · 当前：${character.currentOutfit}` : ''}
+        </summary>
+        <textarea
+          defaultValue={(character.outfits ?? []).join('\n')}
+          onBlur={(e) => {
+            const next = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean);
+            if (next.join('\n') !== (character.outfits ?? []).join('\n')) void save({ outfits: next });
+          }}
+          placeholder={'每行一套服装（分帧生图时注入）：\n白色立领衬衫＋深灰百褶裙＋黑色乐福鞋\n酒红色针织衫＋卡其阔腿裤'}
+          rows={3}
+          className={`${inputCls} mt-1.5`}
+          aria-label="服装库"
+        />
+        <input
+          defaultValue={character.currentOutfit ?? ''}
+          onBlur={(e) => {
+            if (e.target.value !== (character.currentOutfit ?? '')) void save({ currentOutfit: e.target.value.trim() || undefined });
+          }}
+          placeholder="当前穿着（填上面一套的描述，分帧生图注入；空=用档案里的服装描述）"
+          className={`${inputCls} mt-1.5`}
+          aria-label="当前穿着"
+        />
+      </details>
+
       {error && (
         <p className="mt-2 text-xs text-[hsl(var(--danger))]" role="alert">
           {error}
@@ -175,6 +227,17 @@ export default function CharacterCard({ workId, character }: Props) {
           {profileBg.state?.status === 'submitting' || profileBg.state?.status === 'running'
             ? `重生成中…（${profileBg.state.elapsedSec ?? 0}s，可切出）`
             : '✨ AI 重生成外观档案'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void generateAnchor()}
+          disabled={generating || saving}
+          data-testid="char-gen-anchor"
+          className="mt-1.5 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-[hsl(var(--border-soft))] text-xs text-[hsl(var(--fg-muted))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
+          title="正脸大头照锚点（4:5）——分帧参考图建议选它：脸最稳，三视图整图会把景别往全身带"
+        >
+          <ImageIcon className="h-3 w-3" aria-hidden />
+          生成大头照锚点
         </button>
       </div>
 

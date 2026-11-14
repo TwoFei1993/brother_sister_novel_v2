@@ -112,6 +112,22 @@ export default function ComfyUIPanel() {
           </select>
         </label>
 
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={cfg.promptOptimizer === true}
+            onChange={(e) => setCfg({ ...cfg, promptOptimizer: e.target.checked })}
+            className="mt-0.5 h-4 w-4"
+            data-testid="comfyui-prompt-optimizer"
+          />
+          <span className="text-xs leading-4">
+            H3 提示词优化器（AICG3D 插件）
+            <span className="block text-[10px] text-[hsl(var(--fg-muted))]">
+              本地生成视频前先过六段式结构化优化（对白口型/首尾帧锚点）；需在 ComfyUI 的 AICG3D 插件设置里配好 LLM 通道。优化失败自动回退模板版，不阻塞生成
+            </span>
+          </span>
+        </label>
+
         <div className="flex items-center gap-2">
           <button
             type="button"

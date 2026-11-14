@@ -41,19 +41,32 @@ export default function StoryboardPane({ workId }: { workId: string }) {
     [project, episode],
   );
 
-  /** 拆镜头结果应用（onDone 与切出恢复共用）：解析 → 替换该集镜头清单 */
+  /** 拆镜头结果应用（onDone 与切出恢复共用）：解析 → 替换该集镜头清单。
+   *  P1 修复：patch 失败（409/断网）时保留 raw 到恢复键——LLM 拆了几分钟的结果不再凭空丢失 */
   function applySplit(raw: string): void {
     const cur = useDuanjuStore.getState().project;
     const epId = localStorage.getItem(splitEpKey(workId));
-    localStorage.removeItem(splitEpKey(workId));
-    if (!cur || !epId) return;
+    if (!cur || !epId) {
+      localStorage.removeItem(splitEpKey(workId));
+      return;
+    }
     const list = parseStoryboard(raw, epId, cur);
     if (list.length === 0) {
+      localStorage.removeItem(splitEpKey(workId));
       setError('拆镜头失败（模型未返回合法结果），请重试');
       return;
     }
     const others = cur.shots.filter((s) => s.episodeId !== epId);
-    void patch(workId, { shots: [...others, ...list] });
+    void patch(workId, { shots: [...others, ...list] }).then((ok) => {
+      if (ok) {
+        localStorage.removeItem(splitEpKey(workId));
+      } else {
+        // 失败：raw 留在恢复键里，下次 mount 的 bg.resume() 不会自动重放（无 pending taskId），
+        // 显式暂存一份原文供 conflict 解决后手动恢复
+        localStorage.setItem(`duanju-split-raw-${workId}`, raw);
+        setError('拆镜头结果保存失败（版本冲突/网络）——已暂存，请点「刷新」后重试拆解或从浏览器存储恢复');
+      }
+    });
   }
 
   // 拆镜头后台化（切出 App 继续生成）：slot 按作品隔离（同一作品一次拆一集，天然互斥）
@@ -171,6 +184,18 @@ export default function StoryboardPane({ workId }: { workId: string }) {
             </span>
           )}
         </span>
+        <input
+          defaultValue={project.visualSignature ?? ''}
+          onBlur={(e) => {
+            if (e.target.value !== (project.visualSignature ?? '')) {
+              void useDuanjuStore.getState().patch(workId, { visualSignature: e.target.value.trim() || undefined });
+            }
+          }}
+          placeholder="视觉签名（可选）：一组固定视觉词，逐字注入每帧/每镜 prompt——如「35mm颗粒、低对比暗部不死白、暖色逆光」"
+          title="项目风格签名固定串：所有生帧/生视频 prompt 尾部逐字复用，跨镜风格一致的锚"
+          className="h-9 min-w-[16rem] flex-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] bg-transparent px-3 text-xs text-[hsl(var(--fg-muted))] outline-none focus:border-[hsl(var(--accent))]"
+          aria-label="项目视觉签名"
+        />
       </div>
 
       {error && (

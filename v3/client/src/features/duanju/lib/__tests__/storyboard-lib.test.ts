@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { isShotStale, storyboardHealth } from '../stale';
-import { buildFramePrompt, buildGridPrompt, buildVideoPrompt, parseStoryboard } from '../prompts/prompts-storyboard';
+import { buildFramePrompt, buildGridPrompt, parseStoryboard, validateStoryboardIssues } from '../prompts/prompts-storyboard';
+import { buildLocalVideoPrompt, buildVideoPrompt } from '../prompts/prompts-video';
 import { mergeEpisodes, parseBreakdown } from '../prompts/prompts-script';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
 
@@ -37,8 +38,8 @@ function makeProject(overrides: Partial<DuanjuProject> = {}): DuanjuProject {
     style: '动漫风',
     targetEpisodes: 12,
     protagonists: '',
-    characters: [char],
-    scenes: [scene],
+    characters: [{ ...char }], // 克隆防突变泄漏：测试改 updatedAt 不得污染后续用例的共享 fixture
+    scenes: [{ ...scene }],
     episodes: [{ id: 'ep1', index: 1, title: '第一集', synopsis: '' }],
     shots: [],
     spendLog: [],
@@ -119,7 +120,7 @@ describe('isShotStale', () => {
     const shotA = makeShot({
       id: 'a',
       gridImage: { id: 'i', path: 'p', prompt: 'p', createdAt: 1 },
-      builtFrom: { scriptAt: 100 },
+      builtFrom: { scriptAt: 100, charAt: { c1: 100 }, sceneAt: { s1: 100 } },
     });
     const shotB = makeShot({ id: 'b', index: 2 });
     const project = makeProject({ shots: [shotA, shotB] });
@@ -128,11 +129,23 @@ describe('isShotStale', () => {
     expect(storyboardHealth(project, 'ep1').stale).toBe(1);
   });
 
+  it('出图后新增的角色/场景关联（快照无记录）→ stale（P2 修复语义）', () => {
+    const withImg = makeShot({
+      gridImage: { id: 'i', path: 'p', prompt: 'p', createdAt: 1 },
+      builtFrom: { scriptAt: 100 }, // 快照只有 script——c1 关联未锚定
+    });
+    expect(isShotStale(withImg, makeProject())).toBe(true);
+    const anchored = { ...withImg, builtFrom: { scriptAt: 100, charAt: { c1: 100 }, sceneAt: { s1: 100 } } };
+    const p = makeProject();
+    p.shots = [anchored];
+    expect(isShotStale(anchored, p)).toBe(false);
+  });
+
   it('分帧镜头（无 gridImage）同样参与 stale 推导与 withImage 统计', () => {
     const frameImg = { id: 'f', path: 'p', prompt: '', createdAt: 1 };
     const framed = makeShot({
       frames: [{ index: 1, image: frameImg, rolls: 0 }],
-      builtFrom: { scriptAt: 100 },
+      builtFrom: { scriptAt: 100, charAt: { c1: 100 }, sceneAt: { s1: 100 } },
     });
     const project = makeProject({ shots: [framed] });
     expect(isShotStale(framed, project)).toBe(false); // 快照一致
@@ -332,5 +345,64 @@ describe('批验证：durationSec + 剧本导出时间轴（用户反馈 #3）',
     const txt = buildScriptTxt(project, project.episodes[0], [s1, s2]);
     expect(txt).toContain('0:00 - 0:08');
     expect(txt).toContain('预估时长 0:20');
+  });
+});
+
+describe('buildLocalVideoPrompt v2（四帧时间轴 + 人物规格 + 首尾帧对齐）', () => {
+  const fourParts = ['起手描述', '进行描述', '高潮描述', '收势描述'];
+  const voiced = makeShot({ gridParts: [...fourParts], durationSec: 8 });
+
+  it('flf2v：picture 1/2 对齐声明 + 四段均分时间轴 + 首尾呼应 + 人物规格 + 量化运镜', () => {
+    const p = buildLocalVideoPrompt(voiced, [{ name: '小满', profile: '蓝发双马尾红瞳' }], { hasLastFrame: true });
+    expect(p).toContain('picture 1 matches the opening frame exactly at 0.0s');
+    expect(p).toContain('picture 2 matches the closing frame exactly at 8.0s');
+    expect(p).toContain('[0.0s-2.0s] 起手描述 — precisely match the opening state');
+    expect(p).toContain('[2.0s-4.0s] 进行描述');
+    expect(p).toContain('[6.0s-8.0s] 收势描述 — arrive exactly at the closing frame state');
+    expect(p).toContain('[Character spec] 小满（蓝发双马尾红瞳）');
+    expect(p).toContain('slow dolly-in'); // 「推」量化
+    expect(p).toContain('<d>[Chinese] 快跑！</d>');
+  });
+
+  it('i2v（无尾帧）：只锚首帧，无 picture 2；上一镜段末状态注入 Continuity', () => {
+    const p = buildLocalVideoPrompt(voiced, [], { prevEndState: '小满站在崖边回望' });
+    expect(p).toContain('opening frame at 0.0s must precisely match the reference picture');
+    expect(p).not.toContain('picture 2');
+    expect(p).toContain('[Continuity] opening continues naturally from the previous shot');
+    expect(p).toContain('小满站在崖边回望');
+    expect(p).not.toContain('[Character spec]');
+  });
+
+  it('A2 铁律：默认声音为正向描述，禁 no-background-music 否定式', () => {
+    const silent = makeShot({ gridParts: [...fourParts], sound: '', dialog: '' });
+    const p = buildLocalVideoPrompt(silent);
+    expect(p).toContain('[Audio] ambient sound and action sound only');
+    expect(p).not.toContain('no background music');
+    expect(p).not.toContain('<d>');
+  });
+
+  it('gridParts 不足 4 段时时间轴收缩；空时 fallback 动作起终点', () => {
+    const two = makeShot({ gridParts: ['起', '收'], durationSec: 6 });
+    const p2 = buildLocalVideoPrompt(two, [], { hasLastFrame: true });
+    expect(p2).toContain('[0.0s-3.0s] 起');
+    expect(p2).toContain('[3.0s-6.0s] 收');
+    const none = buildLocalVideoPrompt(makeShot({ gridParts: [] }));
+    expect(none).toContain('起身 → 奔跑');
+  });
+});
+
+describe('validateStoryboardIssues（A4 机检）', () => {
+  it('时长超带宽 / 格字数超 / 声音否定式 → 各出一条警告', () => {
+    const issues = validateStoryboardIssues([
+      makeShot({ index: 1, durationSec: 20, gridParts: ['短', 'x'.repeat(130)] }),
+      makeShot({ index: 2, sound: '环境音，无背景音乐' }),
+    ]);
+    expect(issues.some((i) => i.includes('S1 时长 20s'))).toBe(true);
+    expect(issues.some((i) => i.includes('第 2 格 130 字'))).toBe(true);
+    expect(issues.some((i) => i.includes('S2 声音字段含否定式'))).toBe(true);
+  });
+
+  it('正常镜头零警告', () => {
+    expect(validateStoryboardIssues([makeShot({ gridParts: ['x'.repeat(50)] })])).toEqual([]);
   });
 });

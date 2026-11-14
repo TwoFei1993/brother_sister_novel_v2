@@ -91,13 +91,14 @@ async function attachImage(
     if (kind === 'character') {
       const char = project.characters.find((c) => c.id === refId);
       if (!char) throw new HttpError(404, '角色不存在');
-      char.sheetImages.push(image);
+      // readJson 不走 zod（.default 不生效）——旧版数据缺数组字段时兜底，防已花钱的图归档失败（P2 修复）
+      (char.sheetImages ??= []).push(image);
       if (!char.refImageId) char.refImageId = image.id; // 首图自动设为主参考图
       char.updatedAt = now;
     } else if (kind === 'scene') {
       const scene = project.scenes.find((s) => s.id === refId);
       if (!scene) throw new HttpError(404, '场景不存在');
-      scene.images.push(image);
+      (scene.images ??= []).push(image);
       scene.updatedAt = now;
     } else {
       const shot = project.shots.find((s) => s.id === refId);

@@ -49,8 +49,10 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
   const entries = [...states.entries()];
   const done = entries.filter(([, s]) => s.status === 'done').length;
   const failed = entries.filter(([, s]) => s.status === 'fail').length;
+  const aborted = entries.filter(([, s]) => s.status === 'aborted').length;
   const total = entries.length;
-  const finished = total > 0 && done + failed >= total;
+  // P1 修复：aborted 计入完成——否则中止后 finished 永假，X 与完成按钮都失效，全屏遮罩锁死
+  const finished = total > 0 && done + failed + aborted >= total;
   /** 费用/耗时文案随通道：本地 ComfyUI 免费，云端按 0.12 元/张估算 */
   const isComfy = (useSettingsStore.getState().llmPrefs.imageProvider ?? 'comfy') === 'comfy';
 
@@ -65,7 +67,7 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
           <h3 className="text-sm font-semibold">⚡ {episodeTitle} 批量出图（分帧）</h3>
           <button
             type="button"
-            onClick={finished || phase === 'confirm' ? onClose : () => queue.abort()}
+            onClick={finished || phase === 'confirm' ? onClose : () => { queue.abort(); onClose(); }}
             className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-[hsl(var(--bg))]"
             aria-label="关闭"
           >

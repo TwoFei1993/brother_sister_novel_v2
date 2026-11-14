@@ -73,6 +73,69 @@ function nextChapterNo(body) {
   return max + 1;
 }
 
+/** 短剧拆镜头 mock（e2e 用）：system 含「短剧分镜师」→ 返回镜头 JSON 数组文本。
+ *  含 A5/B1 新字段（endState/hookType），驱动分镜 tab 断言。 */
+const STORYBOARD_JSON = JSON.stringify([
+  {
+    shotSize: '中景', cameraMove: '推', actionStart: '巷口转身', actionEnd: '背墙滑坐',
+    staging: '画面中央', dialog: '你到底隐瞒了什么！', durationSec: 6, sound: '雨声与雷声，脚步与呼吸声',
+    gridParts: [
+      '李薇在昏黄路灯下的湿滑巷口猛地转身，风衣下摆甩起水珠；她眉头紧锁张嘴嘶吼，握手机的手指节泛白；逆光剪影，霓虹在湿地面映出冷蓝反光。',
+      '李薇向前逼近一步，雨水顺着发梢滴落，手机屏幕的光照亮她泛红的眼眶；她咬紧下唇，胸口剧烈起伏。',
+      '李薇伸手抓住对方衣袖用力一扯，两人距离骤然拉近；雨水在两人之间溅起细碎水花，霓虹灯在积水中碎成光斑。',
+      '李薇背靠砖墙缓缓滑坐在地，手机滑落到积水里；她仰头靠墙，泪水和雨水混在一起，嘴唇微微颤抖。',
+    ],
+    endState: '李薇背靠砖墙坐在积水中，手机落在脚边屏幕朝上',
+    hookType: 'reversal',
+    characters: [], scene: '',
+  },
+  {
+    shotSize: '特写', cameraMove: '固定', actionStart: '手机亮屏', actionEnd: '瞳孔收缩',
+    staging: '画面中央偏下', dialog: '', durationSec: 4, sound: '只有雨滴敲击屏幕的声音',
+    gridParts: [
+      '积水中的手机屏幕亮起，一条新消息弹出，冷白光照亮水面涟漪。',
+      '特写李薇缓缓睁大的眼睛，瞳孔中映出屏幕冷光，睫毛上挂着水珠。',
+      '她的手指在积水里朝手机方向挪动，指尖触到手机边缘却停住。',
+      '瞳孔骤然收缩，水珠从睫毛坠落，画面定格在她骤变的神情上。',
+    ],
+    endState: '李薇瞳孔收缩的特写定格',
+    hookType: 'reveal',
+    characters: [], scene: '',
+  },
+]);
+
+/** 剧本拆解 mock（e2e 用）：system 含「短剧制片审核助手」→ 返回审核卡 JSON（含 1 集，驱动分镜 tab） */
+const BREAKDOWN_JSON = JSON.stringify({
+  summary: '记者李薇雨夜追查线索，逼问线人未果后从手机里发现更大秘密。',
+  eventChain: ['雨夜巷口逼问', '线人逃脱', '手机发现秘密'],
+  conflict: '真相追查与自身安全的对抗',
+  characterRelations: '李薇与线人是单线联系的调查依赖关系',
+  emotionPoints: ['压抑紧张', '震惊'],
+  visualActions: ['攥紧手机指节泛白', '猛地转身逼视'],
+  riskReplacements: [],
+  episodes: [{ index: 1, title: '雨夜真相', synopsis: '李薇巷口逼问线人，发现手机里的惊天秘密。' }],
+});
+
+/** 流水线 mock（e2e 用）：角色/场景提取 JSON——拆解 onDone 自动流水线三步全通的关键 */
+const CHARACTERS_JSON = JSON.stringify([
+  { name: '李薇', profile: '28岁女记者，身形利落。黑色齐肩发微湿贴颊，深棕色瞳，眉骨清晰下颌线紧；身高165cm；米色长风衣配深灰高领与直筒裤，黑色短靴；左腕旧机械表；气质警觉锋利。' },
+]);
+const SCENES_JSON = JSON.stringify([
+  { name: '雨夜巷口', spec: '狭窄双向巷道，湿滑沥青地面映霓虹；砖墙斑驳带锈迹铁门；顶光昏黄路灯逆光剪影，冷蓝霓虹辅光；深夜暴雨，冷暖对撞；关键道具：巷口垃圾桶、墙面小广告。' },
+]);
+
+/** 按 system prompt 分发：短剧全家桶（拆解/角色/场景/分镜）返回对应 JSON，其余返回章节文本 */
+function replyText(body) {
+  const msgs = Array.isArray(body?.messages) ? body.messages : [];
+  const sysOf = (m) => (String(m?.role) === 'system' ? String(m?.content ?? '') : '');
+  const sys = msgs.map(sysOf).join('\n');
+  if (sys.includes('短剧制片审核助手')) return BREAKDOWN_JSON;
+  if (sys.includes('短剧角色设计师')) return CHARACTERS_JSON;
+  if (sys.includes('短剧美术指导')) return SCENES_JSON;
+  if (sys.includes('短剧分镜师')) return STORYBOARD_JSON;
+  return chapterText(nextChapterNo(body));
+}
+
 const server = createServer((req, res) => {
   if (req.method === 'POST' && (req.url ?? '').includes('/chat/completions')) {
     calls += 1;
@@ -86,7 +149,7 @@ const server = createServer((req, res) => {
       } catch {
         /* 非 JSON body 跳过捕获 */
       }
-      const text = chapterText(nextChapterNo(parsedBody));
+      const text = replyText(parsedBody);
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',

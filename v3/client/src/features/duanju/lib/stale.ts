@@ -14,6 +14,8 @@ export function isShotStale(shot: DuanjuShot, project: DuanjuProject): boolean {
   for (const cid of shot.characterIds) {
     const c = project.characters.find((x) => x.id === cid);
     const was = bf.charAt?.[cid];
+    // P2 修复：关联存在但快照无记录（出图后新增的角色/场景关联）→ 图里没有它，视为待刷新
+    if (c && was === undefined) return true;
     if (c && was !== undefined && was !== c.updatedAt) return true;
     // 角色被删除 → 快照里有、现无 → 视为变更
     if (!c && bf.charAt?.[cid] !== undefined) return true;
@@ -21,6 +23,7 @@ export function isShotStale(shot: DuanjuShot, project: DuanjuProject): boolean {
   if (shot.sceneId) {
     const s = project.scenes.find((x) => x.id === shot.sceneId);
     const was = bf.sceneAt?.[shot.sceneId];
+    if (s && was === undefined) return true; // P2：出图后补设的场景关联
     if (was !== undefined) {
       if (!s) return true; // 场景被删除
       if (was !== s.updatedAt) return true;

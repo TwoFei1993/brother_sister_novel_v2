@@ -64,31 +64,35 @@ export default function ShotTools({
 
   return (
     <div>
-      {(localGenAvailable ? true : true) && (
-        <>
-          <button
-            type="button"
-            onClick={onLocalGen}
-            disabled={!!localGenState || !hasImage || !localGenAvailable}
-            className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-[hsl(var(--accent))]/60 bg-[hsl(var(--accent))]/10 text-xs font-medium text-[hsl(var(--accent))] transition-colors hover:bg-[hsl(var(--accent))]/20 disabled:opacity-40"
-            data-testid="shot-local-gen"
-            title="本地 ComfyUI + H3：分帧图作首帧，免费出片"
-          >
-            🎬 {localGenState ? `本地生成中（${localGenState.phase === 'uploading' ? '传帧图' : localGenState.phase === 'queued' ? '排队' : localGenState.phase === 'downloading' ? '取片' : '生成'} ${localGenState.elapsedSec}s）` : localGenAvailable ? '本地生成视频（免费·音画一体）' : '本地生成视频（需先配置引擎）'}
-          </button>
-          {localGenAvailable && (
-            <button
-              type="button"
-              onClick={onLocalGenTrial}
-              disabled={!!localGenState}
-              className="mt-1.5 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-[11px] text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
-              data-testid="shot-local-gen-trial"
-              title="抽卡试跑：3 秒快速验证动作/运镜/口型，满意再出完整终稿——终稿时长越长越贵，先小注试探"
-            >
-              ⚡ 试跑 3 秒（抽卡验证）
-            </button>
-          )}
-        </>
+      <button
+        type="button"
+        onClick={onLocalGen}
+        disabled={!!localGenState || !hasImage || !localGenAvailable}
+        className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-[hsl(var(--accent))]/60 bg-[hsl(var(--accent))]/10 text-xs font-medium text-[hsl(var(--accent))] transition-colors hover:bg-[hsl(var(--accent))]/20 disabled:opacity-40"
+        data-testid="shot-local-gen"
+        title="本地 ComfyUI + H3：分帧图作首帧，免费出片"
+      >
+        🎬 {localGenState ? `本地生成中（${localGenState.phase === 'uploading' ? '传帧图' : localGenState.phase === 'queued' ? '排队' : localGenState.phase === 'downloading' ? '取片' : '生成'} ${localGenState.elapsedSec}s）` : localGenAvailable ? '本地生成视频（免费·音画一体）' : '本地生成视频（需先配置引擎）'}
+      </button>
+      {localGenAvailable && (
+        <button
+          type="button"
+          onClick={onLocalGenTrial}
+          disabled={!!localGenState}
+          className="mt-1.5 flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border-soft))] text-[11px] text-[hsl(var(--fg-muted))] transition-colors hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] disabled:opacity-40"
+          data-testid="shot-local-gen-trial"
+          title="抽卡试跑：3 秒快速验证动作/运镜/口型，满意再出完整终稿——终稿时长越长越贵，先小注试探"
+        >
+          ⚡ 试跑 3 秒（抽卡验证）
+        </button>
+      )}
+      {localGenError && (
+        <div role="alert" className="mt-1.5 rounded-lg border border-[hsl(var(--danger))]/40 bg-[hsl(var(--danger))]/10 px-2.5 py-2 text-[11px] leading-4 text-[hsl(var(--danger))]">
+          <p>{localGenError}</p>
+          <p className="mt-1 opacity-80">
+            质量不稳时的升级三步：①改写镜头描述强化人物/场景锚点再试 → ②时长缩短到 6 秒内（不稳定镜头安全上限）→ ③把镜头拆成两个短镜头
+          </p>
+        </div>
       )}
       <button
         type="button"

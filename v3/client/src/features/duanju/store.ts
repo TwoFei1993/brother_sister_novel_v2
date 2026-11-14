@@ -3,6 +3,12 @@
  *
  * 与 useWorkStore 同哲学：持久化全在服务端，本地仅会话缓存；
  * patch 内部读当前 revision 提交，失败（409/网络）置 conflict 由调用方提示刷新。
+ *
+ * P1/P2 修复（2026-11-14 审查）：
+ * - 同 work 刷新不再清空 project——旧实现 load 先置 null，批量出图每张完成回调 load
+ *   会让 BatchBar/镜头卡整树卸载重挂（队列实例销毁、旧队列失控、可能重复扣费）；
+ * - 请求序号防乱序：并发 load 时旧响应不覆盖新数据（防后续 patch 全 409）；
+ * - 跨 work 切换仍清空（loadedWorkId 追踪），防串台。
  */
 import { create } from 'zustand';
 
@@ -32,15 +38,25 @@ const INITIAL = {
   conflict: false,
 };
 
+/** load 请求序号 + 已加载 workId（模块级，防并发乱序与跨 work 串台） */
+let loadSeq = 0;
+let loadedWorkId = '';
+
 export const useDuanjuStore = create<DuanjuState>()((set, get) => ({
   ...INITIAL,
   load: async (workId) => {
-    set({ ...INITIAL, loading: true });
+    const seq = ++loadSeq;
+    // 同 work 刷新保留现有 project（不闪空）；跨 work 切换清空防串台
+    if (loadedWorkId !== workId) set({ ...INITIAL, loading: true });
+    else set({ loading: true, loadError: false });
+    loadedWorkId = workId;
     try {
       const project = await getDuanjuProject(workId);
+      if (seq !== loadSeq) return; // 旧响应丢弃：并发 load 乱序不覆盖新数据
       set({ project, loading: false });
     } catch {
-      set({ ...INITIAL, loadError: true });
+      if (seq !== loadSeq) return;
+      set({ loadError: true, loading: false }); // 失败保留现有 project
     }
   },
   patch: async (workId, fields) => {
@@ -57,5 +73,9 @@ export const useDuanjuStore = create<DuanjuState>()((set, get) => ({
     }
   },
   clearConflict: () => set({ conflict: false }),
-  reset: () => set(INITIAL),
+  reset: () => {
+    loadSeq++;
+    loadedWorkId = '';
+    set(INITIAL);
+  },
 }));

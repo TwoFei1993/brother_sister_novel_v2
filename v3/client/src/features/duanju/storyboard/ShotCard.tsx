@@ -42,8 +42,9 @@ export default function ShotCard({ workId, shot }: Props) {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  if (!project) return null;
+  // hook 必须在条件 return 之前调用（React hooks 规则——P2 修复：条件 hook 在组件复用时会崩）
   const localGen = useLocalVideoGen(workId, shot);
+  if (!project) return null;
   const stale = isShotStale(shot, project);
   const hasImage = (shot.frames?.length ?? 0) > 0 || !!shot.gridImage;
   const staging = parseStaging(
@@ -57,7 +58,7 @@ export default function ShotCard({ workId, shot }: Props) {
   }
 
   async function copyVideoPrompt(): Promise<void> {
-    const { buildVideoPrompt } = await import('../lib/prompts/prompts-storyboard');
+    const { buildVideoPrompt } = await import('../lib/prompts/prompts-video');
     try {
       await navigator.clipboard.writeText(buildVideoPrompt(shot, project!));
       setCopied(true);
@@ -164,6 +165,24 @@ export default function ShotCard({ workId, shot }: Props) {
                 className={specInput}
               />
             </Field>
+            <Field label="钩子" className="w-[6.5rem]" >
+              <select
+                value={shot.hookType ?? ''}
+                onChange={(e) => void save({ hookType: e.target.value || undefined })}
+                title="叙事钩子——每 3 镜至少 1 个强钩子（reveal/reversal/callback）保完播"
+                className="h-8 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-1.5 text-[13px] outline-none"
+              >
+                <option value="">过场</option>
+                <option value="reveal">揭示</option>
+                <option value="reversal">反转</option>
+                <option value="callback">回收</option>
+                <option value="suspense">悬念</option>
+                <option value="chase">追逐</option>
+                <option value="visual-joke">视觉笑点</option>
+                <option value="tender">情感</option>
+                <option value="expression-beat">表情节拍</option>
+              </select>
+            </Field>
             <Field label="场景" className="min-w-[7rem] flex-1">
               <select
                 value={shot.sceneId ?? ''}
@@ -193,6 +212,16 @@ export default function ShotCard({ workId, shot }: Props) {
               <input
                 defaultValue={shot.actionEnd}
                 onBlur={(e) => e.target.value !== shot.actionEnd && void save({ actionEnd: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <div className="mt-2">
+            <Field label="段末状态（跨镜衔接锚点：谁+在哪+姿态+道具）">
+              <input
+                defaultValue={shot.endState ?? ''}
+                placeholder="例：李薇站在巷口路灯下侧身回望，手机还举在耳边"
+                onBlur={(e) => e.target.value !== (shot.endState ?? '') && void save({ endState: e.target.value || undefined })}
                 className={inputCls}
               />
             </Field>

@@ -81,10 +81,16 @@ export const DuanjuCharacterSchema = z.strictObject({
   name: z.string(),
   /** 身份/年龄/外观锚点（发色发型瞳色体型服装——一致性的事实源，prompt 组装必注入） */
   profile: z.string(),
+  /** 服装库（B5 轻量版）：服装描述清单（AI 生成或手加）；分帧 prompt 注入当前指定款。optional 兼容旧数据/旧客户端 */
+  outfits: z.array(z.string()).optional(),
+  /** 当前穿着的服装描述（outfits 之一或自由文本；分帧生图时注入） */
+  currentOutfit: z.string().optional(),
   /** 设定图候选（可多张重roll）；主参考图从其中选定 */
   sheetImages: z.array(StoredImageSchema),
-  /** 主参考图 id：生四宫格时由 server 读该图转 Data URL 作 subject_reference（spike S8 定案） */
+  /** 主参考图 id：分帧参考通道 image1（建议指向大头照锚点——脸最稳）；server 读该图转 Data URL */
   refImageId: idSchema.nullable().optional(),
+  /** 流水线创建时刻（307e617 起写入；schema 此前未认导致 PATCH 被 strictObject 拒——e2e 实跑暴露） */
+  createdAt: tsSchema.optional(),
   updatedAt: tsSchema,
 });
 export type DuanjuCharacter = z.infer<typeof DuanjuCharacterSchema>;
@@ -93,9 +99,13 @@ export const DuanjuSceneSchema = z.strictObject({
   id: idSchema,
   /** 允许空名草稿（生图门禁在客户端校验必填） */
   name: z.string(),
-  /** 空间结构/光影基调/关键道具/色彩（资料第 4 课） */
+  /** 空间结构/光影基调/关键道具/色彩（资料第 4 课）；含固定地标与屏幕相对位置（分镜锚定） */
   spec: z.string(),
+  /** 空间模式（B 场景升级）：interior-depth/lateral-run/one-side-depth/landmark-far/vertical-tower/nature-frame/enclosed */
+  mode: z.string().optional(),
   images: z.array(StoredImageSchema),
+  /** 流水线创建时刻（同 character 的 createdAt 补丁） */
+  createdAt: tsSchema.optional(),
   updatedAt: tsSchema,
 });
 export type DuanjuScene = z.infer<typeof DuanjuSceneSchema>;
@@ -158,6 +168,11 @@ export const DuanjuShotSchema = z.strictObject({
   sound: z.string(),
   /** 四格画面描述（分帧 prompt 的数据源；AI 拆镜头写入，可编辑改写后重roll） */
   gridParts: z.array(z.string()).max(4).default([]),
+  /** 段末状态（A5）：本镜最后一帧画面（谁+在哪+姿态+道具状态）——跨镜衔接锚点，喂给下镜 prompt */
+  endState: z.string().optional(),
+  /** 钩子类型（B1，受控词表）：reveal 揭示 / reversal 反转 / callback 回收 / suspense 悬念 /
+   *  chase 追逐 / visual-joke 视觉笑点 / tender 情感 / expression-beat 表情节拍；密度自检：每 3 镜至少 1 个强钩子 */
+  hookType: z.string().optional(),
   /** 旧整图 prompt（兼容 D7 时期数据；新流程走 gridParts + buildFramePrompt） */
   gridPrompt: z.string(),
   /** 预估时长秒（AI 拆镜头输出或手填；剧本导出时间轴 = 前序镜头累加） */
@@ -198,6 +213,8 @@ export const DuanjuProjectSchema = z.strictObject({
   script: DuanjuScriptSchema,
   reviewCards: ReviewCardsSchema,
   style: z.string().min(1),
+  /** 项目风格签名固定串（B3 视觉词汇表轻量版）：逐字注入每帧/每镜 prompt 尾部，不重写；空=不注入 */
+  visualSignature: z.string().optional(),
   targetEpisodes: z.number().int().positive(),
   protagonists: z.string(),
   characters: z.array(DuanjuCharacterSchema),
@@ -236,6 +253,7 @@ export const DuanjuPatchSchema = z.strictObject({
   script: DuanjuScriptSchema.optional(),
   reviewCards: ReviewCardsSchema.optional(),
   style: z.string().min(1).optional(),
+  visualSignature: z.string().optional(),
   targetEpisodes: z.number().int().positive().max(200).optional(),
   protagonists: z.string().optional(),
   characters: z.array(DuanjuCharacterSchema).optional(),

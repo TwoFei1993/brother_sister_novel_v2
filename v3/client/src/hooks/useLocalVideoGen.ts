@@ -15,11 +15,13 @@ import {
   pollVideoOnComfy,
   submitVideoOnComfy,
   loadComfyConfig,
+  optimizePromptOnComfy,
   upscaleVideoOnComfy,
   type SubmittedVideoTask,
   type VideoGenProgress,
 } from '../features/duanju/lib/comfy';
-import { buildLocalVideoPrompt } from '../features/duanju/lib/prompts/prompts-storyboard';
+import { buildLocalVideoPrompt } from '../features/duanju/lib/prompts/prompts-video';
+import { pickFramePath } from '../features/duanju/lib/framePick';
 import { useDuanjuStore } from '../features/duanju/store';
 import type { DuanjuShot } from '@shared/duanju';
 
@@ -101,6 +103,8 @@ export function useLocalVideoGen(workId: string, shot: DuanjuShot) {
       const suffix = slot.trial ? '-trial' : '';
       const file = new File([finalBlob], `S${shot.index}-local${suffix}.mp4`, { type: 'video/mp4' });
       await uploadDuanjuVideo(workId, shot.id, file);
+      // P2 修复：上传成功立即清槽再 load——load 期间组件重挂时 resumePending 不再读到残留槽二次上传
+      clearSlot(workId, shot.id);
       await useDuanjuStore.getState().load(workId);
     } catch (err) {
       clearSlot(workId, shot.id);
@@ -154,13 +158,31 @@ export function useLocalVideoGen(workId: string, shot: DuanjuShot) {
     busyRef.current = true;
     const trial = opts?.trial === true;
     try {
-      // 挑帧（frameIdx 指定帧做首帧，单帧 i2v）；未指定时 ≥2 帧自动首尾帧控制（F1 起势 → F4 落势）
+      // 挑帧（frameIdx=帧号-1，指定帧做首帧，单帧 i2v）；未指定时 ≥2 帧自动首尾帧控制（F1 起势 → F4 落势）
+      // 帧不全时按下标取会错位（F1/F3/F4 有图时 idx2=F4），必须按帧号查
       const pickIdx = opts?.frameIdx !== undefined ? opts.frameIdx : null;
-      const firstPath = pickIdx !== null ? (frames[pickIdx] ?? framePath) : framePath;
+      const firstPath = pickIdx !== null ? (pickFramePath(shot, pickIdx) ?? framePath) : framePath;
       const frameBlob = firstPath ? await fetchImageBlob(workId, firstPath) : null;
       const lastFrameBlob = pickIdx === null && frames.length >= 2 ? await fetchImageBlob(workId, frames[frames.length - 1]!) : null;
-      const prompt = buildLocalVideoPrompt(shot);
+      // v2 提示词：出场角色档案（人物规格交叉验证）+ 尾帧模式声明 + 上一镜段末状态（跨镜衔接）
+      const project = useDuanjuStore.getState().project;
+      const chars = (shot.characterIds ?? [])
+        .map((cid) => project?.characters.find((c) => c.id === cid))
+        .filter((c): c is NonNullable<typeof c> => !!c)
+        .map((c) => ({ name: c.name, profile: c.profile }));
+      const prev = project?.shots.find((s) => s.episodeId === shot.episodeId && s.index === shot.index - 1);
+      let prompt = buildLocalVideoPrompt(shot, chars, {
+        hasLastFrame: lastFrameBlob !== null,
+        prevEndState: prev?.endState,
+      });
       const durationSec = trial ? 3 : (shot.durationSec ?? 5);
+      // C1：AICG3D 提示词优化器（设置页开启后生效；失败静默回退模板版）
+      if (cfg.promptOptimizer) {
+        prompt = await optimizePromptOnComfy(cfg, prompt, {
+          duration: durationSec,
+          task: lastFrameBlob ? 'fl2va' : 'i2va',
+        });
+      }
       // 阶段一：提交——prompt_id 固化进 localStorage，锁屏/杀进程不丢（ComfyUI 侧继续执行）
       const task = await submitVideoOnComfy(
         cfg,
