@@ -77,7 +77,11 @@ describe('RootPage 顶栏退出（D5）', () => {
     expect(store.config).toBeNull(); // 会话内存态清空
     expect(store.llmPrefs.model).toBeTruthy(); // 设备偏好保留（登出语义=清会话不清偏好）
     expect(document.querySelector('[data-testid="login-page"]')).not.toBeNull(); // 已跳 /login
-    expect(fetch).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    // objectContaining：apiFetch 7ce65f5 起默认注入 signal（10min 兜底超时）——断言语义字段而非冻结参数全集
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/auth/logout',
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    );
   });
 });
 
