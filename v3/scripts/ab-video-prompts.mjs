@@ -11,7 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BASE = process.env.COMFY_URL ?? 'http://127.0.0.1:8188';
-const OUT_DIR = 'logs/ab-test';
+const OUT_DIR = 'D:/短剧生成/测试/ab-视频提示词v1v2对比';
 const SEED = 20261114;
 
 // ---------- 模板提取（从 client 内置模板文件抽，保证与 App 通道一致） ----------

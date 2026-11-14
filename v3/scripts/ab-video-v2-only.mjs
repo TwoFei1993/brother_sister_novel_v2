@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const BASE = 'http://127.0.0.1:8188';
-const DIR = resolve('logs/ab-test');
+const DIR = 'D:/短剧生成/测试/ab-视频提示词v1v2对比';
 const SEED = 20261114;
 
 const src = readFileSync(new URL('../client/src/features/duanju/lib/comfyDefaultWorkflow.ts', import.meta.url), 'utf8');
