@@ -15,6 +15,7 @@ import { buildStoryboardMessages, parseStoryboard } from '../lib/prompts/prompts
 import { storyboardHealth } from '../lib/stale';
 import ShotCard from './ShotCard';
 import BatchBar from './BatchBar';
+import VideoBatchBar from './VideoBatchBar';
 
 /** 提交拆镜头时记录目标集（onDone/恢复路径定位 patch 目标；切出回来仍可定位） */
 const splitEpKey = (workId: string): string => `v3-storyboard-split-ep-${workId}`;
@@ -24,6 +25,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
   const [epIndex, setEpIndex] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [videoBatchOpen, setVideoBatchOpen] = useState(false);
 
   const episode = useMemo(
     () => project?.episodes.find((e) => e.index === epIndex) ?? null,
@@ -176,6 +178,17 @@ export default function StoryboardPane({ workId }: { workId: string }) {
             ⚡ 整集批量出图
           </button>
         )}
+        {shots.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setVideoBatchOpen(true)}
+            className="flex h-9 items-center gap-1 rounded-lg border border-[hsl(var(--accent))]/60 bg-[hsl(var(--accent))]/10 px-3 text-xs font-medium text-[hsl(var(--accent))]"
+            data-testid="storyboard-video-batch"
+            title="只补缺失镜头：串行视频+超分+归档全链，断点续跑，切出安全"
+          >
+            🎬 整集出片
+          </button>
+        )}
         <span className="text-xs text-[hsl(var(--fg-muted))]">
           {health.total} 镜 · {health.withImage} 已出图
           {health.stale > 0 && (
@@ -228,6 +241,14 @@ export default function StoryboardPane({ workId }: { workId: string }) {
           episodeTitle={`第 ${episode.index} 集《${episode.title}》`}
           shots={shots}
           onClose={() => setBatchOpen(false)}
+        />
+      )}
+      {videoBatchOpen && episode && (
+        <VideoBatchBar
+          workId={workId}
+          episodeTitle={`第 ${episode.index} 集《${episode.title}》`}
+          shots={shots}
+          onClose={() => setVideoBatchOpen(false)}
         />
       )}
     </div>
