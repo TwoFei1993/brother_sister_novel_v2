@@ -335,6 +335,44 @@ export default function ShotCard({ workId, shot }: Props) {
             </select>
           </div>
 
+          {/* 关键道具 chips + 增选（P2-12：文字锚点注入帧/视频 prompt） */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {(shot.propIds ?? []).map((pid) => (
+              <button
+                key={pid}
+                type="button"
+                onClick={() => void save({ propIds: (shot.propIds ?? []).filter((x) => x !== pid) })}
+                title="点击移除"
+                className="h-7 rounded-full bg-amber-500/15 px-2.5 text-xs text-amber-600"
+              >
+                🎭 {project.props?.find((p) => p.id === pid)?.name ?? '?'} ✕
+              </button>
+            ))}
+            <select
+              multiple={false}
+              value=""
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const cur = shot.propIds ?? [];
+                const has = cur.includes(e.target.value);
+                void save({
+                  propIds: has ? cur.filter((x) => x !== e.target.value) : [...cur, e.target.value],
+                });
+              }}
+              aria-label="增选关键道具"
+              className="h-7 rounded-full border border-dashed border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs text-[hsl(var(--fg-muted))] outline-none"
+            >
+              <option value="">+ 关键道具…</option>
+              {(project.props ?? [])
+                .filter((p) => !(shot.propIds ?? []).includes(p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
           {/* 生图 prompt 折叠 */}
           <details className="mt-2 text-xs text-[hsl(var(--fg-muted))]">
             <summary className="cursor-pointer select-none">提示词（分帧 prompt 数据源，可改后重roll）</summary>

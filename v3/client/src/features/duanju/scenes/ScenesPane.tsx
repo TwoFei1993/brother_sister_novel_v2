@@ -8,6 +8,7 @@ import { Plus, Trash2, ImageIcon, WandSparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { useDuanjuStore } from '../store';
+import PropsSection from './PropsSection';
 import { generateDuanjuImage, duanjuFileUrl } from '../../../api/duanju';
 import { sceneImagePrompt } from '../lib/prompts/prompts-scene';
 import { buildSceneExtractMessages, parseSceneExtract, rebuildSceneSpecMessages } from '../lib/sceneExtract';
@@ -279,6 +280,8 @@ export default function ScenesPane({ workId }: { workId: string }) {
           </div>
         ))}
       </div>
+
+      <PropsSection workId={workId} />
     </div>
   );
 }

@@ -105,6 +105,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
       durationSec: 8,
       frames: [],
       characterIds: [],
+      propIds: [],
       sceneId: null,
       updatedAt: Date.now(),
     };
@@ -126,6 +127,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
         project!.script.text,
         project!.characters,
         project!.scenes,
+        project!.props,
       ),
       thinking: false,
       params: { max_tokens: 32000 },

@@ -75,6 +75,26 @@ export const EMPTY_REVIEW_CARDS: ReviewCards = {
 
 // ---------- 角色 / 场景（D6-D7） ----------
 
+/** 角色状态变化（drama-skills P2-11）：随集演进的外观/携带状态（血迹/湿衣/绷带/新携带物） */
+export const CharacterStateSchema = z.strictObject({
+  /** 从第几集起生效（缺省 = 全程） */
+  fromEpisode: z.number().int().positive().optional(),
+  /** 状态描述（可观察外观事实，非剧情复述） */
+  note: z.string().min(1),
+});
+export type CharacterState = z.infer<typeof CharacterStateSchema>;
+
+/** 道具资产（drama-skills P2-12）：跨镜一致性靠文字锚点注入（一期无图） */
+export const DuanjuPropSchema = z.strictObject({
+  id: idSchema,
+  name: z.string(),
+  /** 颜色/材质/形制/磨损等外观锚点（生图一致性事实源） */
+  spec: z.string(),
+  images: z.array(StoredImageSchema),
+  updatedAt: tsSchema,
+});
+export type DuanjuProp = z.infer<typeof DuanjuPropSchema>;
+
 export const DuanjuCharacterSchema = z.strictObject({
   id: idSchema,
   /** 允许空名草稿（生图门禁在客户端校验必填） */
@@ -89,6 +109,8 @@ export const DuanjuCharacterSchema = z.strictObject({
   outfitImages: z.array(StoredImageSchema).optional(),
   /** 连续性锁面（drama-skills 对照 P1-8）：跨镜不变外观的最小英文名词短语，逐字注入帧/视频 prompt——字符串级一致，杜绝 LLM 转述漂移 */
   lockPhrase: z.string().optional(),
+  /** 状态变化时间线（drama-skills P2-11）：按集注入生效中的状态（如「第3集起右手缠绷带」） */
+  states: z.array(CharacterStateSchema).optional(),
   /** 设定图候选（可多张重roll）；主参考图从其中选定 */
   sheetImages: z.array(StoredImageSchema),
   /** 主参考图 id：分帧参考通道 image1（建议指向大头照锚点——脸最稳）；server 读该图转 Data URL */
@@ -195,6 +217,8 @@ export const DuanjuShotSchema = z.strictObject({
     .optional(),
   /** 本镜头出场角色 id */
   characterIds: z.array(z.string()).default([]),
+  /** 本镜头关键道具 id（drama-skills P2-12：文字锚点注入帧/视频 prompt） */
+  propIds: z.array(z.string()).default([]),
   /** 本镜头场景 id */
   sceneId: idSchema.nullable().optional(),
   builtFrom: BuiltFromSchema.optional(),
@@ -227,6 +251,7 @@ export const DuanjuProjectSchema = z.strictObject({
   protagonists: z.string(),
   characters: z.array(DuanjuCharacterSchema),
   scenes: z.array(DuanjuSceneSchema),
+  props: z.array(DuanjuPropSchema).default([]),
   episodes: z.array(DuanjuEpisodeSchema),
   shots: z.array(DuanjuShotSchema),
   /** 生图记账（server 追加，cap 5000；旧数据无此字段 → 代码侧 ?? [] 防御） */
@@ -247,6 +272,7 @@ export function newDuanjuProject(init: DuanjuInit, now: number): DuanjuProject {
     protagonists: init.protagonists,
     characters: [],
     scenes: [],
+    props: [],
     episodes: [],
     shots: [],
     spendLog: [],
@@ -266,6 +292,7 @@ export const DuanjuPatchSchema = z.strictObject({
   protagonists: z.string().optional(),
   characters: z.array(DuanjuCharacterSchema).optional(),
   scenes: z.array(DuanjuSceneSchema).optional(),
+  props: z.array(DuanjuPropSchema).optional(),
   episodes: z.array(DuanjuEpisodeSchema).optional(),
   shots: z.array(DuanjuShotSchema).optional(),
 });

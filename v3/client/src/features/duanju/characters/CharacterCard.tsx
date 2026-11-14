@@ -9,6 +9,7 @@ import { useRef, useState } from 'react';
 import { ImageIcon, Star, Trash2, WandSparkles } from 'lucide-react';
 
 import { useDuanjuStore } from '../store';
+import CharacterStates from './CharacterStates';
 import { useSettingsStore } from '../../../stores/settings';
 import { generateDuanjuImage, uploadDuanjuImageFile, duanjuFileUrl, imageProviderForApi } from '../../../api/duanju';
 import { anchorPortraitPrompt, characterSheetPrompt } from '../lib/prompts/prompts-image';
@@ -236,6 +237,8 @@ export default function CharacterCard({ workId, character }: Props) {
         aria-label="连续性锁面"
         data-testid="char-lock-phrase"
       />
+
+      <CharacterStates workId={workId} character={character} />
 
       {/* 服装库（B5 闭环）：AI 生成清单+白底商品图 → 点选一套设当前穿着 */}
       <details className="mt-2">

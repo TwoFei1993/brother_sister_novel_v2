@@ -4,7 +4,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { isShotStale, storyboardHealth } from '../stale';
-import { buildFramePrompt, buildGridPrompt, parseStoryboard, validateStoryboardIssues } from '../prompts/prompts-storyboard';
+import {
+  activeStates,
+  buildFramePrompt,
+  buildGridPrompt,
+  parseStoryboard,
+  propAnchorLine,
+  validateStoryboardIssues,
+} from '../prompts/prompts-storyboard';
 import { buildLocalVideoPrompt, buildVideoPrompt } from '../prompts/prompts-video';
 import { mergeEpisodes, parseBreakdown } from '../prompts/prompts-script';
 import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
@@ -40,6 +47,7 @@ function makeProject(overrides: Partial<DuanjuProject> = {}): DuanjuProject {
     protagonists: '',
     characters: [{ ...char }], // 克隆防突变泄漏：测试改 updatedAt 不得污染后续用例的共享 fixture
     scenes: [{ ...scene }],
+    props: [],
     episodes: [{ id: 'ep1', index: 1, title: '第一集', synopsis: '' }],
     shots: [],
     spendLog: [],
@@ -64,6 +72,7 @@ function makeShot(overrides: Partial<DuanjuShot> = {}): DuanjuShot {
     gridPrompt: '',
     frames: [],
     characterIds: ['c1'],
+    propIds: [],
     sceneId: 's1',
     updatedAt: NOW,
     ...overrides,
@@ -442,6 +451,45 @@ describe('buildLocalVideoPrompt v3（drama-skills H3 方言六项）', () => {
     ]);
     expect(issues.some((i) => i.includes('S1 台词'))).toBe(true);
     expect(issues.some((i) => i.includes('S2 有台词但未标说话人'))).toBe(true);
+  });
+});
+
+describe('P2：状态时间线 + 道具锚点（drama-skills 对照）', () => {
+  it('activeStates：fromEpisode 过滤——未到集不注入、全程状态恒注入', () => {
+    const char = { states: [{ note: '右手缠绷带', fromEpisode: 3 }, { note: '左耳耳环' }] };
+    expect(activeStates(char, 2)).toEqual(['左耳耳环']);
+    expect(activeStates(char, 3)).toEqual(['右手缠绷带', '左耳耳环']);
+  });
+
+  it('propAnchorLine：关联道具生成注入行；无关联空串', () => {
+    const proj = makeProject({ props: [{ id: 'p1', name: '旧怀表', spec: '黄铜壳、链绳磨白发灰、表盘右上角裂纹', images: [], updatedAt: 1 }] });
+    const withProp = { ...makeShot(), propIds: ['p1'] };
+    const line = propAnchorLine(withProp, proj);
+    expect(line).toContain('旧怀表');
+    expect(line).toContain('黄铜壳');
+    expect(line).toContain('逐字保持一致');
+    expect(propAnchorLine(makeShot(), proj)).toBe('');
+  });
+
+  it('buildFramePrompt：状态行 + 道具行注入（第 3 集 shot 命中 fromEpisode=3 状态）', () => {
+    const proj = makeProject({
+      episodes: [{ id: 'ep3', index: 3, title: '三', synopsis: '' }],
+      characters: [{ ...makeProject().characters[0], id: 'c9', states: [{ note: '右手掌沾血', fromEpisode: 2 }] }],
+      props: [{ id: 'p1', name: '银色翻盖手机', spec: '右下角磕痕', images: [], updatedAt: 1 }],
+    });
+    const shot = { ...makeShot(), episodeId: 'ep3', characterIds: ['c9'], propIds: ['p1'] };
+    const p = buildFramePrompt(shot, 1, proj);
+    expect(p).toContain('【当前状态】');
+    expect(p).toContain('右手掌沾血');
+    expect(p).toContain('银色翻盖手机');
+    expect(p).toContain('右下角磕痕');
+  });
+
+  it('parseStoryboard：道具名映射 propIds；未知名忽略', () => {
+    const raw = '[{"shotSize":"中景","gridParts":["a"],"characters":[],"scene":"","props":["旧怀表","不存在的"]}]';
+    const proj = makeProject({ props: [{ id: 'p1', name: '旧怀表', spec: 'x', images: [], updatedAt: 1 }] });
+    const shots = parseStoryboard(raw, 'ep1', proj);
+    expect(shots[0].propIds).toEqual(['p1']);
   });
 });
 

@@ -18,7 +18,7 @@ type TabId = 'script' | 'characters' | 'scenes' | 'storyboard' | 'export';
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'script', label: '剧本' },
   { id: 'characters', label: '角色' },
-  { id: 'scenes', label: '场景' },
+  { id: 'scenes', label: '场景/道具' },
   { id: 'storyboard', label: '分镜' },
   { id: 'export', label: '出图/导出' },
 ];

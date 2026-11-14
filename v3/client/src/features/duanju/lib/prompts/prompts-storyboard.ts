@@ -8,7 +8,7 @@
  * 视频提示词在 prompts-video.ts（即梦版 + 本地 H3 v2）
  */
 import type { GenerateMessage } from '../../../../api/llm';
-import type { DuanjuCharacter, DuanjuProject, DuanjuScene, DuanjuShot } from '@shared/duanju';
+import type { DuanjuCharacter, DuanjuProject, DuanjuProp, DuanjuScene, DuanjuShot } from '@shared/duanju';
 import { stylePrefix } from './prompts-image';
 import { extractJsonArray } from '../json-extract';
 
@@ -23,7 +23,7 @@ const STORYBOARD_SYSTEM = `你是短剧分镜师。把给定某集剧本拆成�
  "gridParts":["第1格画面","第2格画面","第3格画面","第4格画面"],
  "endState":"本镜最后一帧画面(谁+在哪+姿态+道具状态)",
  "hookType":"钩子类型(reveal揭示/reversal反转/callback回收/suspense悬念/chase追逐/visual-joke视觉笑点/tender情感/expression-beat表情节拍,纯过场留空串)",
- "characters":["出场角色名(须来自角色清单)"],"scene":"场景名(须来自场景清单,可空)"}
+ "characters":["出场角色名(须来自角色清单)"],"scene":"场景名(须来自场景清单,可空)","props":["关键道具名(须来自道具清单,信物/凶器/手机等跨镜道具,可空)"]}
 要求：
 1. durationSec 按镜头节奏估：动作密集镜头 5-8 秒、特写/反应镜头 4-5 秒、单镜不超过 15 秒；
    一集 6-12 镜头；重要角色同框不超过 3 人；动作起终点可视化（写具体动作而非心理描写）。
@@ -51,14 +51,16 @@ export function buildStoryboardMessages(
   scriptText: string,
   characters: DuanjuCharacter[],
   scenes: DuanjuScene[],
+  props?: Array<Pick<DuanjuProp, 'name' | 'spec'>>,
 ): GenerateMessage[] {
   const charList = characters.map((c) => `- ${c.name}：${c.profile}`).join('\n') || '（无角色，按剧本人名）';
   const sceneList = scenes.map((s) => `- ${s.name}：${s.spec}`).join('\n') || '（无场景清单，按剧本场景自由命名）';
+  const propList = (props ?? []).map((p) => `- ${p.name}：${p.spec}`).join('\n') || '（无道具清单）';
   return [
     { role: 'system', content: STORYBOARD_SYSTEM },
     {
       role: 'user',
-      content: `本集梗概：${episodeSynopsis}\n\n角色清单：\n${charList}\n\n场景清单：\n${sceneList}\n\n剧本原文：\n${scriptText}`,
+      content: `本集梗概：${episodeSynopsis}\n\n角色清单：\n${charList}\n\n场景清单：\n${sceneList}\n\n道具清单：\n${propList}\n\n剧本原文：\n${scriptText}`,
     },
   ];
 }
@@ -79,6 +81,7 @@ interface RawShot {
   hookType?: unknown;
   characters?: unknown;
   scene?: unknown;
+  props?: unknown;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -103,6 +106,12 @@ export function parseStoryboard(
         .filter((v): v is string => !!v);
       const sceneName = str(x.scene);
       const scene = sceneName ? project.scenes.find((s) => s.name === sceneName) : undefined;
+      const propNames = Array.isArray(x.props)
+        ? x.props.filter((n): n is string => typeof n === 'string')
+        : [];
+      const propIds = propNames
+        .map((n) => project.props?.find((p) => p.name === n)?.id)
+        .filter((v): v is string => !!v);
       const parts = Array.isArray(x.gridParts)
         ? x.gridParts.filter((p): p is string => typeof p === 'string').slice(0, 4)
         : [];
@@ -125,6 +134,7 @@ export function parseStoryboard(
         gridPrompt: '',
         frames: [],
         characterIds,
+        propIds,
         sceneId: scene?.id ?? null,
         updatedAt: base,
       };
@@ -255,6 +265,30 @@ export function frameBodyRefImage(shot: DuanjuShot, project: DuanjuProject): str
   return undefined;
 }
 
+/** 角色在指定集生效中的状态清单（P2-11：fromEpisode 缺省=全程；按集过滤注入） */
+export function activeStates(
+  char: Pick<DuanjuCharacter, 'states'>,
+  episodeIndex: number,
+): string[] {
+  return (char.states ?? [])
+    .filter((s) => s.fromEpisode === undefined || s.fromEpisode <= episodeIndex)
+    .map((s) => s.note);
+}
+
+/** 镜头关联道具的「名（spec）」注入行（P2-12：文字锚点保跨镜道具一致） */
+export function propAnchorLine(shot: Pick<DuanjuShot, 'propIds'>, project: DuanjuProject): string {
+  const props = (shot.propIds ?? [])
+    .map((pid) => project.props?.find((p) => p.id === pid))
+    .filter((p): p is NonNullable<typeof p> => !!p);
+  if (props.length === 0) return '';
+  return `【关键道具】${props.map((p) => `${p.name}（${p.spec}）`).join('；')}——形制颜色材质逐字保持一致，不替换不变形。`;
+}
+
+/** 镜头集号（状态过滤用）：episodeId → index，找不到回退 1 */
+export function episodeIndexOf(shot: Pick<DuanjuShot, 'episodeId'>, project: DuanjuProject): number {
+  return project.episodes.find((e) => e.id === shot.episodeId)?.index ?? 1;
+}
+
 /** 单帧生图 prompt v2（2026-11-14 生图对比学习升级）：
  *  普通模式增「未完成瞬间 + 恰好 N 名 + 相邻帧机位微变化 + 光线继承 + 环境动态」；
  *  refMode 改动词式第一句（改图模型只听第一句）+ 逐项保留清单 + 手部细节句（工作流 2026.11.4 实测句式） */
@@ -268,6 +302,11 @@ export function buildFramePrompt(
     .map((cid) => project.characters.find((c) => c.id === cid))
     .filter((c): c is DuanjuCharacter => !!c);
   const locks = chars.map((c) => c.lockPhrase?.trim()).filter((v): v is string => !!v);
+  const epIdx = episodeIndexOf(shot, project);
+  const stateLine = chars
+    .flatMap((c) => activeStates(c, epIdx).map((n) => `${c.name}：${n}`))
+    .join('；');
+  const propLine = propAnchorLine(shot, project);
   const scene = shot.sceneId ? project.scenes.find((s) => s.id === shot.sceneId) : undefined;
   const parts = shot.gridParts?.length ? shot.gridParts : DEFAULT_PARTS;
   const desc = parts[frameIndex - 1] ?? `第 ${frameIndex} 帧画面`;
@@ -295,8 +334,10 @@ export function buildFramePrompt(
         ? `【人物保持】${chars.map((c) => c.name).join('、')}的长相五官与发型${opts.triRef ? `（严格依${faceImg}）` : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
         : '',
       '【手部细节】若画面含手部：双手与手指结构自然完整，袖口与手腕自然衔接。',
+      propLine,
       locks.length > 0 ? `【连续性锁】${locks.join('; ')} —— 逐字保持，一项不改` : '',
       shot.onScreenText?.trim() ? `【画内文字】画面中逐字显示：「${shot.onScreenText.trim()}」——文字清晰可读、无错字、无多余文字` : '',
+      stateLine ? `【当前状态】${stateLine}` : '',
       scene ? `【场景保持】空间布局、主光方向与色温、关键道具及其位置与${sceneImg}保持一致。` : '',
       `【机位指令】${composition}——不沿用参考图的取景角度。`,
       `${stylePrefix(project.style)}，${shot.staging}。画质要求：细节丰富，光影真实。`,
@@ -311,11 +352,13 @@ export function buildFramePrompt(
     `${stylePrefix(project.style)}，电影感单帧分镜图（同一镜头连续动作第 ${frameIndex}/4 帧）`,
     `【画面主体】${desc}——只画这一个动作瞬间，画面停在「下一秒即将发生变化」的时刻，不画成动作已完全结束的定格${/转身|回身|转过头|出画/.test(desc) ? '；若动作为转身/出画，画转身进行到一半的侧身姿态（不画转身完成后的背面）' : ''}`,
     charsLine,
+    stateLine ? `【当前状态】${stateLine}` : '',
     scene ? `【场景与光线】${scene.name}（${scene.spec}）——按场景的光影基调与时间氛围渲染，人物与环境光交互自然` : '',
     `【镜头语言】${composition}（${shot.shotSize}）；人物位置：${shot.staging}；本帧机位相对相邻帧轻微变化（推进/偏移/景别收紧），相邻两帧不得完全同构图`,
     locks.length > 0 ? `【连续性锁】${locks.join('; ')} —— 逐字保持，一项不改` : '',
     shot.onScreenText?.trim() ? `【画内文字】画面中${/手机|屏幕|聊天|短信/.test(shot.onScreenText) ? '的手机/电子屏幕' : '的实体表面'}逐字显示：「${shot.onScreenText.trim()}」——文字清晰可读、无错字、无多余文字` : '',
     '【环境动态】把场景中 1-2 个自然运动元素画进画面：风吹发丝与衣摆、水面波纹、雾气流动、光斑变化、雨丝、蒸汽。',
+    propLine,
     '【光线继承】主光方向、色温、明暗对比与同镜头其他帧保持一致。',
     '画质要求：细节丰富，光影真实，构图稳定横平竖直。',
   ]

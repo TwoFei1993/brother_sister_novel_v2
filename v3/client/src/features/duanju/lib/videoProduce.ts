@@ -18,6 +18,7 @@ import {
   type VideoQualityPreset,
 } from './comfy';
 import { buildLocalVideoPrompt, styleGuardOf } from './prompts/prompts-video';
+import { activeStates, episodeIndexOf, propAnchorLine } from './prompts/prompts-storyboard';
 import { pickFramePath } from './framePick';
 import { useDuanjuStore } from '../store';
 import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
@@ -119,6 +120,16 @@ export async function produceShotVideo(
     textToVideo: frameBlob === null,
     styleGuard: styleGuardOf(project.style),
   });
+  // P2 注入：按集生效的角色状态 + 关键道具文字锚点（与帧 prompt 同源）
+  const epIdx = episodeIndexOf(shot, project);
+  const stateLine = (shot.characterIds ?? [])
+    .map((cid) => project.characters.find((c) => c.id === cid))
+    .filter((c): c is NonNullable<typeof c> => !!c)
+    .flatMap((c) => activeStates(c, epIdx).map((n) => `${c.name}: ${n}`))
+    .join('; ');
+  if (stateLine) prompt += `\n[Active states] ${stateLine}`;
+  const propLine = propAnchorLine(shot, project);
+  if (propLine) prompt += `\n${propLine}`;
   const durationSec = trial ? 3 : (shot.durationSec ?? 5);
   if (cfg.promptOptimizer) {
     // 快赢 1+2：缓存复用 + 来源可见（优化器失效不再静默——用户能发现该去修插件配置）
