@@ -257,6 +257,51 @@ describe('buildFramePrompt 状态/道具/画内文字注入', () => {
     expect(sign).not.toContain('手机');
   });
 
+  describe('参考档提示词：防贴头像 / 三人第三者文字锚 / 朝向视线（2026-11-17 仙侠剧实测修复）', () => {
+    const three = makeProject({
+      characters: [
+        { ...baseChar('c1', '甲'), profile: '甲的档案' },
+        { ...baseChar('c2', '乙'), profile: '乙的档案' },
+        { ...baseChar('c3', '丙'), profile: '丙的档案：白衣青绿腰带' },
+      ],
+    });
+    const duoOpts = { refMode: true, duoRef: { aName: '甲', bName: '乙' } } as const;
+
+    it('双人档不再写“脸部特写”（该字样让 2511 把参考头像贴进画面），并声明参考图只取长相发型服装', () => {
+      const p = buildFramePrompt(makeShot({ characterIds: ['c1', 'c2'] }), 1, three, duoOpts);
+      expect(p).not.toContain('脸部特写');
+      expect(p).toContain('图1是甲的人物参考');
+      expect(p).toContain('图2是乙的人物参考');
+      expect(p).toContain('不要把参考图里的头像、特写或原有姿势画进画面');
+    });
+
+    it('三人镜头：第三人没有参考槽 → 单列文字锚，且不在“人物保持”里点名', () => {
+      const p = buildFramePrompt(makeShot({ characterIds: ['c1', 'c2', 'c3'] }), 1, three, duoOpts);
+      expect(p).toContain('【无参考图的角色】丙（丙的档案：白衣青绿腰带）');
+      expect(p).toContain('不要与参考图中的人物混搭');
+      const keep = p.split('\n').find((l) => l.startsWith('【人物保持】')) ?? '';
+      expect(keep).toContain('甲');
+      expect(keep).toContain('乙');
+      expect(keep).not.toContain('丙');
+    });
+
+    it('双人镜头没有“无参考图的角色”行；单人 ref 档只绑定 1 位', () => {
+      const duo = buildFramePrompt(makeShot({ characterIds: ['c1', 'c2'] }), 1, three, duoOpts);
+      expect(duo).not.toContain('【无参考图的角色】');
+      const solo = buildFramePrompt(makeShot({ characterIds: ['c1', 'c2'] }), 1, three, { refMode: true });
+      expect(solo).toContain('【无参考图的角色】乙（乙的档案）');
+    });
+
+    it('有人物时写朝向与视线行（不看镜头为默认），纯场景帧不写', () => {
+      const p = buildFramePrompt(makeShot({ characterIds: ['c1'] }), 1, three, { refMode: true });
+      expect(p).toContain('【朝向与视线】');
+      expect(p).toContain('不看镜头');
+      const empty = buildFramePrompt(makeShot({ characterIds: [] }), 1, three, { refMode: true });
+      expect(empty).not.toContain('【朝向与视线】');
+      expect(empty).not.toContain('【参考图用法】');
+    });
+  });
+
   it('refMode + triRef 全量组装：状态/道具/锁面/画内文字共存', () => {
     const p = buildFramePrompt(
       makeShot({ episodeId: 'ep5', characterIds: ['c1'], propIds: ['p1'], onScreenText: '402' }),

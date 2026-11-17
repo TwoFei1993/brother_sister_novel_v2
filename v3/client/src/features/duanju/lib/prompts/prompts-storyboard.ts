@@ -38,6 +38,11 @@ const STORYBOARD_SYSTEM = `你是短剧分镜师。把给定某集剧本拆成�
    镜头切分优先落在：一句话说完、情绪完成、视线改变、人物关系变化明确处。
 5. 同一场拆成多镜时共用一套空间逻辑：staging 以场景固定地标写方位（如「桌子左侧/门口/窗边」），
    相邻镜头保持同一轴线（人物左右关系与朝向不翻转）——A 在 B 左侧，则所有镜头里 A 都在 B 左侧。
+   staging 要写到每个人：画面左/右 + 依托的固定物 + 身体朝向谁 + 视线落点（例：「陆惊尘在画面左、背靠青铜剑柱、身体朝向魏无痕、视线落在魏无痕抬起的手上」），
+   不要只写「A、B 对立站位」。画面里有两人及以上时，gridParts 每格也要点出每个人的视线落点；除非剧情要求直视观众，人物不看镜头。
+   框内装不下的人不写可见动作：要么升到全景，要么拆成反应镜。
+   特效（剑气、法术、光效）每次出现都要写成可画出来的样子：形状 + 主色 + 副色 + 范围/持续（例：「青白剑光沿剑身炸开一掌宽，边缘一圈暗金火星，三步内尘土掀起」），
+   不同镜头的特效形状与配色要有区别，不要整集只用同一种颜色；「光效炸裂」「气势磅礴」这类画不出来的词不写。
 6. endState 是跨镜衔接锚点：写下一镜可直接以此开场的定格画面，禁用「严格继承上一镜」套话。
 7. onScreenText 只写画面内真实出现的文字（手机聊天、转账金额、招牌、纸条内容逐字抄录）；
    剧本提到「手机显示」「屏幕上写着」时必须提取，不凭空编造。
@@ -349,6 +354,10 @@ export function episodeIndexOf(shot: Pick<DuanjuShot, 'episodeId'>, project: Dua
   return project.episodes.find((e) => e.id === shot.episodeId)?.index ?? 1;
 }
 
+/** 朝向与视线（drama-skills 关键帧纪律：只写视线替代不了身体朝向；2026-11-17 仙侠剧 32 帧人物全朝镜头的修复） */
+const FACING_LINE =
+  '【朝向与视线】每名角色的身体朝向与视线落点按站位与本帧动作写清：对峙、交谈时身体朝向对方、视线落在对方身上或对方手上的物件上，不看镜头；本帧描述明确写了看向镜头才看镜头。';
+
 /** 单帧生图 prompt v2（2026-11-14 生图对比学习升级）：
  *  普通模式增「未完成瞬间 + 恰好 N 名 + 相邻帧机位微变化 + 光线继承 + 环境动态」；
  *  refMode 改动词式第一句（改图模型只听第一句）+ 逐项保留清单 + 手部细节句（工作流 2026.11.4 实测句式） */
@@ -381,22 +390,33 @@ export function buildFramePrompt(
   // 档位：duoRef 双人（图1=A特写/图2=B特写/图3=场景）；triRef 三参考（图1=特写脸/图2=正面全身/图3=场景）；ref 双参考（图1=特写/图2=场景）
   if (opts.refMode) {
     const duo = opts.duoRef;
+    // 参考槽位只绑得住前几位角色：双人档 2 位，其余档 1 位；超出的按文字描述，不在人物保持里点名
+    const boundCount = duo ? 2 : 1;
+    const boundNames = chars.slice(0, boundCount).map((c) => c.name).join('、');
+    const unbound = chars.slice(boundCount);
     const bodyImg = '图2';
     const sceneImg = opts.triRef || duo ? '图3' : '图2';
     return [
       chars.length > 0
         ? duo
-          ? `把图1的${duo.aName}与图2的${duo.bName}（各自的脸部特写）放进${sceneImg}的场景里，两人同框互动，按新机位重新取景构图，生成一张全新的画面：`
+          ? `图1是${duo.aName}的人物参考，图2是${duo.bName}的人物参考，${sceneImg}是场景。生成一张全新的画面：${chars.map((c) => c.name).join('、')}同框互动，按新机位重新取景构图。`
           : opts.triRef
-            ? `把图1（脸部特写）与${bodyImg}（正面全身）中的${chars.map((c) => c.name).join('、')}放进${sceneImg}的场景里，按新机位重新取景构图，生成一张全新的画面：`
-            : `把图1中的${chars.map((c) => c.name).join('、')}放进图2的场景里，按新机位重新取景构图，生成一张全新的画面：`
+            ? `把图1（脸部参考）与${bodyImg}（正面全身）中的${boundNames}放进${sceneImg}的场景里，按新机位重新取景构图，生成一张全新的画面：`
+            : `把图1中的${boundNames}放进图2的场景里，按新机位重新取景构图，生成一张全新的画面：`
         : `参照${sceneImg}的场景环境重新构图，生成一张全新的画面：`,
+      chars.length > 0
+        ? '【参考图用法】参考图只提供人物的长相、发型与服装；不要把参考图里的头像、特写或原有姿势画进画面，画面只有一个场景。'
+        : '',
       `【画面内容】${desc}——只画这一个动作瞬间。`,
       chars.length > 0
         ? duo
           ? `【人物保持】${duo.aName}的长相五官与发型严格依图1、${duo.bName}的长相五官与发型严格依图2，两人的体型服装与身姿完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
-          : `【人物保持】${chars.map((c) => c.name).join('、')}的长相五官与发型${opts.triRef ? '（严格依图1）' : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
+          : `【人物保持】${boundNames}的长相五官与发型${opts.triRef ? '（严格依图1）' : ''}、体型服装与身姿${opts.triRef ? `（严格依${bodyImg}）` : ''}完全一致，一项都不改。${exactN}${outfitLine ? `\n【服装】${outfitLine}` : ''}`
         : '',
+      unbound.length > 0
+        ? `【无参考图的角色】${unbound.map((c) => `${c.name}（${c.profile}）`).join('；')}——没有参考图，只按这段文字画长相、发型与服装，逐项照写，不要与参考图中的人物混搭。`
+        : '',
+      chars.length > 0 ? FACING_LINE : '',
       '【手部细节】若画面含手部：双手与手指结构自然完整，袖口与手腕自然衔接。',
       propLine,
       locks.length > 0 ? `【连续性锁】${locks.join('; ')} —— 逐字保持，一项不改` : '',

@@ -525,4 +525,13 @@ describe('T8 机制锚注入（#6）', () => {
     const noMech = buildStoryboardMessages('梗概', '剧本', [char], [scene], []);
     expect(String(noMech[1]!.content)).not.toContain('本集叙事机制锚');
   });
+
+  it('拆镜头系统词：站位写到每个人（朝向+视线）/ 特效写形状配色 / 不看镜头（2026-11-17 仙侠剧实测后补）', () => {
+    const sys = String(buildStoryboardMessages('梗概', '剧本', [char], [scene], [])[0]!.content);
+    expect(sys).toContain('staging 要写到每个人');
+    expect(sys).toContain('视线落点');
+    expect(sys).toContain('人物不看镜头');
+    expect(sys).toContain('形状 + 主色 + 副色');
+    expect(sys).toContain('框内装不下的人不写可见动作');
+  });
 });
