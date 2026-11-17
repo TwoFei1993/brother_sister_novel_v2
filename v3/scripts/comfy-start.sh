@@ -27,10 +27,31 @@ echo "[comfy] 启动 ComfyUI（$COMFY_DIR）→ 日志 $LOG"
 # --enable-cors-header *：App 浏览器直连必须（ComfyUI 默认对跨域 Origin 返回 403）
 # --listen 0.0.0.0：手机端直连必须（默认只听 127.0.0.1，局域网设备连不上；Windows 防火墙首次会弹放行确认，选「允许」）
 # [2026-11-14] --disable-dynamic-vram：comfy_aimdo 流式加载在 98% 满的 D 盘读 20G 模型分片必败（host_buffer read_file_slice）——回 legacy ModelPatcher
-# [2026-11-14 暂退] --use-sage-attention：triton-windows tcc JIT 编译在本机失败（Z-Image 首跑即崩队列）——待换 MSVC 工具链后再启用
+# --use-sage-attention：2026-11-15 MSVC Build Tools 补装后启用（tcc 失败根因=无 MSVC 编译器，官方 setup 已补）
+# SageAttention JIT 需 Windows SDK + MSVC include/lib（triton tcc/clang 编译 CUDA stub 用）
+SDK_VER="10.0.26100.0"
+SDK_ROOT="C:\Program Files (x86)\Windows Kits\10"
+# MSVC 实际装在 D:/vstool（优先），其次默认 BuildTools 路径；都没有则跳过 sage，不能让 set -e 静默退出
+MSVC_DIR=""
+for base in "/d/vstool/VC/Tools/MSVC" "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC"; do
+  cand=$(ls -d "$base"/*/ 2>/dev/null | tail -1 || true)
+  if [ -n "$cand" ] && [ -f "${cand}bin/Hostx64/x64/cl.exe" ]; then MSVC_DIR="$(cygpath -w "${cand%/}")"; break; fi
+done
+SAGE_ARG=""
+# 默认不开 sage：2511 开 sage 会输出全黑图（NaN），仅跑 H3 视频时用 COMFY_SAGE=1 启动
+if [ "${COMFY_SAGE:-0}" = "1" ] && [ -n "$MSVC_DIR" ]; then
+  SAGE_ARG="'--use-sage-attention',"
+  export INCLUDE="${MSVC_DIR}\include;${SDK_ROOT}\Include\\${SDK_VER}\ucrt;${SDK_ROOT}\Include\\${SDK_VER}\shared;${SDK_ROOT}\Include\\${SDK_VER}\um;${SDK_ROOT}\Include\\${SDK_VER}\winrt"
+  export LIB="${MSVC_DIR}\lib\x64;${SDK_ROOT}\Lib\\${SDK_VER}\ucrt\x64;${SDK_ROOT}\Lib\\${SDK_VER}\um\x64"
+  export PATH="$(cygpath -u "$MSVC_DIR")/bin/Hostx64/x64:$PATH"
+  export CC="${MSVC_DIR}\bin\Hostx64\x64\cl.exe"
+  export DISTUTILS_USE_SDK=1
+else
+  echo "[comfy] 未启用 sage（COMFY_SAGE=1 且找到 MSVC 才启用）"
+fi
 COMFY_WIN="$(cygpath -w "$COMFY_DIR")"
 LOG_WIN="$(cygpath -w "$LOG")"
-powershell -NoProfile -Command "Start-Process -FilePath '$COMFY_WIN\python_embeded\python.exe' -ArgumentList '-s','ComfyUI/main.py','--windows-standalone-build','--listen','0.0.0.0','--disable-dynamic-vram','--enable-cors-header','*' -WorkingDirectory '$COMFY_WIN' -WindowStyle Hidden -RedirectStandardOutput '$LOG_WIN' -RedirectStandardError '$LOG_WIN.err'"
+powershell -NoProfile -Command "Start-Process -FilePath '$COMFY_WIN\python_embeded\python.exe' -ArgumentList '-s','ComfyUI/main.py','--windows-standalone-build','--listen','0.0.0.0',${SAGE_ARG}'--disable-dynamic-vram','--enable-cors-header','*' -WorkingDirectory '$COMFY_WIN' -WindowStyle Hidden -RedirectStandardOutput '$LOG_WIN' -RedirectStandardError '$LOG_WIN.err'"
 
 echo "[comfy] 后台启动中，探活 $BASE_URL ..."
 for i in $(seq 1 90); do
