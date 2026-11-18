@@ -12,8 +12,9 @@ import CharactersPane from './characters/CharactersPane';
 import ScenesPane from './scenes/ScenesPane';
 import StoryboardPane from './storyboard/StoryboardPane';
 import ExportPane from './export/ExportPane';
+import AssetLibraryPane from './assets/AssetLibraryPane';
 
-type TabId = 'script' | 'characters' | 'scenes' | 'storyboard' | 'export';
+type TabId = 'script' | 'characters' | 'scenes' | 'storyboard' | 'export' | 'assets';
 
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'script', label: '剧本' },
@@ -21,6 +22,7 @@ const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'scenes', label: '场景/道具' },
   { id: 'storyboard', label: '分镜' },
   { id: 'export', label: '出图/导出' },
+  { id: 'assets', label: '资产库' },
 ];
 
 interface Props {
@@ -136,6 +138,7 @@ export default function DuanjuWorkbench({ workId, title, onBack }: Props) {
             <div hidden={tab !== 'scenes'}><ScenesPane workId={workId} /></div>
             <div hidden={tab !== 'storyboard'}><StoryboardPane workId={workId} /></div>
             <div hidden={tab !== 'export'}><ExportPane workId={workId} /></div>
+            <div hidden={tab !== 'assets'}><AssetLibraryPane workId={workId} onImported={() => void load(workId)} /></div>
           </>
         )}
       </main>

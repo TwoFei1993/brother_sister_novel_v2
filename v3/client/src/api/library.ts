@@ -188,3 +188,29 @@ export async function copyAssetToBook(assetType: 'characters' | 'worldbooks' | '
   if (r.created.length === 0) throw new Error('素材不存在，复制失败');
   return r.created[0]!;
 }
+// ---------- 物品道具资料卡（质感/形状/颜色/功能/承载感情结构化描述；/api/items 独立 CRUD） ----------
+// 不走 AssetType 通用通道：物品为原生资产，无酒馆格式 io 导入导出，且资产库 Tab 需结构化编辑器
+
+import type { ItemAsset } from '@shared/assets/item';
+
+export type { ItemAsset };
+
+export async function listItems(): Promise<LibraryAssetRef[]> {
+  return apiFetch<LibraryAssetRef[]>('/api/items');
+}
+
+export async function getItem(id: string): Promise<ItemAsset> {
+  return apiFetch<ItemAsset>(`/api/items/${id}`);
+}
+
+export async function createItem(body: Omit<ItemAsset, 'id' | 'createdAt'>): Promise<{ id: string; name: string }> {
+  return apiFetch<{ id: string; name: string }>('/api/items', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function updateItem(id: string, patch: Partial<Omit<ItemAsset, 'id' | 'createdAt'>>): Promise<void> {
+  await apiFetch(`/api/items/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export async function deleteItem(id: string): Promise<void> {
+  await apiFetch(`/api/items/${id}`, { method: 'DELETE' });
+}

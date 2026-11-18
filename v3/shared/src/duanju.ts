@@ -9,9 +9,9 @@ import { z } from 'zod';
 
 // ---------- 基础件 ----------
 
-const idSchema = z.string().min(1);
+export const idSchema = z.string().min(1);
 /** 实体时间戳（ms）；下游 builtFrom 快照与之比对推导 stale */
-const tsSchema = z.number().int().nonnegative();
+export const tsSchema = z.number().int().nonnegative();
 /** 转存图片记录：path 相对 work 目录（duanju/images/xx.png）；originUrl 仅诊断用（24h 失效） */
 export const StoredImageSchema = z.strictObject({
   id: idSchema,
