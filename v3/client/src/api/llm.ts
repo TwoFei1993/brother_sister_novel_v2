@@ -197,6 +197,7 @@ export async function generateTextOnce(
       const r = await apiFetch<{ text?: string }>('/api/llm/generate', {
         method: 'POST',
         body: JSON.stringify(body),
+        timeoutMs: 30 * 60_000, // 非流式长生成（润色/抽取等推理模型常超 10 分钟）
       });
       const text = r.text ?? '';
       if (text.trim()) {

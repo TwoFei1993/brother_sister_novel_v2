@@ -21,6 +21,19 @@ export interface StyleBits {
   style: string;
 }
 
+/**
+ * 分段生成信息（用户需求：长章分段输出防丢失、单段 20 分钟太长）：
+ * 目标字数 > SEGMENT_WORDS 时一章拆 ceil(targetWords/SEGMENT_WORDS) 段生成自动拼接。
+ */
+export interface SegmentInfo {
+  /** 当前段（1 起） */
+  part: number;
+  /** 总段数 */
+  parts: number;
+  /** 本段目标字数 */
+  words: number;
+}
+
 /** 内置基调 → 写法级执行指令（用户反馈①：只写一行「基调：XX」无效，须给可执行的叙事质感指令） */
 const TONE_GUIDE: Record<string, string> = {
   温情治愈:
@@ -91,11 +104,14 @@ export function buildNovelMainPrompt(targetWords: number): TavernPrompt {
 
 /** 末尾写作要求块：基调文风执行（可选）+ 首行章标题 + 字数下限 + 输出纪律 + 反退化纪律
  *  （泄露形态对照实测：对 System 寒暄 / 确认语 / 思考流 / 选项；退化形态对照深度测试：短语重复循环 / 开头句式跨章复用。
- *  首行标题为用户反馈⑧：正文开头即章节名，ReadingView 经 parseChapterTitle 剥离后仍以标题 heading 展示） */
+ *  首行标题为用户反馈⑧：正文开头即章节名，ReadingView 经 parseChapterTitle 剥离后仍以标题 heading 展示。
+ *  segment（用户需求：长章分段生成）：非空时字数行/章末纪律按「第 part/共 parts 段」改写——
+ *  非末段写满段字数在段落末尾自然停笔（系统自动续写），末段才收束本章留悬念 */
 export function buildChapterRequirement(
   targetWords: number,
   progress?: { chapter: number; total: number },
   styleBits?: StyleBits,
+  segment?: SegmentInfo,
 ): string {
   // 全书创作目标（借鉴成熟写作软件：目标章数驱动节奏）——接近尾声时提示收束伏笔，
   // 超出目标不再硬刹车（作者加章是常态，只提示不强制）
@@ -106,11 +122,24 @@ export function buildChapterRequirement(
         : `\n- 全书节奏：本书规划约 ${progress.total} 章，当前写至第 ${progress.chapter} 章——本章按正常节奏推进主线，可在合适处埋设后续章节的伏笔\n`
       : '';
   const styleHead = styleBits ? buildStyleExecution(styleBits) : '';
+  // 分段模式：字数行与章末纪律按段改写（用户需求：单段太长 → 主动分段，段间自动续写拼接）
+  const wordLine = segment
+    ? `- 分段生成：本章由系统分 ${segment.parts} 段自动拼接，本段为第 ${segment.part}/${segment.parts} 段——本段写约 ${segment.words} 字，写满后在**最近的段落末尾**自然停笔；${
+        segment.part < segment.parts
+          ? '本段不是最后一段：不要收尾、不要结局感，剧情停在推进中（后续由系统自动续写）'
+          : '本段是最后一段：写完剩余剧情后自然收束本章'
+      }\n`
+    : `- 本章正文 ${targetWords}-${targetWords + 1500} 字（不含标题与任何元信息），写到 ${targetWords + 1500} 字左右即收尾成章，禁止提前收束，也禁止为凑字数拖沓注水\n`;
+  const chapterEndDiscipline = segment
+    ? segment.part < segment.parts
+      ? '  ③本段结尾停在场景推进中即可，不需要章末悬念钩子（后续段由系统自动续写拼接）\n'
+      : '  ③本段是本章收尾：章末必须留至少一个未解决的悬念、新麻烦或未完成的行动，驱动读者进入下一章\n'
+    : '  ③章末必须留至少一个未解决的悬念、新麻烦或未完成的行动，驱动读者进入下一章\n';
   return (
     (styleHead ? `${styleHead}\n` : '') +
     '【本章写作要求】\n' +
     '- 正文第一行先输出本章标题（格式：`# 第N章 标题` 一行），紧接正文；除此之外不要输出其他标题或元信息\n' +
-    `- 本章正文 ${targetWords}-${targetWords + 1500} 字（不含标题与任何元信息），写到 ${targetWords + 1500} 字左右即收尾成章，禁止提前收束，也禁止为凑字数拖沓注水\n` +
+    wordLine +
     '- 直接输出正文：禁止与 System/系统/用户对话或寒暄，禁止确认语（如「收到」「可以开始吗」）、' +
     '禁止输出思考过程、写作提纲、选项列表\n' +
     '- 禁止复述本要求或剧情指令原文\n' +
@@ -118,7 +147,7 @@ export function buildChapterRequirement(
     '- 长篇连载纪律（最重要）：本书是连载长篇，每一章只是全书的一段，不是独立小故事——\n' +
     '  ①开篇必须自然承接上一章结尾的场景、悬念或未解决事件（人物状态/时间线/地点与前章连续，读者连读各章必须顺畅）；\n' +
     '  ②禁止在本章内把主线冲突完全解决或写出大结局式收尾——上一章埋的线本章只推进不一步了结；\n' +
-    '  ③章末必须留至少一个未解决的悬念、新麻烦或未完成的行动，驱动读者进入下一章\n' +
+    chapterEndDiscipline +
     '- 反重复纪律：每写一段剧情必须向前推进，禁止用重复的描写、比喻或句式填充字数；' +
     '同一短语若已写过两次，绝对不要写第三次\n' +
     '- 语言纯度：全文使用简体中文，禁止出现任何英文单词、字母或拼音（真实品牌/单位等必要专有名词除外）\n' +
@@ -135,15 +164,56 @@ export function buildChapterRequirement(
  * 已写半章 + 模型重新输出标题从开头另写，拼接后一章两个开头）。续写轮整体替换为：
  * 从已写正文结尾无缝续写，禁止任何形式的重新开始。
  */
-export function buildContinueRequirement(targetWords: number): string {
+export function buildContinueRequirement(targetWords: number, final = true): string {
+  const stopLine = final
+    ? `- 直接从剧情的当前时刻继续推进，写约 ${targetWords}-${targetWords + 1500} 字后自然收束本章（章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n`
+    : `- 直接从剧情的当前时刻继续推进，本段写约 ${targetWords} 字——写满后在**最近的段落末尾**自然停笔（本章由系统分段拼接，后续还会继续写；不要收尾、不要结局感）\n`;
   return (
     '【续写要求（本章已写了一半）】\n' +
     '- 上下文最后一条「小说家」消息就是本章已写正文——从它的结尾无缝接着往下写，当作这段文字是你自己刚写出的\n' +
     '- 严格禁止：重新开始本章、另写新开头、输出章节标题（# 第N章 之类）、重写或复述已写内容、总结前文\n' +
-    '- 直接从剧情的当前时刻继续推进，写约 ' +
-    `${targetWords}-${targetWords + 1500} 字后自然收束本章（章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n` +
+    stopLine +
     '- 直接输出续写正文：禁止与 System/系统/用户对话或寒暄，禁止确认语、思考过程、写作提纲、选项列表；禁止复述本要求\n' +
     VIEW_RHYTHM_LINE + '\n' +
     '- 语言纯度：全文使用简体中文，禁止出现任何英文单词、字母或拼音（真实品牌/单位等必要专有名词除外）'
   );
+}
+
+/** 分段生成的段字数（用户需求：单段 20 分钟太长 → 长章按此粒度拆分，段间自动续写拼接） */
+export const SEGMENT_WORDS = 2500;
+
+/**
+ * 扩写本章要求块（用户需求：允许对当前章要求「加长」）：把当前版本扩写成更长的完整章——
+ * 情节/对话/事实保持不变，把关键场景写细写透；输出整章（带标题行，postprocess 剥离）。
+ * 与「续写本章」（append 新剧情）互补：加长是原地加厚，续写是向后延展。
+ */
+export function buildExpandRequirement(targetWords: number): string {
+  return (
+    '【扩写要求（本章加长）】\n' +
+    '- 上下文最后一条「小说家」消息是本章当前版本——把它扩写成更长的完整章节\n' +
+    '- 保持情节、对话内容、人物关系与事实完全不变，禁止新增改变走向的情节；把关键场景写细写透：' +
+    '补充动作细节、环境感知、主角的观察与心理（贴主角视角），对话间的神态与反应\n' +
+    `- 扩写后全文约 ${targetWords}-${targetWords + 2000} 字；不要为凑字数注水，也不要删减原有情节要素\n` +
+    '- 第一行先输出本章标题（格式：`# 第N章 标题`，与原文一致），紧接扩写后的完整正文\n' +
+    '- 直接输出扩写正文：禁止与 System/系统/用户对话或寒暄，禁止确认语、思考过程、写作提纲、选项列表；禁止复述本要求\n' +
+    VIEW_RHYTHM_LINE + '\n' +
+    '- 语言纯度：全文使用简体中文，禁止出现任何英文单词、字母或拼音（真实品牌/单位等必要专有名词除外）'
+  );
+}
+
+/** 尾部要求选择（scanAndAssemble 消费的纯函数，便于单测）：续写 > 扩写 > 常规（分段信息改变字数行/停笔纪律） */
+export function pickChapterRequirement(opts: {
+  continuation?: boolean;
+  expandChapter?: boolean;
+  segment?: SegmentInfo;
+  targetWords: number;
+  progress?: { chapter: number; total: number };
+  styleBits?: StyleBits;
+}): string {
+  if (opts.continuation) {
+    const seg = opts.segment;
+    return buildContinueRequirement(seg ? seg.words : opts.targetWords, seg ? seg.part >= seg.parts : true);
+  }
+  if (opts.expandChapter) return buildExpandRequirement(opts.targetWords);
+  return buildChapterRequirement(opts.targetWords, opts.progress, opts.styleBits, opts.segment);
 }

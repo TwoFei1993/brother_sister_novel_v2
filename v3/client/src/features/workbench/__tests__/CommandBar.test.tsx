@@ -27,6 +27,8 @@ async function renderBar(props: Partial<Parameters<typeof CommandBar>[0]> = {}):
     busy: false,
     batchProgress: null,
     canOutline: false,
+    canExtend: false,
+    onExtendChapter: () => undefined,
     onGenerate: () => undefined,
     onBatch: () => undefined,
     onByOutline: () => undefined,

@@ -74,11 +74,13 @@ function handleUnauthorized(path: string): void {
 export interface ApiFetchOptions extends RequestInit {
   /** 置 true 时 401 不触发自动跳转（调用方自行处理，如登录页的状态探测） */
   keepOn401?: boolean;
+  /** 覆盖默认 10 分钟兜底超时（毫秒）：润色/摘要等长 LLM 任务放宽到 30 分钟（用户实测 10 分钟上限掐断长生成） */
+  timeoutMs?: number;
 }
 
 /** JSON 请求包装：返回体反序列化为 T；非 2xx 抛 ApiError */
 export async function apiFetch<T = unknown>(path: string, opts: ApiFetchOptions = {}): Promise<T> {
-  const { keepOn401, ...init } = opts;
+  const { keepOn401, timeoutMs, ...init } = opts;
   // 字符串 body 默认按 JSON 发送（未显式指定 Content-Type 时），调用方无需手写请求头
   if (typeof init.body === 'string') {
     const h = new Headers(init.headers);
@@ -89,7 +91,7 @@ export async function apiFetch<T = unknown>(path: string, opts: ApiFetchOptions 
   try {
     // P2 修复：默认 10 分钟兜底超时（TCP 黑洞/代理挂起时任务永久占用队列并发）；
     // 调用方显式传 signal 时以调用方为准
-    const timeout = AbortSignal.timeout(10 * 60_000);
+    const timeout = AbortSignal.timeout(timeoutMs ?? 10 * 60_000);
     const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
     res = await fetch(path, { ...init, credentials: 'include', signal });
   } catch (err) {

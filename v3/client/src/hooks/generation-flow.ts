@@ -121,7 +121,7 @@ export function isChapterRestart(added: string): boolean {
  * （nextChapterIndex 不受影响、不入库），仅进本轮提示词历史。
  */
 export function withPartialInHistory(messages: readonly Message[], partial: string): Message[] {
-  if (!partial.trim()) return [...messages];
+  if (!partial || !partial.trim()) return [...messages];
   return [
     ...messages,
     {

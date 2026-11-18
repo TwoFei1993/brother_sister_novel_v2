@@ -98,6 +98,7 @@ function genStub(): UseGenerateResult {
     generateChapter: vi.fn(),
     continueFromPartial: vi.fn(),
     swipeRegenerate: vi.fn(),
+    extendChapter: vi.fn(),
     runBatch: vi.fn(),
     runByOutline: vi.fn(),
     batch: null,

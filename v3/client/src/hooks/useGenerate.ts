@@ -39,6 +39,7 @@ import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { persistMessage } from './generation-pipeline';
 import { runGenerationStream } from './generation-runtime';
 import { META_ONLY_PLACEHOLDER, parseChapterTitle } from '../engine/prompt/postprocess';
+import { SEGMENT_WORDS, type SegmentInfo } from '../engine/prompt/novel/requirements';
 import {
   buildMacroEnv,
   finalizeGeneration,
@@ -64,6 +65,12 @@ interface RunOptions {
   maxTokensScale?: number;
   /** 续写轮（用户反馈③）：要求块与输出守卫切「无缝续写」变体，不要求章标题、禁止重新开章 */
   continuation?: boolean;
+  /** 扩写轮（用户需求：本章加长）：要求块切「扩写本章」变体（基于上下文最后的当前版本输出更长完整章） */
+  expandChapter?: boolean;
+  /** 分段生成（用户需求：单段太长主动拆分）：进 tail 要求块（分段字数/停笔纪律），末段收束本章 */
+  segment?: SegmentInfo;
+  /** 覆盖输出预算（分段轮：只给本段的量 → finish=length 提前停，后续段自动续写） */
+  effMaxTokensOverride?: number;
 }
 
 /** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
@@ -84,6 +91,14 @@ export interface UseGenerateResult {
   continueFromPartial: (work: Work, messages: Message[], partial: string) => Promise<Message | null>;
   /** 换一支：同 directive 重生成，结果 push 进 target.swipes（幂等 upsert） */
   swipeRegenerate: (work: Work, messages: Message[], target: Message) => Promise<Message | null>;
+  /** 本章加长/续写（用户需求）：append=从本章结尾续写新剧情（追加式变长）；expand=扩写本章（原地加厚，情节不变）。
+   *  结果作为 target 的新候选版本追加（◀▶ 可回退原文），同 id 幂等覆盖 */
+  extendChapter: (
+    work: Work,
+    messages: Message[],
+    target: Message,
+    mode: 'append' | 'expand',
+  ) => Promise<Message | null>;
   /** 一键连写：从下一章自动写到目标章节数（第一章用传入指令、后续空指令自由发挥） */
   runBatch: (work: Work, firstDirective: string) => Promise<void>;
   /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动注入本章大纲要点） */
@@ -133,11 +148,14 @@ export function useGenerate(): UseGenerateResult {
           const pending: PendingVars = { work: new Map(), global: new Map() };
           const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
           // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）；
-          // 续写轮标记 continuation：要求块与输出守卫切「无缝续写」变体（反馈③）
+          // 续写轮标记 continuation：要求块与输出守卫切「无缝续写」变体（反馈③）；
+          // 扩写轮标记 expandChapter：要求块切「本章加长」变体
           const tail: AssembleTail = {
             kind: 'directive',
             text: opts.promptDirective ?? directive,
             ...(opts.continuation ? { continuation: true } : {}),
+            ...(opts.expandChapter ? { expandChapter: true } : {}),
+            ...(opts.segment ? { segment: opts.segment } : {}),
           };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
           // 输出预算按章节目标字数动态反推（calcOutputBudget，见函数注释——「写到一半就没了」
@@ -147,7 +165,7 @@ export function useGenerate(): UseGenerateResult {
           const targetWords = work.settings.targetChapterWords ?? 3000;
           const known = cachedOutputBudget(prefs.source, prefs.model);
           const effMaxTokens = Math.min(
-            calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1),
+            opts.effMaxTokensOverride ?? calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1),
             known ?? Number.MAX_SAFE_INTEGER,
           );
           const body = buildGenerateBody({
@@ -306,8 +324,27 @@ export function useGenerate(): UseGenerateResult {
       // 重试复用同一 targetId：入库按 messageId 幂等 upsert，重试结果覆盖首次无效行
       //（否则首次残章/崩溃行以孤儿形式留在库里，重载后出现垃圾章节）
       const targetId = uuid();
-      let msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
-      if (msg === null) msg = await rescueFromStreamBreak(work, messages, directive, targetId);
+      const tw = work.settings.targetChapterWords ?? 3000;
+      // 长章主动分段（用户需求：单段 20 分钟太长、撞超时上限）——每段约 SEGMENT_WORDS 字，
+      // 段间以续写语义自动拼接（要求块按段改字数/停笔纪律）；每段独立请求：撞超时/断流只损当段，
+      // 已落库段落不丢（各段按 targetId 幂等覆盖累积）
+      const parts = Math.max(1, Math.ceil(tw / SEGMENT_WORDS));
+      const thinkingOn = useSettingsStore.getState().llmPrefs.thinking !== false;
+      const segmentBudget = calcOutputBudget(SEGMENT_WORDS + 600, thinkingOn, 1);
+      let msg: Message | null;
+      if (parts > 1) {
+        // 第 1 段：段级预算（写满即停，后续段自动续写）+ 分段要求块（非末段不收尾）
+        msg = await run(work, messages, directive, {
+          targetId,
+          initialBuffer: '',
+          segment: { part: 1, parts, words: SEGMENT_WORDS },
+          effMaxTokensOverride: segmentBudget,
+        });
+        if (msg === null) msg = await rescueFromStreamBreak(work, messages, directive, targetId);
+      } else {
+        msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
+        if (msg === null) msg = await rescueFromStreamBreak(work, messages, directive, targetId);
+      }
       const reason = invalidReasonOf(msg);
       if (msg && reason) {
         // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；落库按首次消息 id 幂等覆盖）。
@@ -318,17 +355,64 @@ export function useGenerate(): UseGenerateResult {
           promptDirective: directive + RETRY_SUFFIX[reason],
           persistMessageId: msg.id,
           maxTokensScale: 3,
+          ...(parts > 1 ? { segment: { part: 1, parts, words: SEGMENT_WORDS } } : {}),
         });
       }
-      // 截断自动续写（补完结果同 id 幂等覆盖；腰斩常因思考挤占预算——续写轮抬预算 2 倍）
-      const baseId = msg?.id ?? targetId;
-      msg = await continueTruncated(work, messages, directive, msg, (partial) => ({
-        targetId,
-        initialBuffer: partial,
-        promptDirective: directive,
-        persistMessageId: baseId,
-        maxTokensScale: 2,
-      }));
+      if (parts > 1) {
+        // 第 2..parts 段：续写语义（无缝续写要求块 + 半章进历史 grounding），
+        // finish=stop 尊重模型提前收束；重放/重开检测与元数据还原同 continueTruncated
+        for (let part = 2; part <= parts && msg; part += 1) {
+          const finish = useGenerationStore.getState().finishReason;
+          if (finish === 'stop') break; // 模型自然收束 → 分段链提前完成
+          const prev = msg;
+          const partial = msg.content;
+          const next = await run(work, withPartialInHistory(messages, partial), buildContinueDirective(partial), {
+            targetId,
+            initialBuffer: partial,
+            promptDirective: directive,
+            persistMessageId: prev.id, // 当前累积行 id（run1 由 finalize 生成 uuid）
+            continuation: true,
+            segment: { part, parts, words: SEGMENT_WORDS },
+            effMaxTokensOverride: segmentBudget,
+            maxTokensScale: 1,
+          });
+          if (next && isReplayedContinuation(partial, next.content)) {
+            const rolled = { ...next, content: partial, directive: prev.directive };
+            if (prev.chapter) rolled.chapter = { ...prev.chapter };
+            await persistMessage(work.id, rolled);
+            msg = rolled;
+            break;
+          }
+          const added = next && next.content.length > partial.length ? next.content.slice(partial.length) : '';
+          if (next && added.trim().length >= 8 && isChapterRestart(added)) {
+            const parsed = parseChapterTitle(added.trim(), undefined, prev.chapter?.index ?? 0);
+            const cleanTitle = parsed.title && !/^第\d+章$/.test(parsed.title) ? parsed.title : (prev.chapter?.title ?? '');
+            const rolled: Message = {
+              ...next,
+              content: parsed.content,
+              directive: prev.directive,
+              swipes: next.swipes.map((v, i) => (i === next.swipeId ? { ...v, content: parsed.content } : v)),
+              ...(prev.chapter ? { chapter: { ...prev.chapter, title: cleanTitle } } : {}),
+            };
+            await persistMessage(work.id, rolled);
+            msg = rolled;
+            break;
+          }
+          msg = next
+            ? { ...next, directive: prev.directive, ...(prev.chapter ? { chapter: { ...prev.chapter } } : {}) }
+            : next;
+        }
+      } else {
+        // 截断自动续写（补完结果同 id 幂等覆盖；腰斩常因思考挤占预算——续写轮抬预算 2 倍）
+        const baseId = msg?.id ?? targetId;
+        msg = await continueTruncated(work, messages, directive, msg, (partial) => ({
+          targetId,
+          initialBuffer: partial,
+          promptDirective: directive,
+          persistMessageId: baseId,
+          maxTokensScale: 2,
+        }));
+      }
       // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
       // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）。
       // 仅对有效产出润色——meta 占位/崩溃循环稿润色无意义，白烧一次调用（巡检修复）
@@ -456,6 +540,57 @@ export function useGenerate(): UseGenerateResult {
     [run],
   );
 
+  /**
+   * 本章加长/续写（用户需求：卷章之外允许对当前章要求加长或续写）：
+   * - append（续写本章）：上下文含本章（末条）→ continuation 语义从本章结尾续写新剧情；
+   *   initialBuffer=章全文 → buffer 流式呈现「旧文+新文」，结果为完整扩展文本
+   * - expand（加长本章）：扩写语义，基于当前版本输出更长完整章（情节不变原地加厚），initialBuffer=''
+   * 两者都经 swipeTarget 通道：新内容成为 target 的新候选版本（◀▶ 可回退原文），同 id 幂等覆盖；
+   * 产出后同走截断自动续写（append 续写轮语义 / expand 常规语义）
+   */
+  const extendChapter = useCallback(
+    async (work: Work, messages: Message[], target: Message, mode: 'append' | 'expand') => {
+      if (useGenerationStore.getState().streaming) return null; // 防重入
+      const idx = messages.findIndex((m) => m.id === target.id);
+      // 上下文含本章（含 target 本体，模型看得到要续写/扩写的正文）；其后章节不进上下文
+      const ctx = idx === -1 ? messages : messages.slice(0, idx + 1);
+      const tw = work.settings.targetChapterWords ?? 3000;
+      const directive =
+        mode === 'append'
+          ? buildContinueDirective(target.content)
+          : `把本章加长扩写（保持情节不变，写到约 ${tw} 字）`;
+      let msg = await run(work, ctx, directive, {
+        targetId: target.id,
+        initialBuffer: mode === 'append' ? target.content : '',
+        swipeTarget: target,
+        ...(mode === 'append' ? { continuation: true } : { expandChapter: true }),
+        maxTokensScale: 2, // 扩写/续写都是长输出：预算 2 倍（封顶 64000）
+      });
+      const reason = invalidReasonOf(msg);
+      if (msg && reason) {
+        msg = await run(work, ctx, directive, {
+          targetId: target.id,
+          initialBuffer: mode === 'append' ? target.content : '',
+          swipeTarget: target,
+          ...(mode === 'append' ? { continuation: true } : { expandChapter: true }),
+          promptDirective: directive + RETRY_SUFFIX[reason],
+          maxTokensScale: 3,
+        });
+      }
+      // 截断自动续写：append 走续写轮语义（无缝续写），expand 走常规语义（finish=length 时补写）
+      msg = await continueTruncated(work, ctx, directive, msg, (partial) => ({
+        targetId: target.id,
+        initialBuffer: partial,
+        swipeTarget: target,
+        ...(mode === 'append' ? { continuation: true } : {}),
+        maxTokensScale: 2,
+      }));
+      return invalidReasonOf(msg) ? null : msg;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [run, continueTruncated],
+  );
+
   const stop = useCallback(() => {
     batchCancelRef.current = true; // 连写循环下一轮检查后退出
     abortRef.current?.abort();
@@ -491,6 +626,7 @@ export function useGenerate(): UseGenerateResult {
     generateChapter,
     continueFromPartial,
     swipeRegenerate,
+    extendChapter,
     runBatch,
     runByOutline,
     batch,

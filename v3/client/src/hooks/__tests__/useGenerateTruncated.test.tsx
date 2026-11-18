@@ -21,6 +21,7 @@ vi.mock('../generation-runtime', () => ({
 
 vi.mock('../generation-pipeline', () => ({
   loadAssembleAssets: vi.fn(async () => ({ preset: null, cards: [], worldbooks: [], regexScripts: [] })),
+  persistMessage: vi.fn(async () => undefined), // 分段/续写循环的重放回滚落库
   buildMacroEnv: vi.fn(() => ({
     user: '作者',
     char: '小说家',
@@ -29,7 +30,13 @@ vi.mock('../generation-pipeline', () => ({
     scope: 'work' as const,
   })),
   scanAndAssemble: vi.fn(async () => ({ messages: [], promptTokens: 1200, truncated: true, activatedIds: [] })),
-  finalizeGeneration: vi.fn(async () => ({ id: 'm1' })),
+  finalizeGeneration: vi.fn(async () => ({
+    id: 'm1',
+    content: '正文内容。',
+    swipes: [{ id: 's1', name: 'v1', content: '正文内容。', origin: 'ai' as const, createdAt: 1 }],
+    swipeId: 0,
+    chapter: { index: 1, title: '第1章' },
+  })),
 }));
 
 vi.mock('../../api/llm', () => ({
@@ -88,7 +95,7 @@ describe('useGenerate 上下文截断提示（usage.truncated 消费）', () => 
     await act(async () => {
       msg = await latest!.generateChapter(workFixture, [], '指令');
     });
-    expect(msg).toEqual({ id: 'm1' }); // finalize 成功入库
+    expect(msg).toEqual(expect.objectContaining({ id: 'm1' })); // finalize 成功入库
     expect(latest!.lastTruncated).toBe(true); // 组装期截断被记录
 
     await act(async () => {

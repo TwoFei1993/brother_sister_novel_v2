@@ -67,10 +67,12 @@ function upstreamTimeoutMs(): number {
   return Number.isFinite(n) && n > 0 ? n : 120_000;
 }
 
-/** 上游**总时长**硬顶：默认 10 分钟，测试经 env 注入。防对端持续发心跳/碎帧导致的死循环。 */
+/** 上游**总时长**硬顶：默认 30 分钟，测试经 env 注入。防对端持续发心跳/碎帧导致的死循环。
+ *  2026-11-19：10 分钟对推理模型长章生成不够（思考+正文流超 10 分钟被掐，用户实测触发）——
+ *  放宽到 30 分钟；分段防丢仍由客户端截断续写（finish=length）+ 断流救援（rescueFromStreamBreak）兜底。 */
 function upstreamTotalTimeoutMs(): number {
   const n = Number(process.env.LLM_UPSTREAM_TOTAL_TIMEOUT_MS);
-  return Number.isFinite(n) && n > 0 ? n : 600_000;
+  return Number.isFinite(n) && n > 0 ? n : 1_800_000;
 }
 
 /** 读 secrets.json 明文（LLM 调用需要原文；对外接口只回掩码，见 routes/core/secrets.ts） */

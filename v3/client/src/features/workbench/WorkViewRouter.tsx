@@ -130,6 +130,13 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     if (msg) upsertLocal(msg);
   }
 
+  /** 本章加长/续写（用户需求）：对最后一章 append（续写新剧情）或 expand（扩写加厚），新内容为其新候选 */
+  async function handleExtendChapter(mode: 'append' | 'expand'): Promise<void> {
+    if (gen.streaming || !lastChapter) return;
+    const msg = await gen.extendChapter(work, useWorkStore.getState().messages, lastChapter, mode);
+    if (msg) upsertLocal(msg);
+  }
+
   // ---------- A 对话流视图（DialogView）动作 ----------
 
   /** A 视图：任意章节 ◀▶ 切候选（updateSwipe 本地 + PATCH，失败回滚在 store 内） */
@@ -331,11 +338,13 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
         busy={gen.streaming}
         batchProgress={gen.batch ? batchProgressText(gen.batch) : null}
         canOutline={(work.settings.chapterOutlines?.length ?? 0) > 0}
+        canExtend={lastChapter !== null}
         onGenerate={(d) => void handleGenerate(d)}
         onBatch={(d) => void gen.runBatch(work, d)}
         onByOutline={(limit?: number) => void gen.runByOutline(work, messages, limit)}
         onToggleSwipe={(d) => void handleToggleSwipe(d)}
         onRerollLast={() => void handleRerollLast()}
+        onExtendChapter={(mode) => void handleExtendChapter(mode)}
         onContinue={() => void handleContinue()}
         onStop={gen.stop}
         seedText={directiveSeed}

@@ -331,3 +331,42 @@ describe('buildStyleExecution / buildChapterRequirement 基调文风执行（用
     expect(buildChapterRequirement(3000)).toContain('对话不宜连续超过三句');
   });
 });
+
+describe('分段生成 + 本章加长/续写（用户需求：单段太长拆分；卷章之外支持加长/续写）', () => {
+  it('pickChapterRequirement 分段：字数行按段改写、非末段不收尾、末段收束留悬念', async () => {
+    const { pickChapterRequirement } = await import('../prompt/novel/requirements');
+    const seg1 = pickChapterRequirement({ targetWords: 5000, segment: { part: 1, parts: 2, words: 2500 } });
+    expect(seg1).toContain('第 1/2 段');
+    expect(seg1).toContain('本段写约 2500 字');
+    expect(seg1).toContain('不要收尾');
+    expect(seg1).toContain('不需要章末悬念钩子');
+    const segFinal = pickChapterRequirement({ targetWords: 5000, segment: { part: 2, parts: 2, words: 2500 } });
+    expect(segFinal).toContain('本段是最后一段');
+    expect(segFinal).toContain('本段是本章收尾');
+  });
+
+  it('pickChapterRequirement 分段续写轮：续写字数按段、非末段不收束', async () => {
+    const { pickChapterRequirement } = await import('../prompt/novel/requirements');
+    const cont = pickChapterRequirement({ continuation: true, targetWords: 5000, segment: { part: 2, parts: 3, words: 2500 } });
+    expect(cont).toContain('本段写约 2500 字');
+    expect(cont).toContain('后续还会继续写');
+    const contFinal = pickChapterRequirement({ continuation: true, targetWords: 5000 });
+    expect(contFinal).toContain('自然收束本章');
+  });
+
+  it('buildExpandRequirement：扩写=情节不变原地加厚，要求输出完整章带标题', async () => {
+    const { buildExpandRequirement } = await import('../prompt/novel/requirements');
+    const req = buildExpandRequirement(4500);
+    expect(req).toContain('扩写');
+    expect(req).toContain('保持情节、对话内容、人物关系与事实完全不变');
+    expect(req).toContain('4500-6500 字');
+    expect(req).toContain('# 第N章 标题');
+  });
+
+  it('无分段时常规要求块保持原字数行（回归）', async () => {
+    const { pickChapterRequirement } = await import('../prompt/novel/requirements');
+    const plain = pickChapterRequirement({ targetWords: 3000 });
+    expect(plain).toContain('本章正文 3000-4500 字');
+    expect(plain).not.toContain('分段生成');
+  });
+});

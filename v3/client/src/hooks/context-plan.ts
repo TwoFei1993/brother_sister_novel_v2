@@ -14,6 +14,8 @@ import {
   type ChatReplyLength,
 } from '@shared/work';
 
+import type { SegmentInfo } from '../engine/prompt/novel/requirements';
+
 import { apiFetch } from '../api/client';
 import { countTokensApprox } from '../engine/budget';
 import { buildSummarizePrompt } from '../engine/prompt/novel/memory';
@@ -133,9 +135,11 @@ export function novelGuardPlan(
 /** 末轮注入通道（自 generation-pipeline 迁出；review #7 参数化，novel/chat 共用同一 scanAndAssemble）：
  *  novel=剧情指令 directive（「剧情指引：…」包装）/ chat=用户消息 userMessage（§4.3）。
  *  directive.continuation（用户反馈③）：截断续写/断流恢复轮置 true——要求块与输出守卫
- *  切换为「无缝续写」变体，不再要求「第一行输出章标题」（该指令在续写轮 = 命令模型重新开章） */
+ *  切换为「无缝续写」变体，不再要求「第一行输出章标题」（该指令在续写轮 = 命令模型重新开章）。
+ *  directive.expandChapter（用户需求：本章加长）：扩写轮置 true——要求块切「扩写本章」变体
+ *  （基于上下文最后的当前版本输出更长完整章，守卫保持常规带标题形态）。 */
 export type AssembleTail =
-  | { kind: 'directive'; text: string; continuation?: boolean }
+  | { kind: 'directive'; text: string; continuation?: boolean; expandChapter?: boolean; segment?: SegmentInfo }
   | { kind: 'userMessage'; text: string };
 
 /** 组装产物（自 generation-pipeline 迁出；预算校验后的上下文规划层结果） */

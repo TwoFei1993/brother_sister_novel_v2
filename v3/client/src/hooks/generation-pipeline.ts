@@ -22,7 +22,7 @@ import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, extractThinking, mergeThinking, postprocessMessage } from '../engine/prompt/postprocess';
-import { buildChapterRequirement, buildContinueRequirement, type StyleBits } from '../engine/prompt/novel/requirements';
+import { pickChapterRequirement, type SegmentInfo, type StyleBits } from '../engine/prompt/novel/requirements';
 import { MEMORY_EXTRACT_SYSTEM, mergeForeshadows, parseMemoryExtract } from '../engine/prompt/novel/memory-extract';
 import { NEW_ASSETS_HINT, parseNewAssets } from '../engine/prompt/novel/new-assets';
 import { chapterOutlineDirective, volumeOutlineDirective } from '../lib/outline/chapters';
@@ -325,14 +325,19 @@ export async function scanAndAssemble(
             // NEW_ASSETS_HINT 仅在有真实指令的章追加：空指令（⚡连写推进章）保持纯净，
             // 避免「剧情指引：」裸前缀被 hint 撑出（batch 测试锁定的语义）
             directive: tail.text + volumeHint + outlineHint + recallHint + skeletonHint + (tail.text ? NEW_ASSETS_HINT : ''),
-            // 续写轮要求块整体替换为「无缝续写」变体（反馈③：不要求章标题、禁止重新开章）；
-            // 常规轮注入基调文风执行 + 原有字数/纪律要求
-            chapterRequirement: tail.continuation
-              ? buildContinueRequirement(targetWords)
-              : buildChapterRequirement(targetWords, {
-                  chapter: nextChapterIndex(messages),
-                  total: work.settings.desiredChapterCount,
-                }, styleBits),
+            // 要求块选择（pickChapterRequirement，requirements.ts 可单测）：续写轮「无缝续写」变体
+            // （反馈③：不要求章标题、禁止重新开章）> 扩写轮「本章加长」变体 > 常规轮
+            chapterRequirement: pickChapterRequirement({
+              continuation: tail.continuation,
+              expandChapter: tail.expandChapter,
+              segment: tail.segment,
+              targetWords,
+              progress: {
+                chapter: nextChapterIndex(messages),
+                total: work.settings.desiredChapterCount,
+              },
+              styleBits,
+            }),
           }
         : { userMessage: tail.text }),
       macroEnv: env,

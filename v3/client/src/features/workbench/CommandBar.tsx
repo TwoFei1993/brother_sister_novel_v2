@@ -9,7 +9,7 @@
  * - 生成中：▶ 变 ⏹ 停止（连写/大纲时附进度 3/50 或 按大纲 x/y）；输入与换一支禁用
  */
 import { useEffect, useState, type KeyboardEvent } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, Dices, Play, Square, Zap } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Dices, FilePlus2, Play, Square, Zap } from 'lucide-react';
 
 import FieldHint from '../../components/FieldHint';
 
@@ -29,6 +29,8 @@ interface CommandBarProps {
   batchProgress: string | null;
   /** 作品已导入章节大纲（chapterOutlines 非空）→ 显示 📖按大纲生成 */
   canOutline: boolean;
+  /** 已有章节（本章加长/续写按钮显示条件） */
+  canExtend: boolean;
   onGenerate: (directive: string) => void;
   /** ⚡连写：携带输入框当前指令作第一章指令（后续章空指令自由发挥） */
   onBatch: (directive: string) => void;
@@ -37,6 +39,8 @@ interface CommandBarProps {
   onToggleSwipe: (delta: 1 | -1) => void;
   /** 🎲 恒为重roll：同指令追加新候选并切到最新（多候选时也可用，与 ◀▶ 切换互补） */
   onRerollLast: () => void;
+  /** 本章续写（append）：从最后一章结尾续写新剧情，追加为该章新候选 */
+  onExtendChapter: (mode: 'append' | 'expand') => void;
   onContinue: () => void;
   onStop: () => void;
   /** 外部指令复填（C 工作台侧栏点击快速指令/历史）：注入输入框，消费后回调复位 */
@@ -56,11 +60,13 @@ export default function CommandBar({
   busy,
   batchProgress,
   canOutline,
+  canExtend,
   onGenerate,
   onBatch,
   onByOutline,
   onToggleSwipe,
   onRerollLast,
+  onExtendChapter,
   onContinue,
   onStop,
   seedText = null,
@@ -163,6 +169,32 @@ export default function CommandBar({
                 <BookOpen className="h-4 w-4" aria-hidden />
                 按大纲生成
               </button>
+            )}
+            {canExtend && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onExtendChapter('append')}
+                  disabled={disabled || busy}
+                  data-testid="extend-append-btn"
+                  title="本章续写：从最后一章结尾无缝续写新剧情，追加为该章新候选（◀▶ 可回退原文）"
+                  className={`${btnBase} border border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]`}
+                >
+                  <FilePlus2 className="h-4 w-4" aria-hidden />
+                  本章续写
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onExtendChapter('expand')}
+                  disabled={disabled || busy}
+                  data-testid="extend-expand-btn"
+                  title="本章加长：保持情节不变扩写最后一章（原地加厚写细），结果追加为新候选（◀▶ 可回退原文）"
+                  className={`${btnBase} border border-[hsl(var(--border-soft))] text-[hsl(var(--fg))] hover:border-[hsl(var(--accent))]`}
+                >
+                  <FilePlus2 className="h-4 w-4 rotate-180" aria-hidden />
+                  本章加长
+                </button>
+              </>
             )}
             {canOutline && outlinePanelOpen && !streaming && (
               <div
