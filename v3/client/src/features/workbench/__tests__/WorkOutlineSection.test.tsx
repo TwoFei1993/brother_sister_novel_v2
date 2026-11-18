@@ -132,7 +132,7 @@ describe('WorkOutlineSection 章节大纲完整编辑器（反馈⑦）', () => 
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ id: 'w1', revision: 4 }));
-    expect(q(c, 'chapter-outline-msg').textContent).toContain('已保存 3 章大纲');
+    expect(q(c, 'chapter-outline-msg').textContent).toContain('已保存 0 卷规划 + 3 章大纲');
   });
 
   it('删除章：行移除后保存 PATCH 不含该章', async () => {

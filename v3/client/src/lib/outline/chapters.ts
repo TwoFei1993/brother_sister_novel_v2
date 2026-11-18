@@ -8,6 +8,7 @@
  * 「剧情/看点/小冲突」标记可能独立成行也可能行内出现、同一文档含多份大纲草稿
  * （章号重复，取首次出现）。
  */
+import type { VolumeOutlineItem } from '@shared/work';
 
 // ---------- 类型 ----------
 
@@ -21,6 +22,8 @@ export interface ChapterOutline {
   conflict?: string;
   /** 所属卷（「第X卷：名称」归入其后最近的章节） */
   volume?: string;
+  /** 迭代轮「只输出变动部分」协议占位（{"index":N,"unchanged":true}）：mergeProposalUpdate 回填或丢弃 */
+  unchanged?: boolean;
 }
 
 // ---------- 内部正则 ----------
@@ -178,7 +181,48 @@ export function chapterOutlineDirective(
   return `\n\n（本章大纲：标题《${hit.title}》；剧情要点：${hit.plot}）`;
 }
 
-/** settings 入库裁剪：ChapterOutline → {index,title,plot}（shared ChapterOutlineItem 形状） */
+/**
+ * 分卷规划联动（卷规划层，用户反馈：卷大纲与章细纲分开）：第 N 章按 startChapter
+ * 定位所属卷（取 startChapter ≤ N 的最大者；无匹配回落第一卷），返回本卷主线注入文本。
+ * 卷缺 startChapter 不参与归卷（防止顺延错挂）；summary 为空的卷不注入。无则空串。
+ */
+export function volumeOutlineDirective(
+  volumes: readonly { index: number; title: string; summary: string; startChapter?: number }[] | undefined,
+  chapterIndex: number,
+): string {
+  const located = (volumes ?? [])
+    .filter((v) => Number.isFinite(v.startChapter))
+    .sort((a, b) => (a.startChapter ?? 1) - (b.startChapter ?? 1));
+  if (located.length === 0) return '';
+  let hit = located[0];
+  for (const v of located) {
+    if ((v.startChapter ?? 1) <= chapterIndex) hit = v;
+    else break;
+  }
+  if (!hit.summary.trim()) return '';
+  return `\n\n（本卷规划：第${hit.index}卷《${hit.title}》——${hit.summary.trim()}）`;
+}
+
+/**
+ * 导入联动：从带 volume 归属的章纲聚合分卷（用户反馈：导入的大纲常带「第X卷：名称」标记，
+ * 此前入库时被剥掉）。卷按起始章号排序编卷号 1..n；startChapter=卷内最小章号；summary 留空
+ * （导入文本没有卷级概述，作者可在设置里补写）。无卷归属返回空数组。
+ */
+export function volumesFromChapters(chapters: readonly ChapterOutline[]): VolumeOutlineItem[] {
+  const groups = new Map<string, number>();
+  for (const c of chapters) {
+    if (!c.volume) continue;
+    const cur = groups.get(c.volume);
+    groups.set(c.volume, cur === undefined ? c.index : Math.min(cur, c.index));
+  }
+  return [...groups.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([title, start], i) => ({ index: i + 1, title, summary: '', startChapter: start }));
+}
+
+/** settings 入库裁剪：ChapterOutline → {index,title,plot}（shared ChapterOutlineItem 形状）；占位条目（unchanged）不入库 */
 export function toChapterOutlineItems(chapters: ChapterOutline[]): { index: number; title: string; plot: string }[] {
-  return chapters.map(({ index, title, plot }) => ({ index, title, plot }));
+  return chapters
+    .filter((c) => !c.unchanged)
+    .map(({ index, title, plot }) => ({ index, title, plot }));
 }

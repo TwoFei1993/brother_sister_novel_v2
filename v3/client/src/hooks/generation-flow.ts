@@ -105,9 +105,41 @@ export function isReplayedContinuation(partial: string, next: string): boolean {
   return partial.includes(probe);
 }
 
+/** 续写新增段以章标题行开头 = 模型重新开章（用户反馈③：已写半章 + 模型重新输出标题
+ *  从开头另写，拼接后一章两个开头）。捕获形态：`# 第N章 …` / `第N章 …`（冒号/间隔号/
+ *  空白分隔均可）。正常续写绝不会以章标题开头，该信号误报率趋近于零。 */
+const RESTART_TITLE_RE = /^#?\s*第\s*\d+\s*章\s*[:：·\s]/;
+
+export function isChapterRestart(added: string): boolean {
+  return RESTART_TITLE_RE.test(added.trimStart());
+}
+
+/**
+ * 续写轮 grounding（用户反馈③根因修复）：半章原文以伪 assistant 消息进历史——
+ * 此前续写轮上下文只有指令里带的 200 字尾部锚点，模型不知道本章已写了什么，
+ * 叠加末尾「输出章标题」类残留指令就会被带偏而重新开章。伪消息不带 chapter 元数据
+ * （nextChapterIndex 不受影响、不入库），仅进本轮提示词历史。
+ */
+export function withPartialInHistory(messages: readonly Message[], partial: string): Message[] {
+  if (!partial.trim()) return [...messages];
+  return [
+    ...messages,
+    {
+      id: `partial-${uuid()}`,
+      role: 'assistant',
+      name: '小说家',
+      content: partial,
+      createdAt: Date.now(),
+      swipes: [],
+      swipeId: 0,
+      extra: {},
+    },
+  ];
+}
+
 export function buildContinueDirective(partial: string): string {
   const tail = partial.trimEnd().slice(-CONTINUE_TAIL_CHARS);
-  return `接着写完这一章，从下面已写内容的结尾自然续写，保持行文连贯，不要重复已有文字：\n\n…${tail}`;
+  return `接着写完这一章：从下面已写内容的结尾自然续写，保持行文连贯；不要重复已有文字，不要重新开始本章，不要输出章节标题：\n\n…${tail}`;
 }
 
 /** 下一章号：现有最大 chapter.index + 1；无章节消息则 1 */

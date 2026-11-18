@@ -289,3 +289,45 @@ describe('chat 串名泄露剥离（深度测试低危反馈）', () => {
     expect(presentable('哥哥，你快看这个！', '妹妹', ['哥哥', '妹妹'])).toBe('哥哥，你快看这个！');
   });
 });
+
+describe('buildStyleExecution / buildChapterRequirement 基调文风执行（用户反馈①：指定治愈却写压抑）', () => {
+  it('内置基调映射为写法级指令（治愈：禁压抑、期待感钩子）', async () => {
+    const { buildStyleExecution } = await import('../prompt/novel/requirements');
+    const block = buildStyleExecution({ tones: ['温情治愈'], style: '' });
+    expect(block).toContain('【基调与文风（最高优先级）】');
+    expect(block).toContain('禁止渲染压抑');
+    expect(block).toContain('期待感');
+  });
+
+  it('自定义基调透传 + 文风注入；全空 → 空串不注入', async () => {
+    const { buildStyleExecution } = await import('../prompt/novel/requirements');
+    expect(buildStyleExecution({ tones: ['慢节奏种田'], style: '晋江风' })).toContain('慢节奏种田');
+    expect(buildStyleExecution({ tones: [], style: '' })).toBe('');
+  });
+
+  it('buildChapterRequirement 注入基调执行块且声明优先级高于悬念纪律', async () => {
+    const { buildChapterRequirement } = await import('../prompt/novel/requirements');
+    const text = buildChapterRequirement(3000, undefined, { tones: ['温情治愈'], style: '' });
+    expect(text).toContain('【基调与文风（最高优先级）】');
+    expect(text).toContain('以基调规定的方式执行');
+    // 不传 styleBits 保持旧行为（无基调块）
+    expect(buildChapterRequirement(3000)).not.toContain('【基调与文风（最高优先级）】');
+  });
+
+  it('buildContinueRequirement：续写轮不要求章标题、明令禁止重开（用户反馈③）', async () => {
+    const { buildContinueRequirement, buildChapterRequirement } = await import('../prompt/novel/requirements');
+    const cont = buildContinueRequirement(3000);
+    expect(cont).not.toContain('第一行先输出本章标题');
+    expect(cont).toMatch(/严禁|严格禁止/);
+    expect(cont).toContain('从它的结尾无缝接着往下写');
+    // 常规要求块仍要求标题（回归锚定）
+    expect(buildChapterRequirement(3000)).toContain('第一行先输出本章标题');
+  });
+
+  it('视角节奏纪律进主提示词与要求块（用户反馈④）', async () => {
+    const { buildNovelMainPrompt, buildChapterRequirement } = await import('../prompt/novel/requirements');
+    expect(buildNovelMainPrompt(3000).content).toContain('第三人称限制视角');
+    expect(buildChapterRequirement(3000)).toContain('第三人称限制视角');
+    expect(buildChapterRequirement(3000)).toContain('对话不宜连续超过三句');
+  });
+});

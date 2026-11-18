@@ -66,12 +66,13 @@ export default function BookOutlineChat({ work, onApplied, onGoWrite }: Props) {
   /** 等待中的用户输入（失败回滚重填草稿） */
   const lastSentRef = useRef('');
 
-  /** 应用 AI 回复（防重入；由轮询链/恢复路径调用） */
+  /** 应用 AI 回复（防重入；由轮询链/恢复路径调用）。迭代轮「只输出变动部分」协议：
+   *  解析时带当前基准（占位回填 + 缺失字段继承基准），无变更时保持原策划案 */
   function applyReplyOnce(raw: string): void {
     if (!applyGuardRef.current) return;
     applyGuardRef.current = false;
     const prev = latestRef.current;
-    const parsed = parsePlannerReply(strip(raw));
+    const parsed = parsePlannerReply(strip(raw), prev.proposal);
     if (!parsed) {
       commit({ turns: [...prev.turns, { role: 'assistant' as const, text: strip(raw) || '（空回复）' }], proposal: prev.proposal });
     } else {
@@ -205,7 +206,7 @@ export default function BookOutlineChat({ work, onApplied, onGoWrite }: Props) {
   async function apply(p: PlannerProposal): Promise<void> {
     if (applying) return;
     const ok = confirm(
-      `将写入《${work.title}》的「资料」：${(p.extracted.chapters ?? []).length} 章大纲、背景、核心矛盾、势力，并按角色一键建卡绑定。\n` +
+      `将写入《${work.title}》的「资料」：${(p.extracted.chapters ?? []).length} 章大纲、背景、核心矛盾、势力，并按角色/物品一键建卡绑定。\n` +
         '已有正文不受影响；本次应用前的资料自动存入历史，可随时回滚。继续？',
     );
     if (!ok) return;
@@ -380,8 +381,16 @@ export default function BookOutlineChat({ work, onApplied, onGoWrite }: Props) {
           <div className="mt-3 rounded-2xl border-2 border-[hsl(var(--accent))]/50 bg-[hsl(var(--surface))] p-3" data-testid="book-proposal-card">
             <p className="text-sm font-semibold">策划案：{proposal.title}</p>
             <p className="mt-0.5 text-[11px] text-[hsl(var(--fg-muted))]">
-              题材：{proposal.genre} · 角色 {proposal.extracted.characters.length} · 势力 {proposal.extracted.factions.length} ·{' '}
+              题材：{proposal.genre} · 角色 {proposal.extracted.characters.length} · 势力 {proposal.extracted.factions.length}
+              {(proposal.extracted.items?.length ?? 0) > 0 ? ` · 物品 ${proposal.extracted.items?.length}` : ''} ·{' '}
               {(proposal.extracted.chapters ?? []).length} 章大纲
+            </p>
+            {/* 自由调整提示（用户反馈：大纲生成后可反复用自己的话沟通调整） */}
+            <p
+              data-testid="book-proposal-adjust-hint"
+              className="mt-2 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2.5 py-1.5 text-[11px] leading-4 text-[hsl(var(--fg-muted))]"
+            >
+              💬 满意前可以反复改：直接在下方输入框用自己的话说调整（例：「把第 3 章改成吵架」「加一个信物道具」），我只改对应部分。
             </p>
             <details className="mt-2">
               <summary className="cursor-pointer text-[11px] text-[hsl(var(--fg-muted))]">查看策划案全文</summary>

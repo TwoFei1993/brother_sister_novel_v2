@@ -52,6 +52,17 @@ export function buildSettingsBlock(s: NovelSettings): string {
         openForeshadows.map((f, i) => `${i + 1}. ${f.desc}（第${f.plantedAt}章埋）`).join('\n'),
     );
   }
+  // 分卷规划（卷规划层，用户反馈：卷大纲与章细纲分开别混）：卷级主线整块注入，
+  // 与生成期按章号定位的本卷注入（volumeOutlineDirective）互补
+  const volumes = (s.volumeOutlines ?? []).filter((v) => v.title.trim() || v.summary.trim());
+  if (volumes.length > 0) {
+    parts.push(
+      '【分卷规划（卷级主线；章细纲之外的上一层规划）】\n' +
+        volumes
+          .map((v) => `第${v.index}卷《${v.title}》${v.startChapter ? `（第${v.startChapter}章起）` : ''}：${v.summary}`)
+          .join('\n'),
+    );
+  }
   if (s.pastedOutline.trim()) parts.push(`大纲：${s.pastedOutline.trim()}`);
   return parts.length ? `【作品设定】\n${parts.join('\n')}` : '';
 }

@@ -1,19 +1,22 @@
 /**
  * 章节大纲编辑区（作品设置抽屉子区，反馈⑦拆分自 WorkSettingsSheet）
  *
+ * - 分卷规划编辑区（卷规划层，用户反馈：卷大纲与章细纲分开写别混为一谈）：
+ *   每卷 = 卷号 + 卷名 + 起始章 + 本卷概述；生成第 N 章时按 startChapter 定位所属卷注入本卷主线
  * - 完整可编辑列表：每章 = 章号 + 标题 input + 剧情 textarea（3 行起）+ 删除章按钮，
  *   外层 max-h + overflow-y-auto 滚动（此前只露一小截，长大纲不可维护）
  * - 添加章：追加「现有最大章号+1」的空章；保存时按章号升序、剔出全空章
- * - 保存大纲：PATCH settings.chapterOutlines（乐观锁 revision），成功回传新 Work 同步 store
- * - 导入：粘贴/Word 导入 → 解析 ≥3 章 → 整体覆盖保存（与手动编辑互补，原路径保留）
+ * - 保存大纲：PATCH settings.chapterOutlines + volumeOutlines（乐观锁 revision），成功回传新 Work 同步 store
+ * - 导入：粘贴/Word 导入 → 解析 ≥3 章 → 整体覆盖保存（「第X卷：名称」标记聚合为分卷；与手动编辑互补）
  */
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 
 import { updateWork } from '../../api/works';
-import { parseChapterOutlines, toChapterOutlineItems } from '../../lib/outline/chapters';
-import type { ChapterOutlineItem, Work } from '@shared/work';
+import { parseChapterOutlines, toChapterOutlineItems, volumesFromChapters } from '../../lib/outline/chapters';
+import type { ChapterOutlineItem, VolumeOutlineItem, Work } from '@shared/work';
 import DocImport from '../misc/wizard/DocImport';
+import VolumeOutlineList from './outline/VolumeOutlineList';
 
 interface WorkOutlineSectionProps {
   work: Work;
@@ -28,6 +31,8 @@ function clampIndex(value: string, fallback: number): number {
 
 export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSectionProps) {
   const [items, setItems] = useState<ChapterOutlineItem[]>(work.settings.chapterOutlines ?? []);
+  // 分卷规划（卷规划层）：与章细纲分开编辑、一次 PATCH 同存
+  const [volumes, setVolumes] = useState<VolumeOutlineItem[]>(work.settings.volumeOutlines ?? []);
   // 导入路径（保留）：粘贴/Word 文本 → 解析 → 整体覆盖
   const [outlineText, setOutlineText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,6 +42,20 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
   useEffect(() => {
     setItems(work.settings.chapterOutlines ?? []);
   }, [work.settings.chapterOutlines]);
+  useEffect(() => {
+    setVolumes(work.settings.volumeOutlines ?? []);
+  }, [work.settings.volumeOutlines]);
+
+  const updateVolume = (i: number, patch: Partial<VolumeOutlineItem>): void =>
+    setVolumes((prev) => prev.map((v, k) => (k === i ? { ...v, ...patch } : v)));
+
+  const removeVolumeAt = (i: number): void => setVolumes((prev) => prev.filter((_, k) => k !== i));
+
+  const addVolume = (): void =>
+    setVolumes((prev) => [
+      ...prev,
+      { index: prev.reduce((mx, v) => Math.max(mx, v.index), 0) + 1, title: '', summary: '' },
+    ]);
 
   const update = (i: number, patch: Partial<ChapterOutlineItem>): void =>
     setItems((prev) => prev.map((it, k) => (k === i ? { ...it, ...patch } : it)));
@@ -49,7 +68,7 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
       { index: prev.reduce((mx, it) => Math.max(mx, it.index), 0) + 1, title: '', plot: '' },
     ]);
 
-  /** 保存大纲：章号升序 + 剔出全空章 + 章号兜底 → PATCH（乐观锁） */
+  /** 保存大纲：卷/章各自升序 + 剔出全空项 + 章号卷号兜底 → 一次 PATCH（乐观锁） */
   async function saveOutlines(): Promise<void> {
     setBusy(true);
     setMsg('');
@@ -61,12 +80,23 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
       }))
       .filter((it) => it.title !== '' || it.plot !== '')
       .sort((a, b) => a.index - b.index);
+    const cleanedVolumes = volumes
+      .map((v) => ({
+        index: clampIndex(String(v.index), v.index),
+        title: v.title.trim(),
+        summary: v.summary.trim(),
+        ...(Number.isFinite(v.startChapter) && v.startChapter ? { startChapter: clampIndex(String(v.startChapter), v.startChapter) } : {}),
+      }))
+      .filter((v) => v.title !== '' || v.summary !== '')
+      .sort((a, b) => a.index - b.index);
     try {
       const next = await updateWork(work.id, {
         revision: work.revision,
-        settings: { ...work.settings, chapterOutlines: cleaned },
+        settings: { ...work.settings, chapterOutlines: cleaned, volumeOutlines: cleanedVolumes },
       });
-      setMsg(`已保存 ${cleaned.length} 章大纲，生成对应章节时自动跟随其要点`);
+      setMsg(
+        `已保存 ${cleanedVolumes.length} 卷规划 + ${cleaned.length} 章大纲；生成对应章节时自动跟随本卷主线与本章要点`,
+      );
       onSaved(next);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : '保存失败，请重试');
@@ -75,7 +105,7 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
     }
   }
 
-  /** 导入：识别 <3 章提示；成功整体覆盖保存并回传新 Work */
+  /** 导入：识别 <3 章提示；成功整体覆盖保存并回传新 Work（「第X卷」标记聚合为分卷规划） */
   async function importOutlines(): Promise<void> {
     const chapters = parseChapterOutlines(outlineText);
     if (chapters.length < 3) {
@@ -84,13 +114,20 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
     }
     setBusy(true);
     setMsg('');
+    const vols = volumesFromChapters(chapters);
     try {
       const next = await updateWork(work.id, {
         revision: work.revision,
-        settings: { ...work.settings, chapterOutlines: toChapterOutlineItems(chapters) },
+        settings: {
+          ...work.settings,
+          chapterOutlines: toChapterOutlineItems(chapters),
+          volumeOutlines: vols,
+        },
       });
       setOutlineText('');
-      setMsg(`已导入 ${chapters.length} 章大纲，生成对应章节时自动跟随其要点`);
+      setMsg(
+        `已导入 ${chapters.length} 章大纲${vols.length > 0 ? `（含 ${vols.length} 卷，概述可补写后保存）` : ''}，生成对应章节时自动跟随其要点`,
+      );
       onSaved(next);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : '保存失败，请重试');
@@ -104,7 +141,17 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
 
   return (
     <section className="border-t border-[hsl(var(--border-soft))] pt-4">
-      <p className="mb-1 text-sm font-medium">章节大纲</p>
+      {/* ---------- 分卷规划（卷规划层，在章细纲之上） ---------- */}
+      <p className="mb-1 text-sm font-medium">分卷规划</p>
+      <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]">
+        {volumes.length > 0
+          ? `共 ${volumes.length} 卷——生成各章时自动注入所属卷的主线概述（卷管主线节奏，章管具体剧情）`
+          : '可选：先给全书分卷（每卷一条主线概述），生成时按起始章自动归卷注入'}
+      </p>
+
+      <VolumeOutlineList volumes={volumes} onUpdate={updateVolume} onRemove={removeVolumeAt} onAdd={addVolume} />
+
+      <p className="mb-1 mt-4 text-sm font-medium">章节大纲</p>
       <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]">
         {items.length > 0
           ? `共 ${items.length} 章大纲——生成对应章节时自动跟随其剧情要点（可逐章编辑）`
@@ -188,7 +235,7 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
         value={outlineText}
         onChange={(e) => setOutlineText(e.target.value)}
         rows={4}
-        placeholder={'整体覆盖导入：\n第1章 落地嫡长，方寸藏天机\n剧情：女主胎穿…\n第2章 …'}
+        placeholder={'整体覆盖导入（「第X卷：名称」自动聚合为分卷规划）：\n第一卷：初入异世\n第1章 落地嫡长，方寸藏天机\n剧情：女主胎穿…\n第2章 …'}
         className={`mt-3 w-full p-3 ${fieldCls}`}
       />
       <div className="mt-2 flex flex-wrap items-center gap-2">

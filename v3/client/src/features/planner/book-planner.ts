@@ -5,8 +5,10 @@
  * - 协议复用 planner-llm（严格 JSON：reply/questions/proposal），多选组件直接复用 PlannerQuestions
  * - 会话与历史按 workId 独立持久化（localStorage），跨页面切换上下文不丢
  */
+import type { VolumeOutlineItem } from '@shared/work';
+
 import type { ExtractedOutline } from '../../lib/outline/wizard';
-import { normalizeOutlineChapters, type PlannerProposal, type PlannerQuestion } from './planner-llm';
+import { normalizeOutlineChapters, normalizeOutlineVolumes, type PlannerProposal, type PlannerQuestion } from './planner-llm';
 
 export interface BookTurn {
   role: 'user' | 'assistant';
@@ -26,6 +28,8 @@ export interface AppliedVersion {
   /** 应用到 settings 的资料切片（回滚即恢复此切片） */
   slice: {
     chapterOutlines: Array<{ index: number; title: string; plot: string }>;
+    /** 分卷规划（卷规划层，与章细纲分层；旧历史版本可能缺省） */
+    volumeOutlines?: VolumeOutlineItem[];
     desiredChapterCount: number;
     backgroundNote: string;
     coreConflict: string;
@@ -150,12 +154,14 @@ export function bookPlannerSystem(input: {
 {"reply":"给用户的话","questions":[{"q":"问题","options":["候选项一","候选项二","候选项三"]}],"title":"书名","genre":"题材","outline":{...}或null}
 理解规则：每轮 reply 第一句先复述你对当前进度的理解；用户原话中的设定（书名/人名/数量/跨度）严格照用；拿不准才问、已确认绝不重复问；用户说「你决定/都行」时你直接替用户拍板并说明理由，不要再反问。
 【直接生成】规则：用户消息以「【直接生成】」开头时，跳过一切提问，直接拍板所有未定项并输出完整策划案（outline 填全、chapters 8-12 章起），reply 简述你替用户做的关键选择。
-questions 规则：每题 2-3 个具体候选项；无问题传空数组。
+questions 规则：每题 2-3 个具体候选项；无问题传空数组。**每组 questions 的最后一题固定为「你有什么建议和想法？」**——候选项给 2-3 个你的专业建议方向，用户可以直接选，也可以完全自由输入自己的想法。
 提问阶段规则（很重要）：提问先宏观后具体——优先问「题材类型 / 故事基调 / 文风」（例如：轻松日常、权谋斗争、热血冒险、悬疑探案、温馨治愈、搞笑吐槽）、「目标读者与篇幅规模」，题材基调定了之后再问剧情细节与人物设定；禁止一上来就问具体情节走向。
-阶段流程：想法发散（多轮问答，outline=null）→ 关键点齐了出完整策划案（outline 填全）→ 用户提修改则只改对应部分并输出完整最新版 → 纯闲聊 outline=null。
+阶段流程：想法发散（多轮问答，outline=null）→ 关键点齐了出完整策划案（outline 填全）→ **自由调整模式（策划案出来后不设轮次上限）**：用户可以反复用任意口语化的话提调整（大改结构/小改细节/增删人物物品章节都行），你听懂意图后只改对应部分、其余继承当前策划案；纯讨论不涉及策划变更时 outline=null。
+调整轮输出分量控制（极重要）：迭代轮只输出**发生变动的部分**，禁止重发整份大纲——未变更的 chapters 条目写 「{"index":N,"unchanged":true}」 占位（系统自动回填原文）；characters/background/factions/conflict/volumes/items 未变动时整个字段省略（系统继承基准值）；只有用户要求全盘重写时才输出完整版。
 outline 结构：
-{"characters":[{"name":"姓名","role":"身份","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","chapters":[{"index":1,"title":"第1章 标题","plot":"要点80-150字"}]}
-大纲规模规则：用户要求总章数 > 30 时，chapters 只输出卷规划（每卷一段）+ 第一卷前 12-15 章细纲，reply 说明「后续按卷续出」；默认首轮 8-12 章。
+{"characters":[{"name":"姓名","role":"身份","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","items":[{"name":"物品名","summary":"一句话：这是什么、特殊在哪（外观/功能/情感意义，会建成物品资料卡）"}],"volumes":[{"index":1,"title":"卷名","summary":"本卷主线概述150-300字（本卷起止事件与主线推进）","startChapter":1}],"chapters":[{"index":1,"title":"第1章 标题","plot":"要点80-150字"}]}
+大纲规模规则：卷与章严格分层——**volumes 放卷规划**（每卷一条：卷名+本卷主线概述+startChapter 起始章号，默认每卷约 12 章），**chapters 只放逐章细纲**，禁止把卷规划混进 chapters；用户要求总章数 > 30 时，volumes 出全部分卷规划 + chapters 只给第一卷前 12-15 章细纲，reply 说明「后续按卷续出」；默认首轮 8-12 章。
+items 规则：只列对剧情有实际作用的特殊物品/道具（金手指载体、信物、关键武器等），普通日常物品不列；2-6 条为宜，没有传空数组。
 ${input.settingsBits ? `\n【本书既有设定】\n${input.settingsBits}` : ''}${input.chapterTail ? `\n【已有正文（最新章尾部）】\n${input.chapterTail}` : ''}`;
 }
 
@@ -166,21 +172,35 @@ export function bookPlannerMessages(
   userText: string,
   proposal: PlannerProposal | null,
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
-  const base = [{ role: 'system' as const, content: system }, ...history.slice(-12).map((t) => ({ role: t.role, content: t.text }))];
+  // 历史 assistant 消息里的策划案 JSON 压缩 + 基准章节瘦身——同 plannerMessages（反馈②：迭代轮
+  // prompt 随调整次数线性膨胀，会被中转静默截断/空回；基准只带标题，plot 由占位回填）
+  const base = [
+    { role: 'system' as const, content: system },
+    ...history.slice(-12).map((t) => ({
+      role: t.role,
+      content: t.role === 'assistant' ? t.text.replace(/\{[\s\S]{400,}\}/g, '（该轮策划案 JSON 已略——以末尾最新基准为准）') : t.text,
+    })),
+  ];
   if (!proposal) return [...base, { role: 'user' as const, content: userText }];
+  const compact = {
+    title: proposal.title,
+    genre: proposal.genre,
+    ...proposal.extracted,
+    chapters: (proposal.extracted.chapters ?? []).filter((c) => !c.unchanged).map(({ index, title }) => ({ index, title })),
+  };
   return [
     ...base,
     { role: 'user' as const, content: userText },
-    { role: 'user' as const, content: `（当前策划案基准 JSON，修改时继承未提及部分）\n${JSON.stringify({ title: proposal.title, genre: proposal.genre, ...proposal.extracted })}` },
+    { role: 'user' as const, content: `（当前策划案基准 JSON——章节仅含标题，调整时未变更章节写占位由系统回填标题与要点）\n${JSON.stringify(compact)}` },
   ];
 }
 
-/** 应用策划案 → 资料 settings 切片（updateWork 与历史快照共用；chapters 归一化防缺 index → NaN → null 被校验拒） */
+/** 应用策划案 → 资料 settings 切片（updateWork 与历史快照共用；chapters/volumes 归一化防缺 index → NaN → null 被校验拒；占位条目不入库） */
 export function proposalToSlice(
   proposal: PlannerProposal,
   base: { desiredChapterCount?: number },
 ): AppliedVersion['slice'] {
-  const chapters = normalizeOutlineChapters(proposal.extracted.chapters ?? []);
+  const chapters = normalizeOutlineChapters(proposal.extracted.chapters ?? []).filter((c) => !c.unchanged);
   const baseCount = Number.isFinite(base.desiredChapterCount) ? (base.desiredChapterCount ?? 0) : 0;
   const desired = Math.max(
     chapters.reduce((mx, c) => Math.max(mx, c.index), 0),
@@ -189,6 +209,7 @@ export function proposalToSlice(
   );
   return {
     chapterOutlines: chapters,
+    volumeOutlines: normalizeOutlineVolumes(proposal.extracted.volumes),
     desiredChapterCount: desired,
     backgroundNote: proposal.extracted.background,
     coreConflict: proposal.extracted.conflict,

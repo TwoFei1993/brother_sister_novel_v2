@@ -27,16 +27,18 @@ import {
   buildContinueDirective,
   calcOutputBudget,
   historyBeforeTarget,
+  isChapterRestart,
   isReplayedContinuation,
   looksTruncated,
   nextChapterIndex,
   swipeLimitError,
+  withPartialInHistory,
   type BatchProgress,
 } from './generation-flow';
 import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { persistMessage } from './generation-pipeline';
 import { runGenerationStream } from './generation-runtime';
-import { META_ONLY_PLACEHOLDER } from '../engine/prompt/postprocess';
+import { META_ONLY_PLACEHOLDER, parseChapterTitle } from '../engine/prompt/postprocess';
 import {
   buildMacroEnv,
   finalizeGeneration,
@@ -60,6 +62,8 @@ interface RunOptions {
   persistMessageId?: string;
   /** 输出预算倍率（meta/崩溃重试对症「思考吃满 max_tokens」：预算不变的重试注定再失败） */
   maxTokensScale?: number;
+  /** 续写轮（用户反馈③）：要求块与输出守卫切「无缝续写」变体，不要求章标题、禁止重新开章 */
+  continuation?: boolean;
 }
 
 /** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
@@ -128,8 +132,13 @@ export function useGenerate(): UseGenerateResult {
           const assets: AssembleAssets = await loadAssembleAssets(work, nextChapterIndex(messages));
           const pending: PendingVars = { work: new Map(), global: new Map() };
           const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
-          // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）
-          const tail: AssembleTail = { kind: 'directive', text: opts.promptDirective ?? directive };
+          // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）；
+          // 续写轮标记 continuation：要求块与输出守卫切「无缝续写」变体（反馈③）
+          const tail: AssembleTail = {
+            kind: 'directive',
+            text: opts.promptDirective ?? directive,
+            ...(opts.continuation ? { continuation: true } : {}),
+          };
           const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
           // 输出预算按章节目标字数动态反推（calcOutputBudget，见函数注释——「写到一半就没了」
           // 的第一性修复：旧固定值与目标字数脱钩，推理模型思考吃多后正文半途预算枯竭被腰斩）；
@@ -211,7 +220,11 @@ export function useGenerate(): UseGenerateResult {
 
   /** 截断自动续写（generateChapter/swipeRegenerate 共用）：双判据——
    *  判据统一走 looksTruncated（finish 明示 / 无 finish 帧时启发式+字数兜底——句号边界截断盲区）
-   *  runOpts(partial) 由调用方给定续写轮的入库语义（普通章按消息 id 幂等覆盖 / swipe 候选更新） */
+   *  runOpts(partial) 由调用方给定续写轮的入库语义（普通章按消息 id 幂等覆盖 / swipe 候选更新）。
+   *  续写轮接线（用户反馈③）：①半章原文以伪 assistant 消息进历史（grounding，模型知道已写什么）；
+   *  ②continuation 标记切「无缝续写」要求块与守卫（不再要求「第一行输出章标题」——该指令
+   *  在续写轮等于命令模型重新开章）；③新增段以章标题开头 = 模型重开 → 只保留新章（旧半章按
+   *  用户预期「当它不存在」），同 id 幂等覆盖落库 */
   const continueTruncated = async (
     work: Work,
     ctxMessages: Message[],
@@ -226,7 +239,12 @@ export function useGenerate(): UseGenerateResult {
       if (!looksTruncated(finish, msg.content, targetWords)) break;
       const prev = msg;
       const partial = msg.content;
-      const next = await run(work, ctxMessages, buildContinueDirective(partial), runOpts(partial));
+      const next = await run(
+        work,
+        withPartialInHistory(ctxMessages, partial),
+        buildContinueDirective(partial),
+        { ...runOpts(partial), continuation: true },
+      );
       // 重放保护：上游把已有内容从头复述（短流×字数兜底误判组合）→ 整体回滚本轮并停止——
       // content 之外 chapter.title/directive 也一并还原（续写轮 finalize 会把指令文本污染进
       // title 的回退路径），同 id 幂等覆盖回写
@@ -237,13 +255,35 @@ export function useGenerate(): UseGenerateResult {
         msg = rolled;
         break;
       }
-      msg = next;
+      // 重开保护：新增段以章标题开头 = 模型无视续写纪律重新开章 → 丢弃旧半章、只保留新章
+      //（parseChapterTitle 把新章标题剥进 chapter 元数据；旧 chapter.title 保留为兜底），
+      // directive/章节归属还原为 prev（续写轮 finalize 会把续写指令文本污染进 title 回退路径）
+      const added = next && next.content.length > partial.length ? next.content.slice(partial.length) : '';
+      if (next && added.trim().length >= 8 && isChapterRestart(added)) {
+        const parsed = parseChapterTitle(added.trim(), undefined, prev.chapter?.index ?? 0);
+        const cleanTitle = parsed.title && !/^第\d+章$/.test(parsed.title) ? parsed.title : (prev.chapter?.title ?? '');
+        const rolled: Message = {
+          ...next,
+          content: parsed.content,
+          directive: prev.directive,
+          swipes: next.swipes.map((v, i) => (i === next.swipeId ? { ...v, content: parsed.content } : v)),
+          ...(prev.chapter ? { chapter: { ...prev.chapter, title: cleanTitle } } : {}),
+        };
+        await persistMessage(work.id, rolled);
+        msg = rolled;
+        break;
+      }
+      // 正常续写：chapter/directive 同样还原为 prev（章节身份不变；title 不被续写指令污染）
+      msg = next
+        ? { ...next, directive: prev.directive, ...(prev.chapter ? { chapter: { ...prev.chapter } } : {}) }
+        : next;
     }
     return msg;
   };
 
   /** 流中断自动恢复：run 返回 null（网络/上游错误中断，非用户停止）且已有部分内容时，
-   *  以缓冲区半成品为基底自动续写一轮——此前中断即整体丢弃出库，几千字白写（根因③） */
+   *  以缓冲区半成品为基底自动续写一轮——此前中断即整体丢弃出库，几千字白写（根因③）。
+   *  同样走续写轮语义：半章进历史 grounding + continuation 要求块（防重开）。 */
   const rescueFromStreamBreak = async (
     work: Work,
     messages: Message[],
@@ -252,11 +292,12 @@ export function useGenerate(): UseGenerateResult {
   ): Promise<Message | null> => {
     const st = useGenerationStore.getState();
     if (st.error === null || !st.partialKept || st.buffer.trim().length < 200) return null; // 用户停止/无实质内容 → 不救
-    return run(work, messages, buildContinueDirective(st.buffer), {
+    return run(work, withPartialInHistory(messages, st.buffer), buildContinueDirective(st.buffer), {
       targetId,
       initialBuffer: st.buffer,
       promptDirective: directive,
       maxTokensScale: 2,
+      continuation: true,
     });
   };
 
@@ -354,7 +395,12 @@ export function useGenerate(): UseGenerateResult {
   const continueFromPartial = useCallback(
     (work: Work, messages: Message[], partial: string) => {
       const targetId = useGenerationStore.getState().targetMessageId ?? uuid();
-      return run(work, messages, buildContinueDirective(partial), { targetId, initialBuffer: partial });
+      // 续写轮语义（反馈③）：半章进历史 grounding + continuation 要求块（不要求章标题、禁止重开）
+      return run(work, withPartialInHistory(messages, partial), buildContinueDirective(partial), {
+        targetId,
+        initialBuffer: partial,
+        continuation: true,
+      });
     },
     [run],
   );

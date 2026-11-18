@@ -5,6 +5,8 @@
  * 1) 小节序号后无空格（"二、主要人物"）时旧站切界失败；
  * 2) 人物行（"哥哥：…"）不是小节边界，导致背景/矛盾抽取吞并后续段落。
  */
+import type { VolumeOutlineItem } from '@shared/work';
+
 import type { ChapterOutline } from './chapters';
 
 // ---------- 类型 ----------
@@ -27,6 +29,49 @@ export interface ExtractedOutline {
   conflict: string;
   /** 章节级大纲（AI 兜底路径抽取；规则路径由 parseChapterOutlines 独立产出） */
   chapters?: ChapterOutline[];
+  /** 分卷规划（卷规划层，与章细纲分层；planner 输出路径产出，规则抽取路径不产出） */
+  volumes?: VolumeOutlineItem[];
+  /** 特殊物品清单（planner 输出路径产出；一键开书时建成物品资料卡并绑定） */
+  items?: Array<{ name: string; summary: string }>;
+}
+
+/**
+ * 迭代轮「只输出变动部分」协议的合并器（用户反馈：大纲生成后反复用自己的话调整——
+ * 实测全量重发 12 章+分卷的大 JSON 在中转通道稳定截断，小输出没问题）。
+ *
+ * 规则（与 PLANNER_SYSTEM 阶段三提示词约定一致）：
+ * - update.chapters 中 unchanged:true 的占位条目 → 从 baseline 同章号回填；无基准可回填则丢弃
+ * - update 的数组/字符串字段缺失或为空 → 继承 baseline（「继承未提及部分」从提示词约定升级为代码保证）
+ * - baseline 为 null（首轮出案）→ update 原样返回（占位条目丢弃）
+ */
+export function mergeProposalUpdate(baseline: ExtractedOutline | null, update: ExtractedOutline): ExtractedOutline {
+  if (!baseline) {
+    // 无基准：原样收下，占位条目无处回填直接丢弃
+    return { ...update, chapters: (update.chapters ?? []).filter((c) => !c.unchanged) };
+  }
+  const inheritStr = (u: string | undefined, b: string): string => (u !== undefined && u.trim() ? u : b);
+  const inheritArr = <T>(u: T[] | undefined, b: T[]): T[] => (u !== undefined && u.length > 0 ? u : b);
+  const baseChapters = baseline.chapters ?? [];
+  const resolvedChapters = (update.chapters ?? [])
+    .map((c) => {
+      if (!c.unchanged) return c;
+      const hit = baseChapters.find((b) => b.index === c.index);
+      return hit ? { ...hit } : null;
+    })
+    .filter((c): c is ChapterOutline => c !== null);
+  const volumes = update.volumes ?? baseline.volumes ?? [];
+  const items = update.items ?? baseline.items ?? [];
+  return {
+    characters: inheritArr(update.characters, baseline.characters),
+    background: inheritStr(update.background, baseline.background),
+    abilities: inheritArr(update.abilities, baseline.abilities),
+    ...(inheritStr(update.ability ?? '', baseline.ability ?? '') ? { ability: inheritStr(update.ability ?? '', baseline.ability ?? '') } : {}),
+    factions: inheritArr(update.factions, baseline.factions),
+    conflict: inheritStr(update.conflict, baseline.conflict),
+    chapters: update.chapters === undefined ? baseChapters : resolvedChapters,
+    ...(volumes.length > 0 ? { volumes } : {}),
+    ...(items.length > 0 ? { items } : {}),
+  };
 }
 
 // ---------- 正则基建（对照旧站） ----------

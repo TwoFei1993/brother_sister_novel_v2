@@ -17,7 +17,7 @@ import type { CharacterAsset } from '@shared/card';
 import type { Work } from '@shared/work';
 import type { WorldbookAsset } from '@shared/worldbook';
 
-type Kind = 'character' | 'worldbook' | 'faction';
+type Kind = 'character' | 'worldbook' | 'faction' | 'item';
 
 interface AssetRef {
   id: string;
@@ -30,9 +30,10 @@ const ENDPOINT: Record<Kind, string> = {
   character: '/api/characters',
   worldbook: '/api/worldbooks',
   faction: '/api/factions',
+  item: '/api/items',
 };
 
-const LABEL: Record<Kind, string> = { character: '角色卡', worldbook: '世界书', faction: '势力介绍' };
+const LABEL: Record<Kind, string> = { character: '角色卡', worldbook: '世界书', faction: '势力介绍', item: '物品道具' };
 
 /** 全量拉取（含 origin；数量级为个人素材库，直接全量） */
 async function listFull(kind: Kind): Promise<AssetRef[]> {
@@ -53,16 +54,22 @@ export default function BindingsPane({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listFull('character'), listFull('worldbook'), listFull('faction'), listWorks()])
-      .then(([cs, wbs, fas, works]) => {
-        setRefs({ character: cs, worldbook: wbs, faction: fas });
+    Promise.all([listFull('character'), listFull('worldbook'), listFull('faction'), listFull('item'), listWorks()])
+      .then(([cs, wbs, fas, its, works]) => {
+        setRefs({ character: cs, worldbook: wbs, faction: fas, item: its });
         setBookTitles(Object.fromEntries(works.map((w) => [w.id, w.title])));
       })
       .catch(() => setError('素材列表加载失败'));
   }, []);
 
   const boundIds = (kind: Kind): string[] =>
-    kind === 'character' ? work.characterIds : kind === 'worldbook' ? work.worldbookIds : (work.factionIds ?? []);
+    kind === 'character'
+      ? work.characterIds
+      : kind === 'worldbook'
+        ? work.worldbookIds
+        : kind === 'faction'
+          ? (work.factionIds ?? [])
+          : (work.itemIds ?? []);
   const nameOf = (kind: Kind, id: string): string =>
     refs?.[kind]?.find((r) => r.id === id)?.name ?? id.slice(0, 8);
 
@@ -109,7 +116,8 @@ export default function BindingsPane({
       const patchBody: Record<string, unknown> = { revision: latest.revision };
       if (kind === 'character') patchBody.characterIds = nextIds;
       else if (kind === 'worldbook') patchBody.worldbookIds = nextIds;
-      else patchBody.factionIds = nextIds;
+      else if (kind === 'faction') patchBody.factionIds = nextIds;
+      else patchBody.itemIds = nextIds;
       const updated = await apiFetch<Work>(`/api/works/${work.id}`, {
         method: 'PATCH',
         body: JSON.stringify(patchBody),
@@ -144,6 +152,7 @@ export default function BindingsPane({
     { kind: 'character', ids: work.characterIds },
     { kind: 'worldbook', ids: work.worldbookIds },
     { kind: 'faction', ids: work.factionIds ?? [] },
+    { kind: 'item', ids: work.itemIds ?? [] },
   ];
 
   return (

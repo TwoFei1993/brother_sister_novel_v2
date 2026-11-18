@@ -94,6 +94,22 @@ export const ChapterOutlineItemSchema = z.object({
 });
 export type ChapterOutlineItem = z.infer<typeof ChapterOutlineItemSchema>;
 
+/**
+ * 分卷大纲条目（卷规划层，用户反馈：卷大纲与章细纲分开写别混为一谈）：
+ * 卷 = 主线概述层（该卷起止事件与主线推进），章 = 逐章细纲层，两层分开存储与注入。
+ * 生成第 N 章时按 startChapter 定位所属卷，把本卷主线注入提示词。
+ */
+export const VolumeOutlineItemSchema = z.object({
+  /** 卷号（从 1 起） */
+  index: z.number().int(),
+  title: z.string(),
+  /** 本卷主线概述（150-300 字：本卷起止事件与主线推进） */
+  summary: z.string(),
+  /** 本卷起始章号（定位章节归卷；首卷缺省视为第 1 章） */
+  startChapter: z.number().int().positive().optional(),
+});
+export type VolumeOutlineItem = z.infer<typeof VolumeOutlineItemSchema>;
+
 export const NovelSettingsSchema = z.strictObject({
   genre: GenreTypeSchema,
   subGenre: z.string(),
@@ -147,6 +163,8 @@ export const NovelSettingsSchema = z.strictObject({
   styleGuide: z.string().optional(),
   /** 章节大纲（一键导入大纲）：生成第 N 章时按 index 匹配把本章要点追加进指令；缺省视为无 */
   chapterOutlines: z.array(ChapterOutlineItemSchema).optional(),
+  /** 分卷大纲（卷规划层，与章细纲分层）：生成第 N 章时按 startChapter 定位所属卷注入本卷主线；缺省视为无 */
+  volumeOutlines: z.array(VolumeOutlineItemSchema).optional(),
   /** 人物状态卡（自动记忆）：AI 每 N 章抽取的动态事实（位置/伤势/持有物/关系），随【作品设定】注入；作者可编辑=最终事实源 */
   characterState: z.string().optional(),
   /** 伏笔登记（自动抽取+人工维护）：plantedAt=埋设章号，resolved=已回收；未回收项注入上下文提醒 */
@@ -227,7 +245,7 @@ export type WorkStats = z.infer<typeof WorkStatsSchema>;
  */
 export const AssetBindingSchema = z.strictObject({
   assetId: z.string().min(1),
-  kind: z.enum(['character', 'worldbook', 'faction']),
+  kind: z.enum(['character', 'worldbook', 'faction', 'item']),
   fromChapter: z.number().int().min(1),
   status: z.enum(['active', 'pending']),
   /** 来源备注（如「第3章首次出现（AI 检测）」） */
@@ -248,6 +266,8 @@ export const WorkSchema = z.strictObject({
   worldbookIds: z.array(z.string()),
   /** 势力介绍绑定（安卓 app Phase2；缺省=旧数据兼容空） */
   factionIds: z.array(z.string()).optional(),
+  /** 物品道具绑定（初始绑定，全书生效；缺省=旧数据兼容空） */
+  itemIds: z.array(z.string()).optional(),
   /** 增量绑定记录（三态：fromChapter 生效章 / pending 待确认；缺省=旧数据无增量绑定） */
   bindings: z.array(AssetBindingSchema).optional(),
   presetId: z.string(),

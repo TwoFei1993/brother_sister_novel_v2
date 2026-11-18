@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { proposalToSlice, type AppliedVersion } from '../book-planner';
+import { bookPlannerSystem, proposalToSlice, type AppliedVersion } from '../book-planner';
 import type { PlannerProposal } from '../planner-llm';
 
 function proposal(chapters: PlannerProposal['extracted']['chapters']): PlannerProposal {
@@ -65,5 +65,15 @@ describe('proposalToSlice（缺 index → NaN → null 被服务端拒的回归�
       { index: 2, title: 'a', plot: 'pa' },
       { index: 5, title: 'b', plot: 'pb' },
     ]);
+  });
+});
+
+describe('bookPlannerSystem 沟通协议（用户需求：建议题 + 自由调整 + 物品卡）', () => {
+  it('系统提示词含：建议题固定收尾 / 自由调整模式 / items 规则', () => {
+    const system = bookPlannerSystem({ title: 'T', genre: 'G', settingsBits: '', chapterCount: 0, chapterTail: '' });
+    expect(system).toContain('你有什么建议和想法');
+    expect(system).toContain('自由调整模式');
+    expect(system).toContain('items 规则');
+    expect(system).toContain('物品名');
   });
 });

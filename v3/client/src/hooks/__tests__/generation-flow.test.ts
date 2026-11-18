@@ -11,6 +11,7 @@ import {
   buildChapterMessage,
   buildContinueDirective,
   historyBeforeTarget,
+  isChapterRestart,
   nextChapterIndex,
   shouldRetry,
   swipeLimitError,
@@ -18,6 +19,7 @@ import {
   calcOutputBudget,
   isReplayedContinuation,
   looksTruncated,
+  withPartialInHistory,
 } from '../generation-flow';
 
 describe('shouldRetry（§9.1 网络类重试 ≤2 次，仅未产出内容时）', () => {
@@ -286,5 +288,47 @@ describe('isReplayedContinuation（续写重放保护——e2e 抓出的短流�
   it('真正的续写（新增为未见过的情节）→ 不判重放', () => {
     const cont = full + '翌日清晨，两人穿过石门来到地底长廊，火把的光晕里浮出无数壁画，讲述着千年前的封印之战。';
     expect(isReplayedContinuation(full, cont)).toBe(false);
+  });
+});
+
+describe('isChapterRestart（续写重开检测——用户反馈③：半章后模型重新输出标题另写）', () => {
+  it('新增段以「# 第N章」开头 → 判重开', () => {
+    expect(isChapterRestart('# 第5章 风起于萍末\n\n夜色渐深，兄妹俩回到住处。')).toBe(true);
+  });
+
+  it('新增段以无 # 的「第N章」开头 → 判重开', () => {
+    expect(isChapterRestart('第5章：风起于萍末\n夜色渐深。')).toBe(true);
+  });
+
+  it('正常续写（叙述/对话开头）→ 不判重开', () => {
+    expect(isChapterRestart('他攥紧断剑，指节发白。「走。」妹妹低声说。')).toBe(false);
+    expect(isChapterRestart('夜色渐深，兄妹俩回到住处。')).toBe(false);
+  });
+
+  it('叙述中段提及章号（非行首）→ 不判重开', () => {
+    expect(isChapterRestart('这就是第3章埋下的伏笔终于兑现的时刻。')).toBe(false);
+  });
+});
+
+describe('withPartialInHistory（续写轮 grounding——半章原文进历史）', () => {
+  const base: Message[] = [buildChapterMessage({ content: '第一章正文', title: '第一章', chapterIndex: 1, promptTokens: 1, generationMs: 1 })];
+
+  it('半章非空 → 追加伪 assistant 消息（无 chapter 元数据，nextChapterIndex 不受影响）', () => {
+    const msgs = withPartialInHistory(base, '半章正文……他攥紧断剑，');
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1]!.role).toBe('assistant');
+    expect(msgs[1]!.content).toBe('半章正文……他攥紧断剑，');
+    expect(msgs[1]!.chapter).toBeUndefined();
+    expect(nextChapterIndex(msgs)).toBe(2); // 伪消息不占章号
+  });
+
+  it('半章为空/纯空白 → 原样返回', () => {
+    expect(withPartialInHistory(base, '  \n  ')).toHaveLength(1);
+  });
+
+  it('续写指令带防重开措辞（不要求输出标题）', () => {
+    const d = buildContinueDirective('已写内容尾部……');
+    expect(d).toContain('不要重新开始本章');
+    expect(d).toContain('不要输出章节标题');
   });
 });

@@ -15,6 +15,7 @@ import CardEditor from '../features/library/editors/CardEditor';
 import WorldbookEditor from '../features/library/editors/WorldbookEditor';
 import PromptManager from '../features/library/prompts/PromptManager';
 import ResourceHub from '../features/library/ResourceHub';
+import ItemPanel from '../features/library/items/ItemPanel';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
 
@@ -27,7 +28,7 @@ export default function LibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab');
   const isHub = rawTab === 'hub'; // 资源中心深链（?tab=hub，Task 30）
-  const tab: AssetType = parseTab(rawTab);
+  const tab: AssetType | 'items' = parseTab(rawTab);
   const [toast, setToast] = useState<Toast>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ type: AssetType; id: string } | null>(null);

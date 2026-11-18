@@ -50,6 +50,9 @@ export interface UpdateWorkSettingsInput {
   /** 绑定资产（作品设置可编辑名单）：角色卡/世界书多选、预设单选 */
   characterIds?: string[];
   worldbookIds?: string[];
+  /** 势力/物品道具绑定（移动端 BindingsPane/策划案应用写入） */
+  factionIds?: string[];
+  itemIds?: string[];
   presetId?: string;
   settings?: Work['settings'];
   allowCardOverride?: boolean;

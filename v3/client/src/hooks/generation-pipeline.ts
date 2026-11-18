@@ -9,6 +9,8 @@ import type { TavernCardV2, TavernPreset, TavernRegexScript } from '@shared/tave
 import type { CharacterAsset } from '@shared/card';
 import type { PresetAsset } from '@shared/preset';
 import type { FactionAsset } from '@shared/assets/faction';
+import type { ItemAsset } from '@shared/assets/item';
+import { describeItem } from '@shared/assets/item';
 import type { WorldbookAsset } from '@shared/worldbook';
 import type { Work } from '@shared/work';
 import { DEFAULT_TARGET_CHAPTER_WORDS } from '@shared/work';
@@ -20,10 +22,10 @@ import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
 import { META_ONLY_PLACEHOLDER, extractThinking, mergeThinking, postprocessMessage } from '../engine/prompt/postprocess';
-import { buildChapterRequirement } from '../engine/prompt/novel/requirements';
+import { buildChapterRequirement, buildContinueRequirement, type StyleBits } from '../engine/prompt/novel/requirements';
 import { MEMORY_EXTRACT_SYSTEM, mergeForeshadows, parseMemoryExtract } from '../engine/prompt/novel/memory-extract';
 import { NEW_ASSETS_HINT, parseNewAssets } from '../engine/prompt/novel/new-assets';
-import { chapterOutlineDirective } from '../lib/outline/chapters';
+import { chapterOutlineDirective, volumeOutlineDirective } from '../lib/outline/chapters';
 import { recallBlock } from '../lib/recall';
 import { skeletonBlock } from '../lib/skeleton';
 import { scanWorldInfo } from '../engine/worldbook';
@@ -82,11 +84,17 @@ export async function loadRegexScripts(work: Work): Promise<TavernRegexScript[]>
  */
 export function effectiveAssetIds(
   work: Work,
-  kind: 'character' | 'worldbook' | 'faction',
+  kind: 'character' | 'worldbook' | 'faction' | 'item',
   chapterIndex?: number,
 ): string[] {
   const initial =
-    kind === 'character' ? work.characterIds : kind === 'worldbook' ? work.worldbookIds : (work.factionIds ?? []);
+    kind === 'character'
+      ? work.characterIds
+      : kind === 'worldbook'
+        ? work.worldbookIds
+        : kind === 'faction'
+          ? (work.factionIds ?? [])
+          : (work.itemIds ?? []);
   if (chapterIndex === undefined) return initial;
   const extra = (work.bindings ?? [])
     .filter((b) => b.kind === kind && b.status === 'active' && b.fromChapter <= chapterIndex)
@@ -94,12 +102,40 @@ export function effectiveAssetIds(
   return [...new Set([...initial, ...extra])];
 }
 
+/**
+ * 物品道具伪世界书（D4「整块注入」，同势力语义）：constant 条目复用世界书引擎注入路径。
+ * 描述经 describeItem 只拼非空段（质感/形状/颜色/功能/承载感情/备注）。
+ */
+export function buildItemBook(items: ItemAsset[]): WorldbookAsset | null {
+  if (items.length === 0) return null;
+  return {
+    id: '__items__',
+    name: '物品道具（绑定生效）',
+    raw: {
+      entries: Object.fromEntries(
+        items.map((it, i) => [
+          String(i),
+          {
+            uid: i,
+            key: [it.name],
+            content: `【物品道具：${it.name}】${describeItem(it)}`,
+            constant: true,
+            enabled: true,
+            insertion_order: 39,
+          },
+        ]),
+      ),
+    },
+  };
+}
+
 /** 并行拉取作品绑定的资产；chapterIndex 给定时按绑定生效章过滤（novel 生成），缺省全量（chat） */
 export async function loadAssembleAssets(work: Work, chapterIndex?: number): Promise<AssembleAssets> {
   const characterIds = effectiveAssetIds(work, 'character', chapterIndex);
   const worldbookIds = effectiveAssetIds(work, 'worldbook', chapterIndex);
   const factionIds = effectiveAssetIds(work, 'faction', chapterIndex);
-  const [preset, cardAssets, books, factions, regexScripts] = await Promise.all([
+  const itemIds = effectiveAssetIds(work, 'item', chapterIndex);
+  const [preset, cardAssets, books, factions, itemAssets, regexScripts] = await Promise.all([
     work.presetId
       ? apiFetch<PresetAsset>(`/api/presets/${work.presetId}`).then((a) => a.raw).catch(() => null)
       : Promise.resolve(null),
@@ -110,6 +146,7 @@ export async function loadAssembleAssets(work: Work, chapterIndex?: number): Pro
     ),
     Promise.all(worldbookIds.map((id) => apiFetch<WorldbookAsset>(`/api/worldbooks/${id}`).catch(() => null))),
     Promise.all(factionIds.map((id) => apiFetch<FactionAsset>(`/api/factions/${id}`).catch(() => null))),
+    Promise.all(itemIds.map((id) => apiFetch<ItemAsset>(`/api/items/${id}`).catch(() => null))),
     loadRegexScripts(work),
   ]);
   // 壳层人物小传随卡同序保留（拉取失败的卡小传一并丢弃，序号对齐由 filter 同步完成）
@@ -117,6 +154,7 @@ export async function loadAssembleAssets(work: Work, chapterIndex?: number): Pro
   const cards = keptCards.map((a) => a.card);
   const bios = keptCards.map((a) => a.bio ?? '');
   const factionList = factions.filter((f): f is FactionAsset => f !== null);
+  const itemList = itemAssets.filter((x): x is ItemAsset => x !== null);
   // 势力注入（D4「整块注入」）：构造成伪世界书 constant 条目，复用世界书引擎的既有注入路径（不动引擎）
   const factionBook: WorldbookAsset | null =
     factionList.length > 0
@@ -140,11 +178,16 @@ export async function loadAssembleAssets(work: Work, chapterIndex?: number): Pro
           },
         }
       : null;
+  const itemBook = buildItemBook(itemList);
   return {
     preset,
     cards,
     bios,
-    worldbooks: [...books.filter((b): b is WorldbookAsset => b !== null), ...(factionBook ? [factionBook] : [])],
+    worldbooks: [
+      ...books.filter((b): b is WorldbookAsset => b !== null),
+      ...(factionBook ? [factionBook] : []),
+      ...(itemBook ? [itemBook] : []),
+    ],
     factions: factionList,
     regexScripts,
   };
@@ -225,10 +268,28 @@ export async function scanAndAssemble(
 
   let history = plan.kept;
   const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS; // 兜底主提示词与末尾写作要求共用
+  // 基调与文风执行位（用户反馈①）：解析作品设置的基调/文风为写法级指令，注入要求块最前（最高优先级）
+  const WRITING_STYLE_LABEL: Record<string, string> = {
+    qidian: '起点风：爽点前置、节奏明快、句子利落',
+    jjwxc: '晋江风：情感细腻、人物张力足、心理刻画绵密',
+    fanqie: '番茄风：强钩子、快节奏、段落短',
+  };
+  const styleBits: StyleBits = {
+    tones: [...work.settings.storyTones, work.settings.customStoryTone].filter(Boolean),
+    style:
+      (work.settings.customWritingStyle || '').trim() ||
+      WRITING_STYLE_LABEL[work.settings.writingStyle] ||
+      '',
+  };
   // 章节大纲联动（一键导入大纲）：第 N 章有预设大纲时 directive 末尾追加本章要点（仅进提示词，入库 directive 保持原指令）
   const outlineHint =
     tail.kind === 'directive'
       ? chapterOutlineDirective(work.settings.chapterOutlines, nextChapterIndex(messages))
+      : '';
+  // 分卷规划联动（卷规划层）：第 N 章按 startChapter 定位所属卷，追加本卷主线（仅进提示词）
+  const volumeHint =
+    tail.kind === 'directive'
+      ? volumeOutlineDirective(work.settings.volumeOutlines, nextChapterIndex(messages))
       : '';
   // 远距记忆检索（P2-1）：被预算裁掉的最旧章节按当前指令相关性召回 top3 窗口（仅 novel，仅进提示词）
   const recallHint =
@@ -242,10 +303,11 @@ export async function scanAndAssemble(
   // 骨架块纯本地压缩（标题+首段）永不在场失败，与摘要/回忆并存（仅进提示词）
   const skeletonHint =
     tail.kind === 'directive' && plan.dropped.length > 0 ? skeletonBlock(plan.dropped) : '';
-  // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）
+  // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）；
+  // 续写轮用「无缝续写」守卫变体（反馈③：常规守卫的「第一行输出标题」会诱发模型重新开章）
   const guardPlan =
     tail.kind === 'directive'
-      ? novelGuardPlan(targetWords)
+      ? novelGuardPlan(targetWords, tail.continuation === true)
       : { allowance: 0, withGuard: (msgs: GenerateMessage[]): GenerateMessage[] => msgs };
   for (;;) {
     const result = assemblePrompt({
@@ -262,11 +324,15 @@ export async function scanAndAssemble(
         ? {
             // NEW_ASSETS_HINT 仅在有真实指令的章追加：空指令（⚡连写推进章）保持纯净，
             // 避免「剧情指引：」裸前缀被 hint 撑出（batch 测试锁定的语义）
-            directive: tail.text + outlineHint + recallHint + skeletonHint + (tail.text ? NEW_ASSETS_HINT : ''),
-            chapterRequirement: buildChapterRequirement(targetWords, {
-              chapter: nextChapterIndex(messages),
-              total: work.settings.desiredChapterCount,
-            }),
+            directive: tail.text + volumeHint + outlineHint + recallHint + skeletonHint + (tail.text ? NEW_ASSETS_HINT : ''),
+            // 续写轮要求块整体替换为「无缝续写」变体（反馈③：不要求章标题、禁止重新开章）；
+            // 常规轮注入基调文风执行 + 原有字数/纪律要求
+            chapterRequirement: tail.continuation
+              ? buildContinueRequirement(targetWords)
+              : buildChapterRequirement(targetWords, {
+                  chapter: nextChapterIndex(messages),
+                  total: work.settings.desiredChapterCount,
+                }, styleBits),
           }
         : { userMessage: tail.text }),
       macroEnv: env,

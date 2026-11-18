@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { chapterOutlineDirective, parseChapterOutlines, toChapterOutlineItems } from '../../outline/chapters';
+import { chapterOutlineDirective, parseChapterOutlines, toChapterOutlineItems, volumeOutlineDirective, volumesFromChapters } from '../../outline/chapters';
 
 /** 用户 docx 同构缩样：单个巨型段落，段内以 U+FEFF 分隔，标记独立"行" */
 const DOCX_LIKE = [
@@ -201,5 +201,49 @@ describe('chapterOutlineDirective / toChapterOutlineItems', () => {
   it('toChapterOutlineItems：裁剪为 index/title/plot 三字段', () => {
     const trimmed = toChapterOutlineItems([{ index: 1, title: 'a', plot: 'b', highlight: 'c', conflict: 'd', volume: 'e' }]);
     expect(trimmed).toEqual([{ index: 1, title: 'a', plot: 'b' }]);
+  });
+});
+
+describe('volumeOutlineDirective（分卷规划联动——卷按 startChapter 归卷注入）', () => {
+  const volumes = [
+    { index: 1, title: '胎穿藏锋', summary: '第一卷主线：稚岁囤积，暗中布局。', startChapter: 1 },
+    { index: 2, title: '初入朝堂', summary: '第二卷主线：亮相京华，锋芒初露。', startChapter: 13 },
+  ];
+
+  it('第 N 章落进 startChapter ≤ N 的最大卷', () => {
+    expect(volumeOutlineDirective(volumes, 1)).toContain('第1卷');
+    expect(volumeOutlineDirective(volumes, 5)).toContain('胎穿藏锋');
+    expect(volumeOutlineDirective(volumes, 13)).toContain('初入朝堂');
+    expect(volumeOutlineDirective(volumes, 40)).toContain('初入朝堂'); // 超界沿用最后一卷
+  });
+
+  it('空/缺省/summary 全空 → 空串不注入', () => {
+    expect(volumeOutlineDirective(undefined, 1)).toBe('');
+    expect(volumeOutlineDirective([], 1)).toBe('');
+    expect(volumeOutlineDirective([{ index: 1, title: '卷', summary: '', startChapter: 1 }], 1)).toBe('');
+  });
+
+  it('缺 startChapter 的卷不参与归卷（防顺延错挂）', () => {
+    const partial = [{ index: 1, title: '无起始卷', summary: '概述。' }];
+    expect(volumeOutlineDirective(partial, 1)).toBe('');
+  });
+});
+
+describe('volumesFromChapters（导入联动：卷标记聚合为分卷规划）', () => {
+  it('按 volume 归属聚合，卷号按起始章顺序编 1..n', () => {
+    const chapters = [
+      { index: 13, title: 'c13', plot: 'p', volume: '第二卷' },
+      { index: 1, title: 'c1', plot: 'p', volume: '第一卷' },
+      { index: 2, title: 'c2', plot: 'p', volume: '第一卷' },
+      { index: 3, title: 'c3', plot: 'p' },
+    ];
+    const vols = volumesFromChapters(chapters);
+    expect(vols).toHaveLength(2);
+    expect(vols[0]).toEqual({ index: 1, title: '第一卷', summary: '', startChapter: 1 });
+    expect(vols[1]).toEqual({ index: 2, title: '第二卷', summary: '', startChapter: 13 });
+  });
+
+  it('无卷归属 → 空数组', () => {
+    expect(volumesFromChapters([{ index: 1, title: 't', plot: 'p' }])).toEqual([]);
   });
 });

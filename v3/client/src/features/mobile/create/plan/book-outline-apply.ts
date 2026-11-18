@@ -69,6 +69,19 @@ export async function applyProposalToBook(
     }
   }
   onStage?.('settings');
+  // 2.5) 特殊物品资料卡（用户需求：物品道具也有资料卡）：策划案 items 逐条建卡（服务端按 name 幂等），失败跳过
+  const itemIds: string[] = [];
+  for (const it of p.extracted.items ?? []) {
+    try {
+      const a = await apiFetch<{ id: string }>('/api/items', {
+        method: 'POST',
+        body: JSON.stringify({ name: it.name, summary: it.summary }),
+      });
+      itemIds.push(a.id);
+    } catch {
+      /* 单卡失败跳过 */
+    }
+  }
   // 3) 绑定（合并去重）+ settings 应用
   const latest = await apiFetch<Work>(`/api/works/${work.id}`);
   const merge = (base: string[], add: string[]): string[] => Array.from(new Set([...base, ...add]));
@@ -77,6 +90,7 @@ export async function applyProposalToBook(
     revision: latest.revision,
     characterIds: merge(latest.characterIds, characterIds),
     worldbookIds: merge(latest.worldbookIds, worldbookIds),
+    itemIds: merge(latest.itemIds ?? [], itemIds),
     settings: { ...work.settings, ...slice },
   });
   // 4) 历史版本入账（改错了能回滚）
@@ -86,7 +100,7 @@ export async function applyProposalToBook(
     slice,
     proposal: p,
   });
-  const msg = `已应用：${slice.chapterOutlines.length} 章大纲 · 角色 +${characterIds.length} · 世界书 ${
+  const msg = `已应用：${slice.chapterOutlines.length} 章大纲 · 角色 +${characterIds.length} · 物品 +${itemIds.length} · 世界书 ${
     worldbookIds.length > 0 ? '+1' : '沿用'
   }（历史已存档）`;
   return { updated, msg };

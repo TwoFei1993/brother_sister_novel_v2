@@ -10,6 +10,7 @@ import { CircleHelp, ClipboardList, Dices, Menu, Smartphone, WandSparkles } from
 import { useNavigate } from 'react-router-dom';
 
 import { createWork } from '../../api/works';
+import { createItem } from '../../api/library';
 import { defaultNovelSettings } from '@shared/work';
 import { useSettingsStore } from '../../stores/settings';
 import { useBgLlmTask } from '../../hooks/useBgLlmTask';
@@ -59,6 +60,9 @@ export default function PlannerPage() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** 最新会话镜像（bg onDone 异步回调防闭包旧值；解析部分更新需读当轮基准策划案） */
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
 
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0];
   const turns = active?.turns ?? [];
@@ -98,7 +102,9 @@ export default function PlannerPage() {
       clearPending();
       if (!ctx) return;
       void (async () => {
-        let parsed = parsePlannerReply(text);
+        // 迭代轮「只输出变动部分」协议：带当前基准解析（占位回填 + 缺失字段继承基准）
+        const baseline = sessionsRef.current.find((s) => s.id === ctx.sessionId)?.proposal ?? null;
+        let parsed = parsePlannerReply(text, baseline);
         // 推理模型把预算吃在思考上（JSON 半截）→ 翻倍预算重提交一次（原 callPlanner 双段语义）
         if (!parsed && !ctx.retried) {
           ctx.retried = true;
@@ -118,14 +124,12 @@ export default function PlannerPage() {
           if (ctx.fromInput) setInput(ctx.draft);
           return;
         }
+        // 解析时已带基准合并（parsePlannerReply 第二参），此处直接入会话
         updateSessionById(ctx.sessionId, (s) => ({
           ...s,
           turns: [...s.turns, { role: 'assistant' as const, text: parsed!.reply, questions: parsed!.questions }],
+          ...(parsed!.proposal ? { proposal: parsed!.proposal } : {}),
         }));
-        if (parsed!.proposal) {
-          const proposalParsed = parsed!.proposal;
-          updateSessionById(ctx.sessionId, (s) => ({ ...s, proposal: proposalParsed }));
-        }
       })();
     },
     (msg: string) => {
@@ -181,12 +185,14 @@ export default function PlannerPage() {
       role: t.role,
       content: t.text,
     }));
-    // 提问轮次硬限制（用户要求：最多 3 轮）：第 3 轮回答或用户点「直接生成」→ 附加收敛指令
+    // 提问轮次硬限制（用户要求：最多 3 轮）：第 3 轮回答或用户点「直接生成」→ 附加收敛指令。
+    // 仅限「尚无策划案」阶段——策划案生成后是自由调整模式（用户反馈：可反复用自己的话沟通调整），
+    // 调整消息原样透传，不再附加「不要再提问」收敛指令污染迭代对话
     const questionRounds = turns.filter((t) => t.role === 'assistant' && (t.questions?.length ?? 0) > 0).length;
-    const finalText =
-      opts.forceGenerate || questionRounds >= 3
-        ? `${trimmed}\n（请直接基于以上全部信息生成完整策划案：questions 传空数组、outline 一次性填全，不要再提问）`
-        : trimmed;
+    const converge = !proposal && (opts.forceGenerate || questionRounds >= 3);
+    const finalText = converge
+      ? `${trimmed}\n（请直接基于以上全部信息生成完整策划案：questions 传空数组、outline 一次性填全，不要再提问）`
+      : trimmed;
     history.push({ role: 'user', content: finalText });
     const userTurn: PlannerTurn = { role: 'user', text: trimmed };
     if (opts.isReroll) updateActive((s) => ensureTitle({ ...s, turns: [...s.turns.slice(0, -2), userTurn] }));
@@ -220,16 +226,29 @@ export default function PlannerPage() {
     setError(null);
     try {
       const assets: ImportedAssets = await importAllAssets(proposal.extracted);
-      const { chapterOutlines, desiredChapterCount } = proposalToChapterSettings(proposal);
+      // 特殊物品资料卡（用户需求：物品道具有质感/形状/颜色/功能/承载感情等结构化描述）：
+      // 策划案 items 逐条建卡（服务端同名幂等），失败的物品跳过不阻塞开书
+      const itemIds: string[] = [];
+      for (const it of proposal.extracted.items ?? []) {
+        try {
+          const created = await createItem({ name: it.name, summary: it.summary });
+          itemIds.push(created.id);
+        } catch {
+          /* 单卡失败跳过 */
+        }
+      }
+      const { chapterOutlines, volumeOutlines, desiredChapterCount } = proposalToChapterSettings(proposal);
       const work = await createWork({
         title: proposal.title,
         mode: 'novel',
         genre: proposal.genre,
         characterIds: assets.characterIds,
         worldbookIds: assets.worldbookIds,
+        ...(itemIds.length > 0 ? { itemIds } : {}),
         settings: {
           ...defaultNovelSettings,
           chapterOutlines,
+          volumeOutlines,
           desiredChapterCount,
           backgroundNote: proposal.extracted.background,
           coreConflict: proposal.extracted.conflict,
@@ -469,6 +488,21 @@ export default function PlannerPage() {
                       <dd>{p.extracted.conflict}</dd>
                     </div>
                   )}
+                  {(p.extracted.items?.length ?? 0) > 0 && (
+                    <div>
+                      <dt className="text-xs text-[hsl(var(--fg-muted))]">特殊物品（{p.extracted.items?.length}）</dt>
+                      <dd>
+                        <ul className="space-y-1">
+                          {p.extracted.items?.map((it) => (
+                            <li key={it.name}>
+                              <span className="font-medium">{it.name}</span>
+                              {it.summary && <span className="block text-xs text-[hsl(var(--fg-muted))]">{it.summary}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                  )}
                   {(p.extracted.chapters?.length ?? 0) > 0 && (
                     <div>
                       <dt className="text-xs text-[hsl(var(--fg-muted))]">章节大纲（{p.extracted.chapters?.length} 章）</dt>
@@ -485,14 +519,21 @@ export default function PlannerPage() {
                     </div>
                   )}
                 </dl>
+                {/* 自由调整提示（用户反馈：大纲生成后可反复用自己的话沟通调整） */}
+                <p
+                  data-testid="proposal-adjust-hint"
+                  className="mt-3 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-xs leading-5 text-[hsl(var(--fg-muted))]"
+                >
+                  💬 不满意？不用重新生成——直接在下方输入框用你自己的话说调整（例：「把第 3 章改成兄妹吵架」、「妹妹性格再软萌一点」、「删掉第三卷」），我会只改对应部分，其余保持不变。可以反复改，满意再开书。
+                </p>
                 <button
                   type="button"
                   disabled={importing || bgBusy}
                   onClick={() => void confirmImport()}
                   data-testid="proposal-import"
-                  className="mt-4 min-h-[40px] w-full rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
+                  className="mt-3 min-h-[40px] w-full rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
                 >
-                  {importing ? '导入中…（建卡/世界书/作品）' : '没问题，一键开书（导入人物/世界观/大纲）'}
+                  {importing ? '导入中…（建卡/世界书/物品/作品）' : '没问题，一键开书（导入人物/世界观/物品/大纲）'}
                 </button>
               </div>
             )}

@@ -103,25 +103,27 @@ export function buildFallbackPreset(
  *  只回思考没有正文视为无效。追加在消息最末尾（贴近生成点，遵循最强；对齐 chat 侧长度 hint 位置）。
  *  字数与 buildChapterRequirement 同源（targetWords），避免同一末尾出现两个矛盾的字数要求。
  *  role 用 user：部分 OpenAI 兼容桥接要求末条为 user / system 仅可居首，尾部 system 会 400
- *  （claude 通道本就会把尾部 system 降级为 user，见 server converters/claude.ts——此处直接对齐全通道一致）。 */
-export function withNovelOutputGuard(messages: GenerateMessage[], targetWords: number): GenerateMessage[] {
-  return [
-    ...messages,
-    {
-      role: 'user' as const,
-      content:
-        `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文第一行先输出「# 第N章 标题」标题行再写正文；正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`,
-    },
-  ];
+ *  （claude 通道本就会把尾部 system 降级为 user，见 server converters/claude.ts——此处直接对齐全通道一致）。
+ *  continuation=true（用户反馈③）：续写轮改用「无缝续写」守卫——常规守卫的「第一行输出标题」
+ *  在续写轮等于命令模型重新开章（已写半章 + 模型重开另写，拼接后一章两个开头）。 */
+export function withNovelOutputGuard(messages: GenerateMessage[], targetWords: number, continuation = false): GenerateMessage[] {
+  const content = continuation
+    ? `（输出守卫：完成思考/提纲后，必须紧接着输出续写正文——只有思考没有正文视为无效输出。这是本章的续写：严禁重新开始本章、严禁输出章节标题、严禁重写已有内容，从已写正文的结尾直接接着写；正文中不得出现思考过程、提纲、要点列表或选项，续写到本章目标字数约 ${targetWords} 字为止。）`
+    : `（输出守卫：完成思考/提纲后，必须紧接着输出完整章节正文——只有思考没有正文视为无效输出。正文第一行先输出「# 第N章 标题」标题行再写正文；正文中不得出现思考过程、提纲、要点列表或选项，字数不少于 ${targetWords} 字。）`;
+  return [...messages, { role: 'user' as const, content }];
 }
 
 /** novel 守卫的组装侧接入（规范回补自 generation-pipeline 迁出）：预算需预留守卫自身开销，
- *  否则最紧预算下最终请求会超限约几十 token。allowance=守卫 token 开销；withGuard=组装后追加守卫。 */
-export function novelGuardPlan(targetWords: number): {
+ *  否则最紧预算下最终请求会超限约几十 token。allowance=守卫 token 开销；withGuard=组装后追加守卫。
+ *  continuation：续写轮守卫变体（见 withNovelOutputGuard）。 */
+export function novelGuardPlan(
+  targetWords: number,
+  continuation = false,
+): {
   allowance: number;
   withGuard: (msgs: GenerateMessage[]) => GenerateMessage[];
 } {
-  const guard = withNovelOutputGuard([], targetWords)[0]!;
+  const guard = withNovelOutputGuard([], targetWords, continuation)[0]!;
   return {
     allowance: countTokensApprox(guard.content),
     withGuard: (msgs) => [...msgs, guard],
@@ -129,9 +131,11 @@ export function novelGuardPlan(targetWords: number): {
 }
 
 /** 末轮注入通道（自 generation-pipeline 迁出；review #7 参数化，novel/chat 共用同一 scanAndAssemble）：
- *  novel=剧情指令 directive（「剧情指引：…」包装）/ chat=用户消息 userMessage（§4.3） */
+ *  novel=剧情指令 directive（「剧情指引：…」包装）/ chat=用户消息 userMessage（§4.3）。
+ *  directive.continuation（用户反馈③）：截断续写/断流恢复轮置 true——要求块与输出守卫
+ *  切换为「无缝续写」变体，不再要求「第一行输出章标题」（该指令在续写轮 = 命令模型重新开章） */
 export type AssembleTail =
-  | { kind: 'directive'; text: string }
+  | { kind: 'directive'; text: string; continuation?: boolean }
   | { kind: 'userMessage'; text: string };
 
 /** 组装产物（自 generation-pipeline 迁出；预算校验后的上下文规划层结果） */

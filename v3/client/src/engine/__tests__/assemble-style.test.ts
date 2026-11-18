@@ -48,3 +48,23 @@ describe('buildSettingsBlock 文风画像注入', () => {
     expect(scenarioMsg?.content).toContain('短句急促，动作为主。');
   });
 });
+
+describe('buildSettingsBlock 分卷规划注入（卷规划层与章细纲分开）', () => {
+  it('volumeOutlines 非空 → 注入【分卷规划】块（卷名+起始章+概述）', async () => {
+    const { buildSettingsBlock } = await import('../prompt/novel/settings-block');
+    const block = buildSettingsBlock({
+      ...defaultNovelSettings,
+      volumeOutlines: [{ index: 1, title: '胎穿藏锋', summary: '稚岁囤积，暗中布局。', startChapter: 1 }],
+    });
+    expect(block).toContain('【分卷规划（卷级主线；章细纲之外的上一层规划）】');
+    expect(block).toContain('第1卷《胎穿藏锋》（第1章起）：稚岁囤积，暗中布局。');
+  });
+
+  it('缺省/全空卷 → 不注入', async () => {
+    const { buildSettingsBlock } = await import('../prompt/novel/settings-block');
+    expect(buildSettingsBlock({ ...defaultNovelSettings })).not.toContain('分卷规划');
+    expect(
+      buildSettingsBlock({ ...defaultNovelSettings, volumeOutlines: [{ index: 1, title: '', summary: '' }] }),
+    ).not.toContain('分卷规划');
+  });
+});

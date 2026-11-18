@@ -153,3 +153,208 @@ describe('proposalToChapterSettings', () => {
     expect(proposalToChapterSettings(proposal).desiredChapterCount).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('normalizeOutlineVolumes / 分卷规划解析（用户反馈：卷大纲与章细纲分开）', () => {
+  it('outline.volumes 解析进 extracted.volumes；缺 index 按序补号、全空条目剔除', async () => {
+    const { normalizeOutlineVolumes, parsePlannerReply } = await import('../planner-llm');
+    const reply = JSON.stringify({
+      reply: '出案', questions: [], title: 'T', genre: 'G',
+      outline: {
+        characters: [{ name: 'A', role: '主角', traits: [] }],
+        background: '背景。',
+        abilities: [], factions: [], conflict: 'C',
+        volumes: [
+          { title: '第一卷 起步', summary: '本卷主线概述。', startChapter: 1 },
+          { index: 3, title: '第三卷 决战', summary: '主线。', startChapter: 25 },
+          { title: '', summary: '' },
+        ],
+        chapters: [{ index: 1, title: '第1章', plot: '细纲' }],
+      },
+    });
+    const r = parsePlannerReply(reply);
+    const volumes = r?.proposal?.extracted.volumes ?? [];
+    expect(volumes).toHaveLength(2);
+    expect(volumes[0]).toMatchObject({ index: 1, title: '第一卷 起步', startChapter: 1 });
+    expect(volumes[1]).toMatchObject({ index: 3, startChapter: 25 });
+    // 纯函数直接调用：非数组 → 空数组
+    expect(normalizeOutlineVolumes(undefined)).toEqual([]);
+  });
+
+  it('proposalToChapterSettings 返回 volumeOutlines（卷/章分层进 settings）', async () => {
+    const { parsePlannerReply, proposalToChapterSettings } = await import('../planner-llm');
+    const reply = JSON.stringify({
+      reply: '出案', questions: [], title: 'T', genre: 'G',
+      outline: {
+        characters: [{ name: 'A', role: '主角', traits: [] }],
+        background: '背景。', abilities: [], factions: [], conflict: 'C',
+        volumes: [{ index: 1, title: '第一卷', summary: '主线。', startChapter: 1 }],
+        chapters: [{ index: 1, title: '第1章', plot: '细纲' }],
+      },
+    });
+    const s = proposalToChapterSettings(parsePlannerReply(reply)!.proposal!);
+    expect(s.volumeOutlines).toEqual([{ index: 1, title: '第一卷', summary: '主线。', startChapter: 1 }]);
+    expect(s.chapterOutlines).toHaveLength(1);
+  });
+});
+
+describe('特殊物品清单（用户需求：物品道具资料卡）+ 沟通协议', () => {
+  it('outline.items 解析进 extracted.items；空名条目剔除', async () => {
+    const { normalizeOutlineItems, parsePlannerReply } = await import('../planner-llm');
+    const reply = JSON.stringify({
+      reply: '出案', questions: [], title: 'T', genre: 'G',
+      outline: {
+        characters: [{ name: 'A', role: '主角', traits: [] }],
+        background: '背景。', abilities: [], factions: [], conflict: 'C',
+        items: [
+          { name: '母亲的银锁', summary: '藏着母亲字条的旧银锁' },
+          { name: '  ', summary: '无名条目剔除' },
+        ],
+        chapters: [{ index: 1, title: '第1章', plot: '细纲' }],
+      },
+    });
+    const r = parsePlannerReply(reply);
+    expect(r?.proposal?.extracted.items).toEqual([{ name: '母亲的银锁', summary: '藏着母亲字条的旧银锁' }]);
+    expect(normalizeOutlineItems(undefined)).toEqual([]);
+  });
+
+  it('协议提示词锁定：每组问题最后一题固定「你有什么建议和想法」+ 策划案后自由调整模式', async () => {
+    const { PLANNER_SYSTEM } = await import('../planner-llm');
+    expect(PLANNER_SYSTEM).toContain('你有什么建议和想法');
+    expect(PLANNER_SYSTEM).toContain('自由调整模式');
+    expect(PLANNER_SYSTEM).toContain('不设轮次上限');
+  });
+});
+
+describe('mergeProposalUpdate（迭代轮只输出变动部分——占位回填/字段继承）', () => {
+  const baseline = {
+    characters: [{ name: '沈川', role: '哥哥', traits: ['温和'] }],
+    background: '深夜便利店背景。',
+    abilities: [] as string[],
+    factions: [] as string[],
+    conflict: '生计与陪伴的张力',
+    items: [{ name: '旧座钟', summary: '店里停摆的旧挂钟' }],
+    volumes: [{ index: 1, title: '第一卷', summary: '开店初期', startChapter: 1 }],
+    chapters: [
+      { index: 1, title: '第1章 开店', plot: '首夜营业。' },
+      { index: 2, title: '第2章 日常', plot: '兄妹夜班日常。' },
+    ],
+  };
+
+  it('占位条目回填基准原文；新章正常收；无基准可回填的占位丢弃', async () => {
+    const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
+    const merged = mergeProposalUpdate(baseline, {
+      characters: [], background: '', abilities: [], factions: [], conflict: '',
+      chapters: [
+        { index: 1, title: '', plot: '', unchanged: true },
+        { index: 2, title: '第2章 吵架', plot: '因小事大吵。' },
+        { index: 5, title: '', plot: '', unchanged: true },
+      ],
+    });
+    expect(merged.chapters).toHaveLength(2); // 占位1回填 + 新2；占位5无基准丢弃
+    expect(merged.chapters![0]).toEqual({ index: 1, title: '第1章 开店', plot: '首夜营业。' });
+    expect(merged.chapters![1]?.title).toBe('第2章 吵架');
+  });
+
+  it('缺失/空字段继承基准（characters/background/items/volumes/conflict）', async () => {
+    const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
+    const merged = mergeProposalUpdate(baseline, {
+      characters: [], background: '', abilities: [], factions: [], conflict: '',
+      chapters: [{ index: 1, title: '', plot: '', unchanged: true }, { index: 2, title: '', plot: '', unchanged: true }],
+    });
+    expect(merged.background).toBe(baseline.background);
+    expect(merged.characters).toEqual(baseline.characters);
+    expect(merged.items).toEqual(baseline.items);
+    expect(merged.volumes).toEqual(baseline.volumes);
+    expect(merged.conflict).toBe(baseline.conflict);
+  });
+
+  it('显式提供的数组整体替换（items 加银锁）', async () => {
+    const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
+    const merged = mergeProposalUpdate(baseline, {
+      characters: [], background: '', abilities: [], factions: [], conflict: '',
+      items: [{ name: '母亲的银锁', summary: '藏着字条' }],
+      chapters: [{ index: 1, title: '', plot: '', unchanged: true }, { index: 2, title: '', plot: '', unchanged: true }],
+    });
+    expect(merged.items).toEqual([{ name: '母亲的银锁', summary: '藏着字条' }]);
+  });
+
+  it('baseline=null（首轮出案）原样收下且占位丢弃', async () => {
+    const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
+    const merged = mergeProposalUpdate(null, {
+      characters: [{ name: 'A', role: '主角', traits: [] }],
+      background: '背景。', abilities: [], factions: [], conflict: 'C',
+      chapters: [{ index: 1, title: '第1章', plot: '细纲' }, { index: 2, title: '', plot: '', unchanged: true }],
+    });
+    expect(merged.chapters).toEqual([{ index: 1, title: '第1章', plot: '细纲' }]);
+  });
+
+  it('normalizeOutlineChapters 保留占位标记（unchanged 且无实质内容）', async () => {
+    const { normalizeOutlineChapters } = await import('../planner-llm');
+    const out = normalizeOutlineChapters([
+      { index: 2, unchanged: true },
+      { index: 3, unchanged: true, title: '有实质', plot: '不算占位' },
+    ]);
+    expect(out[0]).toMatchObject({ index: 2, unchanged: true });
+    expect(out[1]?.unchanged).toBeUndefined();
+  });
+
+  it('协议提示词锁定：调整轮分量控制（占位 + 字段省略）', async () => {
+    const { PLANNER_SYSTEM } = await import('../planner-llm');
+    expect(PLANNER_SYSTEM).toContain('unchanged');
+    expect(PLANNER_SYSTEM).toContain('禁止重发整份大纲');
+  });
+});
+
+describe('plannerMessages 瘦身（迭代轮 prompt 膨胀治理——中转大 prompt 静默截断的根因）', () => {
+  it('历史 assistant 里的大 JSON 压缩为占位说明；基准章节只带 index+title（plot 不进 prompt）', async () => {
+    const { plannerMessages, parsePlannerReply } = await import('../planner-llm');
+    const bigJson = JSON.stringify({ outline: { chapters: Array.from({ length: 12 }, (_, i) => ({ index: i + 1, title: `第${i + 1}章`, plot: '很长的剧情要点'.repeat(30) })) } });
+    const history = [
+      { role: 'user' as const, content: '帮我出案' },
+      { role: 'assistant' as const, content: `好的：${bigJson}` },
+    ];
+    const proposal: PlannerProposal = parsePlannerReply('{"reply":"案","questions":[],"title":"T","genre":"G","outline":{"characters":[{"name":"A","role":"主角","traits":[]}],"background":"背景。","abilities":[],"factions":[],"conflict":"C","chapters":[{"index":1,"title":"第1章","plot":"要点要点要点"}]}}')!.proposal!;
+    const msgs = plannerMessages(history, proposal);
+    const histAssistant = msgs[2]!.content;
+    expect(histAssistant).toContain('JSON 已略');
+    expect(histAssistant).not.toContain('很长的剧情要点');
+    const baseline = JSON.parse(msgs.at(-1)!.content.split('\n')[1] ?? '{}') as { chapters: Array<{ index: number; title: string; plot?: string }> };
+    expect(baseline.chapters[0]).toEqual({ index: 1, title: '第1章' });
+    expect(baseline.chapters[0]?.plot).toBeUndefined();
+  });
+});
+
+describe('parsePlannerReply 带基准（迭代轮部分更新解析——省略字段合法 + 占位回填）', () => {
+  const BASELINE_RAW =
+    '{"reply":"基准","questions":[],"title":"夜灯便利屋","genre":"都市日常","outline":{"characters":[{"name":"沈川","role":"哥哥","traits":["温和"]}],"background":"深夜便利店。","abilities":[],"factions":[],"conflict":"生计与陪伴","chapters":[{"index":1,"title":"第1章 开店","plot":"首夜营业。"},{"index":2,"title":"第2章 日常","plot":"兄妹夜班。"}]}}';
+
+  it('带基准：只含占位+新章+items 的部分 outline → 合法且回填/继承', async () => {
+    const { parsePlannerReply } = await import('../planner-llm');
+    const baseline = parsePlannerReply(BASELINE_RAW)!.proposal!;
+    const update = parsePlannerReply(
+      '{"reply":"已改第2章并加银锁","questions":[],"outline":{"chapters":[{"index":1,"unchanged":true},{"index":2,"title":"第2章 吵架","plot":"因小事大吵。"}],"items":[{"name":"母亲的银锁","summary":"藏着字条"}]}}',
+      baseline,
+    );
+    expect(update?.proposal).not.toBeNull();
+    const ex = update!.proposal!.extracted;
+    expect(ex.chapters).toHaveLength(2); // 占位回填第1章 + 新第2章
+    expect(ex.chapters![0]).toMatchObject({ index: 1, title: '第1章 开店', plot: '首夜营业。' });
+    expect(ex.items).toEqual([{ name: '母亲的银锁', summary: '藏着字条' }]);
+    expect(ex.background).toBe('深夜便利店。'); // 省略字段继承基准
+    expect(update!.proposal!.title).toBe('夜灯便利屋'); // title 缺省继承基准
+  });
+
+  it('带基准：outline=null（纯闲聊）→ proposal null；无实质变动的 outline → proposal null', async () => {
+    const { parsePlannerReply } = await import('../planner-llm');
+    const baseline = parsePlannerReply(BASELINE_RAW)!.proposal!;
+    expect(parsePlannerReply('{"reply":"聊聊天气","questions":[]}', baseline)?.proposal).toBeNull();
+    expect(parsePlannerReply('{"reply":"嗯","questions":[],"outline":{"background":"深夜便利店。"}}', baseline)?.proposal).toBeNull();
+  });
+
+  it('不带基准（首轮）：部分 outline 仍按严格校验拒绝（回归）', async () => {
+    const { parsePlannerReply } = await import('../planner-llm');
+    expect(
+      parsePlannerReply('{"reply":"案","questions":[],"outline":{"chapters":[{"index":1,"title":"第1章","plot":"细纲"}]}}')?.proposal,
+    ).toBeNull();
+  });
+});
