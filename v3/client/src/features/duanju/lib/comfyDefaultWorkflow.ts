@@ -1,66 +1,75 @@
 /**
- * 内置默认生图工作流：Z-Image-Turbo（阿里 6B，Apache 2.0，中文提示词原生直出）
+ * 内置默认生图工作流：MiniMax-H3-Image（33B DiT，文生图+参考编辑二合一，官方 6 步蒸馏）
  *
- * 2026-11-10 本地实测通过（设定图横版 / 分帧竖屏 / 场景横版三种尺寸档）。
- * 占位符：<<PROMPT>> / <<WIDTH>> / <<HEIGHT>> / <<SEED>>（提交前全文替换）。
- * 模型文件名对应 Comfy-Org/Z-Image-Turbo 重打包 int8/fp8 版；用户换权重后可在设置页覆盖本模板。
+ * 2026-11-18 本地实测通过（768×1344 分镜帧 1.5-8 分钟；定妆照 704×1024 91 秒；三人四参考帧场景/脸全锁定）。
+ * 占位符：<<PROMPT>> / <<WIDTH>> / <<HEIGHT>> / <<SEED>>（提交前全文替换；宽高需 32 的倍数）。
+ * 权重：Comfy-Org/MiniMax-H3-Image int8_convrot 主模型 + qwen3vl_32b nvfp4_awq 编码器（与视频链共用）。
+ * conditioning 节点自带 10 个参考图槽（images.image_1..10，本模板文生图不连图）；latents 由其第 2 输出直接给出。
+ * 官方调优面积 2048×2048（约 4.2MP）；12GB 显存 + 32GB 内存机器上限约 2MP（4MP 换页风暴实测不可行）。
  */
-export const Z_IMAGE_TURBO_DEFAULT_WORKFLOW = `{
-  "28": {
+export const MINIMAX_H3_IMAGE_T2I_WORKFLOW = `{
+  "1": {
     "class_type": "UNETLoader",
-    "inputs": { "unet_name": "z_image_turbo_int8_convrot.safetensors", "weight_dtype": "default" }
+    "inputs": { "unet_name": "minimax_h3_image_pruned_int8_convrot.safetensors", "weight_dtype": "default" }
   },
-  "30": {
+  "2": {
     "class_type": "CLIPLoader",
-    "inputs": { "clip_name": "qwen_3_4b_fp8_mixed.safetensors", "type": "lumina2", "device": "default" }
-  },
-  "29": {
-    "class_type": "VAELoader",
-    "inputs": { "vae_name": "ae.safetensors" }
-  },
-  "27": {
-    "class_type": "CLIPTextEncode",
-    "inputs": { "text": "<<PROMPT>>", "clip": ["30", 0] }
-  },
-  "33": {
-    "class_type": "ConditioningZeroOut",
-    "inputs": { "conditioning": ["27", 0] }
-  },
-  "13": {
-    "class_type": "EmptySD3LatentImage",
-    "inputs": { "width": <<WIDTH>>, "height": <<HEIGHT>>, "batch_size": 1 }
-  },
-  "11": {
-    "class_type": "ModelSamplingAuraFlow",
-    "inputs": { "shift": 3, "model": ["28", 0] }
+    "inputs": { "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "type": "minimax", "device": "default" }
   },
   "3": {
-    "class_type": "KSampler",
+    "class_type": "VAELoader",
+    "inputs": { "vae_name": "minimax_h3_image_vae_fp16.safetensors" }
+  },
+  "30": {
+    "class_type": "MiniMaxH3ImageConditioning",
+    "inputs": { "clip": ["2", 0], "vae": ["3", 0], "prompt": "<<PROMPT>>", "width": <<WIDTH>>, "height": <<HEIGHT>> }
+  },
+  "31": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": { "conditioning": ["30", 0] }
+  },
+  "35": {
+    "class_type": "RandomNoise",
+    "inputs": { "noise_seed": <<SEED>> }
+  },
+  "36": {
+    "class_type": "CFGGuider",
+    "inputs": { "model": ["1", 0], "positive": ["30", 0], "negative": ["31", 0], "cfg": 1 }
+  },
+  "37": {
+    "class_type": "BasicScheduler",
+    "inputs": { "model": ["1", 0], "scheduler": "simple", "steps": 6, "denoise": 1 }
+  },
+  "38": {
+    "class_type": "SamplerLCM",
+    "inputs": { "s_noise": 1.1, "s_noise_end": 0.9, "noise_clip_std": 0 }
+  },
+  "39": {
+    "class_type": "SamplerCustomAdvanced",
     "inputs": {
-      "seed": <<SEED>>, "steps": 8, "cfg": 1,
-      "sampler_name": "res_multistep", "scheduler": "simple", "denoise": 1,
-      "model": ["11", 0], "positive": ["27", 0], "negative": ["33", 0], "latent_image": ["13", 0]
+      "noise": ["35", 0], "guider": ["36", 0], "sampler": ["38", 0],
+      "sigmas": ["37", 0], "latent_image": ["30", 1]
     }
   },
-  "8": {
-    "class_type": "VAEDecode",
-    "inputs": { "samples": ["3", 0], "vae": ["29", 0] }
+  "33": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": { "samples": ["39", 0], "vae": ["3", 0], "tile_size": 768, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8 }
   },
-  "9": {
+  "34": {
     "class_type": "SaveImage",
-    "inputs": { "filename_prefix": "comfy-app/image", "images": ["8", 0] }
+    "inputs": { "filename_prefix": "comfy-app/image", "images": ["33", 0] }
   }
 }`;
 
 /**
- * 内置参考生图工作流：Qwen-Image-Edit-2511（分镜帧通道——定妆照+场景图双参考，角色与场景双一致）
+ * 内置参考生图工作流：MiniMax-H3-Image 编辑（分镜帧通道——定妆照+场景图双参考，角色与场景双一致）
  *
- * 按官方模板 image_qwen_image_edit_2511.json 连线手工构造（Lightning 4 步档）。
+ * 2026-11-18 本地实测通过（同提示词/同种子对比 2511：站位视线服从度、胡须一致性、特效形态全面占优）。
  * 占位符：<<PROMPT>>（分镜指令）/ <<REF>>（定妆照文件名）/ <<SCENE_REF>>（场景图文件名）/ <<SEED>>。
- * image1=定妆照（锁角色外貌），image2=场景图（锁场景环境）——TextEncodeQwenImageEditPlus 原生多参考。
- * 模型：qwen_image_edit_2511_int8_convrot（19GB 官方重打包）+ Lightning-4steps LoRA。
+ * image_1=定妆照（锁角色外貌），image_2=场景图（锁场景环境）——conditioning 节点最多 10 槽，此处用 2。
+ * 尺寸固定 768×1344（与 2511 时代分镜帧一致）；提示词里的「图1/图2」引用由 comfy.ts 注入前改写为 Picture 1/2。
  */
-export const QWEN_EDIT_2511_WORKFLOW = `{
+export const MINIMAX_H3_IMAGE_EDIT_WORKFLOW = `{
   "1": {
     "class_type": "LoadImage",
     "inputs": { "image": "<<REF>>" }
@@ -69,65 +78,59 @@ export const QWEN_EDIT_2511_WORKFLOW = `{
     "class_type": "LoadImage",
     "inputs": { "image": "<<SCENE_REF>>" }
   },
-  "161": {
+  "1u": {
     "class_type": "UNETLoader",
-    "inputs": { "unet_name": "qwen_image_edit_2511_int8_convrot.safetensors", "weight_dtype": "default" }
+    "inputs": { "unet_name": "minimax_h3_image_pruned_int8_convrot.safetensors", "weight_dtype": "default" }
   },
-  "145": {
-    "class_type": "ModelSamplingAuraFlow",
-    "inputs": { "shift": 3.1, "model": ["161", 0] }
-  },
-  "153": {
-    "class_type": "LoraLoaderModelOnly",
-    "inputs": { "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", "strength_model": 1, "model": ["145", 0] }
-  },
-  "152": {
-    "class_type": "CFGNorm",
-    "inputs": { "strength": 1, "disable": false, "model": ["153", 0] }
-  },
-  "162": {
+  "2c": {
     "class_type": "CLIPLoader",
-    "inputs": { "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", "type": "qwen_image", "device": "default" }
+    "inputs": { "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "type": "minimax", "device": "default" }
   },
-  "146": {
+  "3v": {
     "class_type": "VAELoader",
-    "inputs": { "vae_name": "qwen_image_vae.safetensors" }
+    "inputs": { "vae_name": "minimax_h3_image_vae_fp16.safetensors" }
   },
-  "160": {
-    "class_type": "FluxKontextImageScale",
-    "inputs": { "image": ["1", 0] }
-  },
-  "1610": {
-    "class_type": "FluxKontextImageScale",
-    "inputs": { "image": ["2", 0] }
-  },
-  "151": {
-    "class_type": "TextEncodeQwenImageEditPlus",
-    "inputs": { "clip": ["162", 0], "vae": ["146", 0], "image1": ["160", 0], "image2": ["1610", 0], "prompt": "<<PROMPT>>" }
-  },
-  "149": {
-    "class_type": "TextEncodeQwenImageEditPlus",
-    "inputs": { "clip": ["162", 0], "vae": ["146", 0], "image1": ["160", 0], "image2": ["1610", 0], "prompt": "" }
-  },
-  "156": {
-    "class_type": "VAEEncode",
-    "inputs": { "pixels": ["160", 0], "vae": ["146", 0] }
-  },
-  "169": {
-    "class_type": "KSampler",
+  "30": {
+    "class_type": "MiniMaxH3ImageConditioning",
     "inputs": {
-      "seed": <<SEED>>, "steps": 4, "cfg": 1,
-      "sampler_name": "euler", "scheduler": "simple", "denoise": 1,
-      "model": ["152", 0], "positive": ["151", 0], "negative": ["149", 0], "latent_image": ["156", 0]
+      "clip": ["2c", 0], "vae": ["3v", 0], "prompt": "<<PROMPT>>", "width": 768, "height": 1344,
+      "images.image_1": ["1", 0], "images.image_2": ["2", 0]
     }
   },
-  "158": {
-    "class_type": "VAEDecode",
-    "inputs": { "samples": ["169", 0], "vae": ["146", 0] }
+  "31": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": { "conditioning": ["30", 0] }
+  },
+  "35": {
+    "class_type": "RandomNoise",
+    "inputs": { "noise_seed": <<SEED>> }
+  },
+  "36": {
+    "class_type": "CFGGuider",
+    "inputs": { "model": ["1u", 0], "positive": ["30", 0], "negative": ["31", 0], "cfg": 1 }
+  },
+  "37": {
+    "class_type": "BasicScheduler",
+    "inputs": { "model": ["1u", 0], "scheduler": "simple", "steps": 6, "denoise": 1 }
+  },
+  "38": {
+    "class_type": "SamplerLCM",
+    "inputs": { "s_noise": 1.1, "s_noise_end": 0.9, "noise_clip_std": 0 }
+  },
+  "39": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": ["35", 0], "guider": ["36", 0], "sampler": ["38", 0],
+      "sigmas": ["37", 0], "latent_image": ["30", 1]
+    }
+  },
+  "33": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": { "samples": ["39", 0], "vae": ["3v", 0], "tile_size": 768, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8 }
   },
   "9": {
     "class_type": "SaveImage",
-    "inputs": { "filename_prefix": "comfy-app/frame-ref", "images": ["158", 0] }
+    "inputs": { "filename_prefix": "comfy-app/frame-ref", "images": ["33", 0] }
   }
 }`;
 
@@ -163,7 +166,8 @@ export const HYPERFLOW_REF2V_DEFAULT_WORKFLOW = `{"1":{"class_type":"HyperFlowLo
 export const SEEDVR2_UPSCALE_DEFAULT_WORKFLOW = `{"18":{"class_type":"LoadVideo","inputs":{"file":"<<VIDEO>>"}},"19":{"class_type":"GetVideoComponents","inputs":{"video":["18",0]}},"15:5":{"class_type":"SeedVR2LoadDiTModel","inputs":{"model":"seedvr2_ema_3b_fp8_e4m3fn.safetensors","attention_mode":"sdpa","blocks_to_swap":0,"cache_model":false,"device":"cuda:0","offload_device":"none","swap_io_components":false}},"15:6":{"class_type":"SeedVR2LoadVAEModel","inputs":{"model":"ema_vae_fp16.safetensors","cache_model":false,"device":"cuda:0","decode_tile_overlap":128,"decode_tile_size":512,"decode_tiled":true,"encode_tile_overlap":128,"encode_tile_size":512,"encode_tiled":true,"offload_device":"none"}},"15:4":{"class_type":"SeedVR2VideoUpscaler","inputs":{"image":["19",0],"dit":["15:5",0],"vae":["15:6",0],"batch_size":5,"color_correction":"lab","enable_debug":false,"input_noise_scale":0,"latent_noise_scale":0,"max_resolution":0,"offload_device":"none","prepend_frames":0,"resolution":"<<RESOLUTION>>","seed":825616700,"temporal_overlap":0,"uniform_batch_size":false}},"16":{"class_type":"CreateVideo","inputs":{"images":["15:4",0],"audio":["19",1],"fps":["19",2],"bit_depth":"auto","codec":"none","color_space":"sRGB","chroma_subsampling":"auto"}},"17":{"class_type":"SaveVideo","inputs":{"video":["16",0],"filename_prefix":"seedvr2/upscale","format":"mp4","codec":"auto"}}}`;
 
 /**
- * 2511 三参考工作流（分镜帧最强档）：image1=特写脸（<<REF>>）+ image2=正面全身（<<BODY_REF>>）
- * + image3=场景图（<<SCENE_REF>>）——脸/身体/场景三重锁定；缺正面单图时回退双参考模板。
+ * H3 三参考工作流（分镜帧最强档）：image_1=特写脸（<<REF>>）+ image_2=正面全身（<<BODY_REF>>）
+ * + image_3=场景图（<<SCENE_REF>>）——脸/身体/场景三重锁定；缺正面单图时回退双参考模板。
+ * 2026-11-18 实测：三人镜头（第三角色文字锚）在 H3 四参考下脸锁与视线显著优于 2511 三槽方案。
  */
-export const QWEN_EDIT_2511_TRI_WORKFLOW = `{"1":{"class_type":"LoadImage","inputs":{"image":"<<REF>>"}},"2":{"class_type":"LoadImage","inputs":{"image":"<<SCENE_REF>>"}},"161":{"class_type":"UNETLoader","inputs":{"unet_name":"qwen_image_edit_2511_int8_convrot.safetensors","weight_dtype":"default"}},"145":{"class_type":"ModelSamplingAuraFlow","inputs":{"shift":3.1,"model":["161",0]}},"153":{"class_type":"LoraLoaderModelOnly","inputs":{"lora_name":"Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors","strength_model":1,"model":["145",0]}},"152":{"class_type":"CFGNorm","inputs":{"strength":1,"disable":false,"model":["153",0]}},"162":{"class_type":"CLIPLoader","inputs":{"clip_name":"qwen_2.5_vl_7b_fp8_scaled.safetensors","type":"qwen_image","device":"default"}},"146":{"class_type":"VAELoader","inputs":{"vae_name":"qwen_image_vae.safetensors"}},"160":{"class_type":"FluxKontextImageScale","inputs":{"image":["1",0]}},"1610":{"class_type":"FluxKontextImageScale","inputs":{"image":["2",0]}},"151":{"class_type":"TextEncodeQwenImageEditPlus","inputs":{"clip":["162",0],"vae":["146",0],"image1":["160",0],"image2":["1612",0],"prompt":"<<PROMPT>>","image3":["1610",0]}},"149":{"class_type":"TextEncodeQwenImageEditPlus","inputs":{"clip":["162",0],"vae":["146",0],"image1":["160",0],"image2":["1612",0],"prompt":"","image3":["1610",0]}},"156":{"class_type":"VAEEncode","inputs":{"pixels":["160",0],"vae":["146",0]}},"169":{"class_type":"KSampler","inputs":{"seed":0,"steps":4,"cfg":1,"sampler_name":"euler","scheduler":"simple","denoise":1,"model":["152",0],"positive":["151",0],"negative":["149",0],"latent_image":["156",0]}},"158":{"class_type":"VAEDecode","inputs":{"samples":["169",0],"vae":["146",0]}},"9":{"class_type":"SaveImage","inputs":{"filename_prefix":"comfy-app/frame-ref","images":["158",0]}},"1611":{"class_type":"LoadImage","inputs":{"image":"<<BODY_REF>>"}},"1612":{"class_type":"FluxKontextImageScale","inputs":{"image":["1611",0]}}}`;
+export const MINIMAX_H3_IMAGE_EDIT_TRI_WORKFLOW = `{"1":{"class_type":"LoadImage","inputs":{"image":"<<REF>>"}},"2":{"class_type":"LoadImage","inputs":{"image":"<<SCENE_REF>>"}},"3":{"class_type":"LoadImage","inputs":{"image":"<<BODY_REF>>"}},"1u":{"class_type":"UNETLoader","inputs":{"unet_name":"minimax_h3_image_pruned_int8_convrot.safetensors","weight_dtype":"default"}},"2c":{"class_type":"CLIPLoader","inputs":{"clip_name":"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors","type":"minimax","device":"default"}},"3v":{"class_type":"VAELoader","inputs":{"vae_name":"minimax_h3_image_vae_fp16.safetensors"}},"30":{"class_type":"MiniMaxH3ImageConditioning","inputs":{"clip":["2c",0],"vae":["3v",0],"prompt":"<<PROMPT>>","width":768,"height":1344,"images.image_1":["1",0],"images.image_3":["2",0],"images.image_2":["3",0]}},"31":{"class_type":"ConditioningZeroOut","inputs":{"conditioning":["30",0]}},"35":{"class_type":"RandomNoise","inputs":{"noise_seed":"<<SEED>>"}},"36":{"class_type":"CFGGuider","inputs":{"model":["1u",0],"positive":["30",0],"negative":["31",0],"cfg":1}},"37":{"class_type":"BasicScheduler","inputs":{"model":["1u",0],"scheduler":"simple","steps":6,"denoise":1}},"38":{"class_type":"SamplerLCM","inputs":{"s_noise":1.1,"s_noise_end":0.9,"noise_clip_std":0}},"39":{"class_type":"SamplerCustomAdvanced","inputs":{"noise":["35",0],"guider":["36",0],"sampler":["38",0],"sigmas":["37",0],"latent_image":["30",1]}},"33":{"class_type":"VAEDecodeTiled","inputs":{"samples":["39",0],"vae":["3v",0],"tile_size":768,"overlap":64,"temporal_size":64,"temporal_overlap":8}},"9":{"class_type":"SaveImage","inputs":{"filename_prefix":"comfy-app/frame-ref","images":["33",0]}}}`;

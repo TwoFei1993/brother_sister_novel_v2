@@ -6,12 +6,12 @@
  *
  * 工作流约定（设置页粘贴 API 格式 workflow，提交前全文占位符替换）：
  *   视频 "<<FRAME>>"=分帧图文件名 "<<PROMPT>>"=镜头提示词
- *   生图 "<<PROMPT>>"/"<<WIDTH>>"/"<<HEIGHT>>"/"<<SEED>>"（空模板=用内置 Z-Image-Turbo 默认）
+ *   生图 "<<PROMPT>>"/"<<WIDTH>>"/"<<HEIGHT>>"/"<<SEED>>"（空模板=用内置 MiniMax-H3-Image 默认）
  */
 import {
-  Z_IMAGE_TURBO_DEFAULT_WORKFLOW,
-  QWEN_EDIT_2511_WORKFLOW,
-  QWEN_EDIT_2511_TRI_WORKFLOW,
+  MINIMAX_H3_IMAGE_T2I_WORKFLOW,
+  MINIMAX_H3_IMAGE_EDIT_WORKFLOW,
+  MINIMAX_H3_IMAGE_EDIT_TRI_WORKFLOW,
   HYPERFLOW_I2V_DEFAULT_WORKFLOW,
   HYPERFLOW_T2V_DEFAULT_WORKFLOW,
   HYPERFLOW_FLF2V_DEFAULT_WORKFLOW,
@@ -210,7 +210,7 @@ export async function ensureComfyHeadroom(
 
 /** 生图实际生效的 workflow 文本（用户自定义优先，空则内置默认） */
 export function effectiveImageWorkflow(cfg: ComfyuiConfig): string {
-  return cfg.imageWorkflow.trim() || Z_IMAGE_TURBO_DEFAULT_WORKFLOW;
+  return cfg.imageWorkflow.trim() || MINIMAX_H3_IMAGE_T2I_WORKFLOW;
 }
 
 /** 视频模式（决定内置模板选择；用户自定义模板优先于全部内置） */
@@ -404,6 +404,21 @@ async function pollWorkflow(
       continue; // 单次轮询抖动静默重试
     }
     if (!inHistory) {
+      // ComfyUI 只把「已完成」的任务写 history——执行中查 /history 恒为空。
+      // H3-Image 一张 3-8 分钟，远超旧 60s 阈值：先查 /queue 确认还在执行就不算丢失
+      //（P2 原语义保留：queue 也没有且连续 20 次缺失才报「任务从引擎队列消失」）。
+      let inQueue = false;
+      try {
+        const q = await fetch(`${base}/queue`, { signal: AbortSignal.timeout(10_000) });
+        const qj = (await q.json()) as { queue_running?: unknown[][]; queue_pending?: unknown[][] };
+        inQueue = [...(qj.queue_running ?? []), ...(qj.queue_pending ?? [])].some((it) => it[1] === promptId);
+      } catch {
+        continue; // 抖动静默重试
+      }
+      if (inQueue) {
+        missingStreak = 0;
+        continue;
+      }
       missingStreak += 1;
       if (missingStreak >= 20) {
         throw new Error('任务从引擎队列消失（可能引擎重启或 history 被清）——请重新生成');
@@ -578,7 +593,7 @@ export interface ComfyImageParams {
   bodyRefBlob?: Blob;
   /** 场景图 blob（可选，分镜参考通道）：注入 <<SCENE_REF>>——与定妆照双重锁定，跨帧场景一致（双参考档 image2 / 三参考档 image3） */
   sceneRefBlob?: Blob;
-  /** 指定 workflow（默认 Z-Image-Turbo；'qwen-edit-2511' = 分镜参考通道） */
+  /** 指定 workflow（默认 MiniMax-H3-Image 文生图；'qwen-edit-2511' = 分镜参考通道——枚举名保留历史值，引擎已切 H3） */
   workflow?: 'qwen-edit-2511';
 }
 
@@ -587,11 +602,14 @@ export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImag
   const base = cfg.url.replace(/\/$/, '');
   if (params.workflow === 'qwen-edit-2511') {
     if (!params.refBlob) throw new Error('参考生图缺少定妆照（refBlob）');
-    // 内存防线：2511 int8 权重 20G 流式分页——RAM 余量不足先释放（分镜批量重roll 时高频触发）
-    await ensureComfyHeadroom(base, { ramGb: 12 });
+    // 内存防线：H3 int8 主模型 21G + nvfp4 编码器 15.7G 流式换页（磁盘空间不足时页面文件无法扩容即崩）
+    // RAM 余量不足先释放缓存（分镜批量重roll 时高频触发）
+    await ensureComfyHeadroom(base, { ramGb: 16 });
     const refName = await uploadImage(base, params.refBlob, 'ref.png');
+    // H3 的参考图按「Picture n」序号引用（提示词生成层保留中文「图1」措辞，注入前改写）
+    const prompt = params.prompt.replace(/图([0-9]+)/g, 'Picture $1');
     const placeholders: Record<string, string> = {
-      '<<PROMPT>>': params.prompt,
+      '<<PROMPT>>': prompt,
       '<<REF>>': refName,
       '<<SEED>>': String(params.seed),
     };
@@ -604,15 +622,16 @@ export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImag
     // 有正面全身 → 三参考模板（脸+身体+场景）；存量角色无正面图回退双参考
     return runWorkflow(
       base,
-      params.bodyRefBlob ? QWEN_EDIT_2511_TRI_WORKFLOW : QWEN_EDIT_2511_WORKFLOW,
+      params.bodyRefBlob ? MINIMAX_H3_IMAGE_EDIT_TRI_WORKFLOW : MINIMAX_H3_IMAGE_EDIT_WORKFLOW,
       placeholders,
       15 * 60 * 1000,
     );
   }
+  // H3 一张 1.5-8 分钟 + 引擎排队/冷加载余量：5 分钟兜底在排队场景必然超时，提到 15 分钟（参考通道同值）
   return runWorkflow(base, effectiveImageWorkflow(cfg), {
     '<<PROMPT>>': params.prompt,
     '<<WIDTH>>': String(params.width),
     '<<HEIGHT>>': String(params.height),
     '<<SEED>>': String(params.seed),
-  }, 5 * 60 * 1000);
+  }, 15 * 60 * 1000);
 }
