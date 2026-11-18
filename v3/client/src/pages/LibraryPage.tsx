@@ -19,8 +19,9 @@ import ItemPanel from '../features/library/items/ItemPanel';
 
 type Toast = { kind: 'ok' | 'err'; text: string } | null;
 
-/** 从 Tab 参数解析资产类型（非法回退角色卡） */
-function parseTab(v: string | null): AssetType {
+/** 从 Tab 参数解析资产类型（物品道具为原生资产 Tab，非法回退角色卡） */
+function parseTab(v: string | null): AssetType | 'items' {
+  if (v === 'items') return 'items';
   return ASSET_META.some((m) => m.id === v) ? (v as AssetType) : 'characters';
 }
 
@@ -101,6 +102,8 @@ export default function LibraryPage() {
 
       {isHub ? (
         <ResourceHub notify={notify} onJump={setTab} />
+      ) : tab === 'items' ? (
+        <ItemPanel notify={notify} />
       ) : (
         <>
           {tab === 'presets' && selectedPresetId && (

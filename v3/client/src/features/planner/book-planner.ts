@@ -157,7 +157,7 @@ export function bookPlannerSystem(input: {
 questions 规则：每题 2-3 个具体候选项；无问题传空数组。**每组 questions 的最后一题固定为「你有什么建议和想法？」**——候选项给 2-3 个你的专业建议方向，用户可以直接选，也可以完全自由输入自己的想法。
 提问阶段规则（很重要）：提问先宏观后具体——优先问「题材类型 / 故事基调 / 文风」（例如：轻松日常、权谋斗争、热血冒险、悬疑探案、温馨治愈、搞笑吐槽）、「目标读者与篇幅规模」，题材基调定了之后再问剧情细节与人物设定；禁止一上来就问具体情节走向。
 阶段流程：想法发散（多轮问答，outline=null）→ 关键点齐了出完整策划案（outline 填全）→ **自由调整模式（策划案出来后不设轮次上限）**：用户可以反复用任意口语化的话提调整（大改结构/小改细节/增删人物物品章节都行），你听懂意图后只改对应部分、其余继承当前策划案；纯讨论不涉及策划变更时 outline=null。
-调整轮输出分量控制（极重要）：迭代轮只输出**发生变动的部分**，禁止重发整份大纲——未变更的 chapters 条目写 「{"index":N,"unchanged":true}」 占位（系统自动回填原文）；characters/background/factions/conflict/volumes/items 未变动时整个字段省略（系统继承基准值）；只有用户要求全盘重写时才输出完整版。
+调整轮输出分量控制（极重要）：迭代轮只输出**发生变动的部分**，禁止重发整份大纲——未变更的章节**不用输出**（系统自动保留）；被修改的章输出完整条目；要删除的章输出 {"index":N,"deleted":true}；characters/background/factions/conflict/volumes/items 未变动时整个字段省略（系统继承基准值）；只有用户要求全盘重写时才输出完整版。
 outline 结构：
 {"characters":[{"name":"姓名","role":"身份","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","items":[{"name":"物品名","summary":"一句话：这是什么、特殊在哪（外观/功能/情感意义，会建成物品资料卡）"}],"volumes":[{"index":1,"title":"卷名","summary":"本卷主线概述150-300字（本卷起止事件与主线推进）","startChapter":1}],"chapters":[{"index":1,"title":"第1章 标题","plot":"要点80-150字"}]}
 大纲规模规则：卷与章严格分层——**volumes 放卷规划**（每卷一条：卷名+本卷主线概述+startChapter 起始章号，默认每卷约 12 章），**chapters 只放逐章细纲**，禁止把卷规划混进 chapters；用户要求总章数 > 30 时，volumes 出全部分卷规划 + chapters 只给第一卷前 12-15 章细纲，reply 说明「后续按卷续出」；默认首轮 8-12 章。
@@ -200,7 +200,7 @@ export function proposalToSlice(
   proposal: PlannerProposal,
   base: { desiredChapterCount?: number },
 ): AppliedVersion['slice'] {
-  const chapters = normalizeOutlineChapters(proposal.extracted.chapters ?? []).filter((c) => !c.unchanged);
+  const chapters = normalizeOutlineChapters(proposal.extracted.chapters ?? []).filter((c) => !c.unchanged && !c.deleted);
   const baseCount = Number.isFinite(base.desiredChapterCount) ? (base.desiredChapterCount ?? 0) : 0;
   const desired = Math.max(
     chapters.reduce((mx, c) => Math.max(mx, c.index), 0),

@@ -300,7 +300,7 @@ describe('mergeProposalUpdate（迭代轮只输出变动部分——占位回填
 
   it('协议提示词锁定：调整轮分量控制（占位 + 字段省略）', async () => {
     const { PLANNER_SYSTEM } = await import('../planner-llm');
-    expect(PLANNER_SYSTEM).toContain('unchanged');
+    expect(PLANNER_SYSTEM).toContain('deleted');
     expect(PLANNER_SYSTEM).toContain('禁止重发整份大纲');
   });
 });
@@ -356,5 +356,51 @@ describe('parsePlannerReply 带基准（迭代轮部分更新解析——省略�
     expect(
       parsePlannerReply('{"reply":"案","questions":[],"outline":{"chapters":[{"index":1,"title":"第1章","plot":"细纲"}]}}')?.proposal,
     ).toBeNull();
+  });
+});
+
+describe('mergeProposalUpdate 增量合并（UI 实测回归：模型只发改动章不写占位 → 不得丢章）', () => {
+  const baseline = {
+    characters: [{ name: '林彻', role: '哥哥', traits: [] }],
+    background: '末世背景。', abilities: [], factions: [], conflict: '基地背叛',
+    chapters: [
+      { index: 1, title: '第1章', plot: '灾变爆发。' },
+      { index: 2, title: '第2章', plot: '抵达基地。' },
+      { index: 3, title: '第3章', plot: '内部裂痕。' },
+    ],
+  };
+
+  it('只发改动章（无占位）→ 基于基准增量替换，其余章保留', async () => {
+    const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
+    const merged = mergeProposalUpdate(baseline, {
+      characters: [], background: '', abilities: [], factions: [], conflict: '',
+      chapters: [{ index: 2, title: '第2章 吵架', plot: '物资分配大吵。' }],
+    });
+    expect(merged.chapters).toHaveLength(3);
+    expect(merged.chapters![0]).toMatchObject({ index: 1, title: '第1章' });
+    expect(merged.chapters![1]).toMatchObject({ index: 2, title: '第2章 吵架' });
+    expect(merged.chapters![2]).toMatchObject({ index: 3, title: '第3章' });
+  });
+
+  it('deleted 标记 → 按章号删除；新增章 → 追加并按章号排序', async () => {
+    const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
+    const merged = mergeProposalUpdate(baseline, {
+      characters: [], background: '', abilities: [], factions: [], conflict: '',
+      chapters: [
+        { index: 3, title: '', plot: '', deleted: true },
+        { index: 5, title: '第5章', plot: '新章。' },
+      ],
+    });
+    expect(merged.chapters!.map((c) => c.index)).toEqual([1, 2, 5]);
+  });
+
+  it('normalizeOutlineChapters 保留 deleted 标记（无实质内容才算）', async () => {
+    const { normalizeOutlineChapters } = await import('../planner-llm');
+    const out = normalizeOutlineChapters([
+      { index: 3, deleted: true },
+      { index: 4, deleted: true, title: '有实质' },
+    ]);
+    expect(out[0]?.deleted).toBe(true);
+    expect(out[1]?.deleted).toBeUndefined();
   });
 });

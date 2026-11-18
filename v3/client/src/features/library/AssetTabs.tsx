@@ -6,8 +6,8 @@
  */
 import { ASSET_META, type AssetType } from '../../api/library';
 
-/** Tab 值：四类资产 id 或资源中心（hub） */
-export type LibraryTab = AssetType | 'hub';
+/** Tab 值：四类资产 id / 物品道具（原生资产，用户需求）或资源中心（hub） */
+export type LibraryTab = AssetType | 'items' | 'hub';
 
 interface AssetTabsProps {
   value: LibraryTab;
@@ -16,6 +16,7 @@ interface AssetTabsProps {
 
 const TAB_ITEMS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
   ...ASSET_META.map((m) => ({ id: m.id as LibraryTab, label: m.label })),
+  { id: 'items', label: '物品道具' },
   { id: 'hub', label: '资源中心' },
 ];
 

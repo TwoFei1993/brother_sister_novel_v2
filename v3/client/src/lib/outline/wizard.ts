@@ -40,25 +40,32 @@ export interface ExtractedOutline {
  * 实测全量重发 12 章+分卷的大 JSON 在中转通道稳定截断，小输出没问题）。
  *
  * 规则（与 PLANNER_SYSTEM 阶段三提示词约定一致）：
- * - update.chapters 中 unchanged:true 的占位条目 → 从 baseline 同章号回填；无基准可回填则丢弃
+ * - **chapters 增量合并**：以基准全部章节为底，update 逐条按 index 替换/插入；
+ *   unchanged:true 占位条目跳过（基准原文保留）；deleted:true 删除该章（UI 验证实测：
+ *   模型常只发改动章而不写全占位——整体替换会静默丢章，增量合并把这种形态变成正确行为）
  * - update 的数组/字符串字段缺失或为空 → 继承 baseline（「继承未提及部分」从提示词约定升级为代码保证）
- * - baseline 为 null（首轮出案）→ update 原样返回（占位条目丢弃）
+ * - baseline 为 null（首轮出案）→ update 原样返回（占位/删除标记条目丢弃）
  */
 export function mergeProposalUpdate(baseline: ExtractedOutline | null, update: ExtractedOutline): ExtractedOutline {
   if (!baseline) {
-    // 无基准：原样收下，占位条目无处回填直接丢弃
-    return { ...update, chapters: (update.chapters ?? []).filter((c) => !c.unchanged) };
+    // 无基准：原样收下，占位/删除标记条目无处落地直接丢弃
+    return { ...update, chapters: (update.chapters ?? []).filter((c) => !c.unchanged && !c.deleted) };
   }
   const inheritStr = (u: string | undefined, b: string): string => (u !== undefined && u.trim() ? u : b);
   const inheritArr = <T>(u: T[] | undefined, b: T[]): T[] => (u !== undefined && u.length > 0 ? u : b);
   const baseChapters = baseline.chapters ?? [];
-  const resolvedChapters = (update.chapters ?? [])
-    .map((c) => {
-      if (!c.unchanged) return c;
-      const hit = baseChapters.find((b) => b.index === c.index);
-      return hit ? { ...hit } : null;
-    })
-    .filter((c): c is ChapterOutline => c !== null);
+  const mergedMap = new Map(baseChapters.map((c) => [c.index, { ...c }]));
+  if (update.chapters !== undefined) {
+    for (const c of update.chapters) {
+      if (c.unchanged) continue; // 占位：基准原文已在
+      if (c.deleted) {
+        mergedMap.delete(c.index);
+        continue;
+      }
+      mergedMap.set(c.index, { ...c }); // 替换或新增
+    }
+  }
+  const chapters = [...mergedMap.values()].sort((a, b) => a.index - b.index);
   const volumes = update.volumes ?? baseline.volumes ?? [];
   const items = update.items ?? baseline.items ?? [];
   return {
@@ -68,7 +75,7 @@ export function mergeProposalUpdate(baseline: ExtractedOutline | null, update: E
     ...(inheritStr(update.ability ?? '', baseline.ability ?? '') ? { ability: inheritStr(update.ability ?? '', baseline.ability ?? '') } : {}),
     factions: inheritArr(update.factions, baseline.factions),
     conflict: inheritStr(update.conflict, baseline.conflict),
-    chapters: update.chapters === undefined ? baseChapters : resolvedChapters,
+    chapters: update.chapters === undefined ? baseChapters : chapters,
     ...(volumes.length > 0 ? { volumes } : {}),
     ...(items.length > 0 ? { items } : {}),
   };

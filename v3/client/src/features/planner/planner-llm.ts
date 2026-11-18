@@ -41,18 +41,20 @@ export interface ParsedPlannerReply {
  * 由 mergeProposalUpdate 回填或丢弃（有实质内容的条目即使带 unchanged 也视为完整输出）。
  */
 export function normalizeOutlineChapters(
-  chapters: ReadonlyArray<{ index?: unknown; title?: unknown; plot?: unknown; unchanged?: unknown }>,
-): Array<{ index: number; title: string; plot: string; unchanged?: boolean }> {
+  chapters: ReadonlyArray<{ index?: unknown; title?: unknown; plot?: unknown; unchanged?: unknown; deleted?: unknown }>,
+): Array<{ index: number; title: string; plot: string; unchanged?: boolean; deleted?: boolean }> {
   return chapters.map((c, i) => {
     const raw = Number(c.index);
     const title = String(c.title ?? '');
     const plot = String(c.plot ?? '');
     const unchanged = c.unchanged === true && title.trim() === '' && plot.trim() === '';
+    const deleted = c.deleted === true && title.trim() === '' && plot.trim() === '' && !unchanged;
     return {
       index: Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : i + 1,
       title,
       plot,
       ...(unchanged ? { unchanged: true } : {}),
+      ...(deleted ? { deleted: true } : {}),
     };
   });
 }
@@ -72,7 +74,7 @@ questions 规则：每个问题必须带 2-3 个具体候选项；无问题则 q
 - 阶段一·提问（默认）：想法尚浅时**只提问、不产出策划案**（outline=null）。等用户回答；用户若说「直接生成」，跳过剩余提问立即出案。
 - 阶段二·出案：关键问题已被回答后，一次性产出完整策划案（outline 填全），reply 用几句话概括亮点。
 - 阶段三·迭代（策划案生成后的**自由调整模式**，用户反馈：要能反复用自己的话继续沟通调整）：策划案出来后，用户可以反复用任意口语化的话提调整——大改结构、小改细节、增删人物/物品/章节、调整文风基调都行；你听懂意图后**只改对应部分**，其余继承当前策划案，reply 说明改了什么。此阶段不设轮次上限，用户随时可以直接开书。
-- **调整轮输出分量控制（极重要）**：迭代轮只输出**发生变动的部分**，禁止重发整份大纲——未变更的 chapters 条目写 「{"index":N,"unchanged":true}」 占位（系统会自动回填原文）；characters/background/abilities/factions/conflict/volumes/items 未变动时**整个字段省略**（系统继承基准值）；只有用户要求全盘重写时才输出完整版。这样调整轮输出保持很小，不会截断。
+- **调整轮输出分量控制（极重要）**：迭代轮只输出**发生变动的部分**，禁止重发整份大纲——未变更的章节**不用输出**（系统自动保留）；被修改的章输出完整条目；要删除的章输出 {"index":N,"deleted":true}；characters/background/abilities/factions/conflict/volumes/items 未变动时**整个字段省略**（系统继承基准值）；只有用户要求全盘重写时才输出完整版。这样调整轮输出保持很小，不会截断。
 - 纯闲聊/问答（无策划变更）→ outline 传 null，reply 正常聊天。
 outline 结构：
 {"characters":[{"name":"姓名","role":"身份（哥哥/妹妹/反派等）","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","items":[{"name":"物品名","summary":"一句话：这是什么、特殊在哪（外观/功能/情感意义，会建成物品资料卡）"}],"volumes":[{"index":1,"title":"卷名","summary":"本卷主线概述150-300字（本卷起止事件与主线推进）","startChapter":1}],"chapters":[{"index":1,"title":"第1章 标题","plot":"本章剧情要点80-150字，具体到可直接写成文"}]}
@@ -267,7 +269,9 @@ function slimHistoryText(text: string): string {
  * 写占位、系统回填全文），plot 不进 prompt——12 章+分卷的大纲基准从上万字缩到千字级。
  */
 function compactBaseline(p: PlannerProposal): string {
-  const chapters = (p.extracted.chapters ?? []).filter((c) => !c.unchanged).map(({ index, title }) => ({ index, title }));
+  const chapters = (p.extracted.chapters ?? [])
+    .filter((c) => !c.unchanged && !c.deleted)
+    .map(({ index, title }) => ({ index, title }));
   return JSON.stringify({ title: p.title, genre: p.genre, ...p.extracted, chapters });
 }
 

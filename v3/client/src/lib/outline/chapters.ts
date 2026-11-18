@@ -22,8 +22,10 @@ export interface ChapterOutline {
   conflict?: string;
   /** 所属卷（「第X卷：名称」归入其后最近的章节） */
   volume?: string;
-  /** 迭代轮「只输出变动部分」协议占位（{"index":N,"unchanged":true}）：mergeProposalUpdate 回填或丢弃 */
+  /** 迭代轮「只输出变动部分」协议占位（{"index":N,"unchanged":true}）：mergeProposalUpdate 跳过保留基准 */
   unchanged?: boolean;
+  /** 迭代轮删除标记（{"index":N,"deleted":true}）：mergeProposalUpdate 按章号删除 */
+  deleted?: boolean;
 }
 
 // ---------- 内部正则 ----------
@@ -223,6 +225,6 @@ export function volumesFromChapters(chapters: readonly ChapterOutline[]): Volume
 /** settings 入库裁剪：ChapterOutline → {index,title,plot}（shared ChapterOutlineItem 形状）；占位条目（unchanged）不入库 */
 export function toChapterOutlineItems(chapters: ChapterOutline[]): { index: number; title: string; plot: string }[] {
   return chapters
-    .filter((c) => !c.unchanged)
+    .filter((c) => !c.unchanged && !c.deleted)
     .map(({ index, title, plot }) => ({ index, title, plot }));
 }
