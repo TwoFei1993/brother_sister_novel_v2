@@ -146,7 +146,7 @@ async function main(): Promise<void> {
       void after;
     }
     console.log(`  [frame] S${shot.index} ✓ 4帧`);
-  }  }
+  }
 
   // ⑤ H3 视频：挑 EP1 前 3 镜（时长控制在 ~30 分钟）
   console.log('[5] H3 视频（前 3 镜 flf2v）');
