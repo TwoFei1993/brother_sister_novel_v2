@@ -36,8 +36,9 @@ const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 export interface CrudOptions<Asset extends { id: string; name: string; createdAt?: number }> {
   /** 资产子目录解析器（每请求求值） */
   dirOf: () => string;
-  /** 完整资产 schema（含 id 字段；POST 时自动 omit，PATCH 时自动 partial） */
-  schema: z.ZodType<Asset>;
+  /** 完整资产 schema（含 id 字段；POST 时自动 omit，PATCH 时自动 partial）。
+   *  input 允许 unknown：schema 带 z.default（如 ItemAsset.owner）时输入类型与输出类型不同 */
+  schema: z.ZodType<Asset, z.ZodTypeDef, unknown>;
   /** 错误消息中的资源名（如"角色卡"） */
   label: string;
   /**
