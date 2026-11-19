@@ -20,7 +20,7 @@ interface ItemEditorProps {
 
 type ItemDraft = Omit<ItemAsset, 'id' | 'createdAt' | 'origin'>;
 
-const EMPTY: ItemDraft = { name: '', summary: '', texture: '', shape: '', color: '', usage: '', emotion: '', notes: '' };
+const EMPTY: ItemDraft = { name: '', summary: '', owner: '无', texture: '', shape: '', color: '', usage: '', emotion: '', notes: '' };
 
 export default function ItemEditor({ itemId, notify, onClose, onSaved }: ItemEditorProps) {
   const [draft, setDraft] = useState<ItemDraft>(EMPTY);
@@ -85,6 +85,13 @@ export default function ItemEditor({ itemId, notify, onClose, onSaved }: ItemEdi
         ) : (
           <>
             <TextField label="物品名" value={draft.name} onChange={(v) => set({ name: v })} placeholder="如：母亲的银锁" />
+            <TextField
+              label="主人"
+              tip="物品归属的角色名；无明确主人写「无」（所有物品必须有主人）"
+              value={draft.owner ?? ''}
+              onChange={(v) => set({ owner: v })}
+              placeholder="如：沈念 / 无"
+            />
             <TextField
               label="一句话定位"
               tip="这是什么、特殊在哪；生成时的引导句"

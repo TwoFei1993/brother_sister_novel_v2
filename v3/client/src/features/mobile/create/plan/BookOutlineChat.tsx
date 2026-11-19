@@ -426,16 +426,22 @@ export default function BookOutlineChat({ work, onApplied, onGoWrite }: Props) {
         </div>
       )}
 
-      {/* 输入行 */}
+      {/* 输入行（无字数上限：支持直接粘贴整本书大纲/设定长文，可分次补充粘贴） */}
       <div className="safe-bottom flex shrink-0 gap-2 border-t border-[hsl(var(--border-soft))] px-4 py-2">
-        <input
+        <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && void send(input)}
-          placeholder="这本书的任何想法（毫无头绪就写个词，我帮你发散）"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void send(input);
+            }
+          }}
+          rows={2}
+          placeholder="这本书的任何想法（支持直接粘贴整本书大纲/设定长文，可分次补充）"
           disabled={busy}
           data-testid="book-outline-input"
-          className="h-10 min-w-0 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))] disabled:opacity-50"
+          className="max-h-32 min-h-[40px] min-w-0 flex-1 resize-y rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-[hsl(var(--accent))] disabled:opacity-50"
         />
         <button
           type="button"

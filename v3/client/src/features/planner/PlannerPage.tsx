@@ -231,7 +231,7 @@ export default function PlannerPage() {
       const itemIds: string[] = [];
       for (const it of proposal.extracted.items ?? []) {
         try {
-          const created = await createItem({ name: it.name, summary: it.summary });
+          const created = await createItem({ name: it.name, summary: it.summary, owner: it.owner });
           itemIds.push(created.id);
         } catch {
           /* 单卡失败跳过 */
@@ -543,21 +543,22 @@ export default function PlannerPage() {
           {/* 输入区（safe-bottom 适配 APK 导航条） */}
           <div className="safe-bottom shrink-0 border-t border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 pb-3 pt-2 md:px-4 md:py-3">
             <div className="mx-auto flex max-w-3xl items-center gap-2">
+              {/* 无字数上限（用户需求：可直接粘贴整本书大纲/设定长文，支持分次补充粘贴） */}
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !bgBusy) {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.nativeEvent.isComposing && !bgBusy) {
                     e.preventDefault();
                     void send(input, { fromInput: true });
                   }
                 }}
-                rows={1}
+                rows={3}
                 disabled={bgBusy || importing}
-                placeholder="描述你的创作想法…"
+                placeholder="描述你的创作想法…（支持直接粘贴整本书大纲/设定长文，可分次补充粘贴，无字数上限；Enter 发送，Shift+Enter 换行）"
                 aria-label="向导输入"
                 data-testid="planner-input"
-                className="max-h-32 min-h-[40px] min-w-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+                className="max-h-56 min-h-[72px] min-w-0 flex-1 resize-y rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
               />
               {bgBusy && (
                 <span className="shrink-0 px-2 text-[11px] text-[hsl(var(--fg-muted))]" data-testid="planner-bg-hint">

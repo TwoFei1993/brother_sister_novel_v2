@@ -26,7 +26,11 @@ echo "[comfy] 启动 ComfyUI（$COMFY_DIR）→ 日志 $LOG"
 # PowerShell 只认 Windows 路径，MSYS 风格（/d/...）必须先转换；进程用 Start-Process 完全独立于当前 shell
 # --enable-cors-header *：App 浏览器直连必须（ComfyUI 默认对跨域 Origin 返回 403）
 # --listen 0.0.0.0：手机端直连必须（默认只听 127.0.0.1，局域网设备连不上；Windows 防火墙首次会弹放行确认，选「允许」）
-# [2026-11-14] --disable-dynamic-vram：comfy_aimdo 流式加载在 98% 满的 D 盘读 20G 模型分片必败（host_buffer read_file_slice）——回 legacy ModelPatcher
+# [2026-11-14 曾加 --disable-dynamic-vram]：当时 D 盘 98% 满，comfy_aimdo 流式加载读 20G 模型分片必败，回退 legacy CPU offload。
+# [2026-11-19 移除]：D 盘已清理（63G 可用），触发条件消失；且实测 legacy CPU offload 是性能灾难——
+#   16MP 三参考 30+ 分钟（权重页换页到磁盘，N 卡 0% 等 CPU 算 offload 层），
+#   而 ComfyUI Desktop 动态显存模式（CUDA 共享内存 fallback，权重驻 RAM 由 N 卡 DMA 直读）同任务仅 4 分钟。
+#   若 D 盘再度逼近满盘导致流式加载失败，再临时加回此参数。
 # --use-sage-attention：2026-11-15 MSVC Build Tools 补装后启用（tcc 失败根因=无 MSVC 编译器，官方 setup 已补）
 # SageAttention JIT 需 Windows SDK + MSVC include/lib（triton tcc/clang 编译 CUDA stub 用）
 SDK_VER="10.0.26100.0"
@@ -51,7 +55,7 @@ else
 fi
 COMFY_WIN="$(cygpath -w "$COMFY_DIR")"
 LOG_WIN="$(cygpath -w "$LOG")"
-powershell -NoProfile -Command "Start-Process -FilePath '$COMFY_WIN\python_embeded\python.exe' -ArgumentList '-s','ComfyUI/main.py','--windows-standalone-build','--listen','0.0.0.0',${SAGE_ARG}'--disable-dynamic-vram','--enable-cors-header','*' -WorkingDirectory '$COMFY_WIN' -WindowStyle Hidden -RedirectStandardOutput '$LOG_WIN' -RedirectStandardError '$LOG_WIN.err'"
+powershell -NoProfile -Command "Start-Process -FilePath '$COMFY_WIN\python_embeded\python.exe' -ArgumentList '-s','ComfyUI/main.py','--windows-standalone-build','--listen','0.0.0.0',${SAGE_ARG}'--enable-cors-header','*' -WorkingDirectory '$COMFY_WIN' -WindowStyle Hidden -RedirectStandardOutput '$LOG_WIN' -RedirectStandardError '$LOG_WIN.err'"
 
 echo "[comfy] 后台启动中，探活 $BASE_URL ..."
 for i in $(seq 1 90); do

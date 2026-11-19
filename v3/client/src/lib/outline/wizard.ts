@@ -31,8 +31,8 @@ export interface ExtractedOutline {
   chapters?: ChapterOutline[];
   /** 分卷规划（卷规划层，与章细纲分层；planner 输出路径产出，规则抽取路径不产出） */
   volumes?: VolumeOutlineItem[];
-  /** 特殊物品清单（planner 输出路径产出；一键开书时建成物品资料卡并绑定） */
-  items?: Array<{ name: string; summary: string }>;
+  /** 特殊物品清单（planner 输出路径产出；一键开书时建成物品资料卡并绑定；owner=主人角色，无明确主人写「无」） */
+  items?: Array<{ name: string; summary: string; owner: string }>;
 }
 
 /**

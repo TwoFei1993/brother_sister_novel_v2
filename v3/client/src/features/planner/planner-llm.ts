@@ -66,6 +66,7 @@ questions 规则：每个问题必须带 2-3 个具体候选项；无问题则 q
 理解规则（反馈③：先复述、再提问，防止理解跑偏）：
 - 每轮 reply 的第一句先用你的话**复述你对需求的理解**（要写什么、时间跨度/主角/总章数等关键点各是什么）；复述错了用户会纠正你。
 - 严格以用户原话中的实体与设定为准（书名、人名、总章数、时间跨度都按原话采用），不得自行增删；拿不准的点放进 questions（一次最多 3 问），已明确的绝不重复问。
+- 用户可能**直接粘贴整本书大纲/设定长文**（无字数上限，也可能分次补充粘贴）：完整吸收全部内容，禁止要求用户分段或截断；把粘贴内容里的分卷/章节/人物/物品道具全部整合进策划案（物品一律进 items 并标注主人），粘贴的事实设定原样尊重，不得凭空删改。
 - 用户给了总章数就按该总数规划节奏；数量庞大时首轮只出「分卷规划（volumes）+ 首批章细纲（chapters）」（见大纲规模规则）。
 交互协议（grill 式面谈，严格按阶段走）：
 - **提问上限：全程最多 3 轮 questions**。第 3 轮用户回答后必须直接出案（questions 空数组、outline 填全）——界面会在用户回答后自动触发直接生成。
@@ -77,8 +78,8 @@ questions 规则：每个问题必须带 2-3 个具体候选项；无问题则 q
 - **调整轮输出分量控制（极重要）**：迭代轮只输出**发生变动的部分**，禁止重发整份大纲——未变更的章节**不用输出**（系统自动保留）；被修改的章输出完整条目；要删除的章输出 {"index":N,"deleted":true}；characters/background/abilities/factions/conflict/volumes/items 未变动时**整个字段省略**（系统继承基准值）；只有用户要求全盘重写时才输出完整版。这样调整轮输出保持很小，不会截断。
 - 纯闲聊/问答（无策划变更）→ outline 传 null，reply 正常聊天。
 outline 结构：
-{"characters":[{"name":"姓名","role":"身份（哥哥/妹妹/反派等）","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","items":[{"name":"物品名","summary":"一句话：这是什么、特殊在哪（外观/功能/情感意义，会建成物品资料卡）"}],"volumes":[{"index":1,"title":"卷名","summary":"本卷主线概述150-300字（本卷起止事件与主线推进）","startChapter":1}],"chapters":[{"index":1,"title":"第1章 标题","plot":"本章剧情要点80-150字，具体到可直接写成文"}]}
-items 规则：只列**对剧情有实际作用的特殊物品/道具**（金手指载体、信物、关键武器等），普通日常物品不列；2-6 条为宜，没有就传空数组。
+{"characters":[{"name":"姓名","role":"身份（哥哥/妹妹/反派等）","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","items":[{"name":"物品名","owner":"主人角色名（物品归属谁；无明确主人写「无」）","summary":"一句话：这是什么、特殊在哪（外观/功能/情感意义，会建成物品资料卡）"}],"volumes":[{"index":1,"title":"卷名","summary":"本卷主线概述150-300字（本卷起止事件与主线推进）","startChapter":1}],"chapters":[{"index":1,"title":"第1章 标题","plot":"本章剧情要点80-150字，具体到可直接写成文"}]}
+items 规则：只列**对剧情有实际作用的特殊物品/道具**（金手指载体、信物、关键武器等），普通日常物品不列；2-6 条为宜，没有就传空数组。**每件物品必须标注主人**（归属的角色名；无明确主人写「无」），禁止遗漏。
 大纲规模规则（反馈⑥：超长大纲一次输出会截断断流；用户反馈：卷大纲与章细纲严格分层）：
 - 卷与章分层：**volumes 放卷规划**（每卷一条：卷名 + 本卷主线概述 + startChapter 起始章号 + chapterCount 本卷章数【用户可选择每卷几章，默认约 12 章】，下一卷 startChapter = 本卷起始 + chapterCount）；**chapters 只放逐章细纲**，禁止把卷规划混进 chapters。
 - 默认首轮规划 8-12 章细纲；用户要求总章数 > 30 时，先出全部分卷规划（volumes 填全），chapters 只给第一卷的前 12-15 章细纲，并在 reply 里说明「后续各卷细纲按卷续出」。
@@ -247,13 +248,17 @@ export function normalizeOutlineVolumes(
     .filter((v) => v.title !== '' || v.summary !== '');
 }
 
-/** 特殊物品清单归一化：name/summary 字符串化 + 去空白名条目（物品资料卡的数据源） */
+/** 特殊物品清单归一化：name/summary/owner 字符串化 + 去空白名条目（物品资料卡的数据源；owner 缺省「无」——用户要求所有物品必须有主人） */
 export function normalizeOutlineItems(
-  items: ReadonlyArray<{ name?: unknown; summary?: unknown }> | undefined,
-): Array<{ name: string; summary: string }> {
+  items: ReadonlyArray<{ name?: unknown; summary?: unknown; owner?: unknown }> | undefined,
+): Array<{ name: string; summary: string; owner: string }> {
   if (!Array.isArray(items)) return [];
   return items
-    .map((it) => ({ name: String(it.name ?? '').trim(), summary: String(it.summary ?? '').trim() }))
+    .map((it) => ({
+      name: String(it.name ?? '').trim(),
+      summary: String(it.summary ?? '').trim(),
+      owner: String(it.owner ?? '').trim() || '无',
+    }))
     .filter((it) => it.name !== '');
 }
 

@@ -213,7 +213,7 @@ describe('特殊物品清单（用户需求：物品道具资料卡）+ 沟通�
       },
     });
     const r = parsePlannerReply(reply);
-    expect(r?.proposal?.extracted.items).toEqual([{ name: '母亲的银锁', summary: '藏着母亲字条的旧银锁' }]);
+    expect(r?.proposal?.extracted.items).toEqual([{ name: '母亲的银锁', summary: '藏着母亲字条的旧银锁', owner: '无' }]);
     expect(normalizeOutlineItems(undefined)).toEqual([]);
   });
 
@@ -232,7 +232,7 @@ describe('mergeProposalUpdate（迭代轮只输出变动部分——占位回填
     abilities: [] as string[],
     factions: [] as string[],
     conflict: '生计与陪伴的张力',
-    items: [{ name: '旧座钟', summary: '店里停摆的旧挂钟' }],
+    items: [{ name: '旧座钟', summary: '店里停摆的旧挂钟', owner: '无' }],
     volumes: [{ index: 1, title: '第一卷', summary: '开店初期', startChapter: 1 }],
     chapters: [
       { index: 1, title: '第1章 开店', plot: '首夜营业。' },
@@ -272,10 +272,10 @@ describe('mergeProposalUpdate（迭代轮只输出变动部分——占位回填
     const { mergeProposalUpdate } = await import('../../../lib/outline/wizard');
     const merged = mergeProposalUpdate(baseline, {
       characters: [], background: '', abilities: [], factions: [], conflict: '',
-      items: [{ name: '母亲的银锁', summary: '藏着字条' }],
+      items: [{ name: '母亲的银锁', summary: '藏着字条', owner: '无' }],
       chapters: [{ index: 1, title: '', plot: '', unchanged: true }, { index: 2, title: '', plot: '', unchanged: true }],
     });
-    expect(merged.items).toEqual([{ name: '母亲的银锁', summary: '藏着字条' }]);
+    expect(merged.items).toEqual([{ name: '母亲的银锁', summary: '藏着字条', owner: '无' }]);
   });
 
   it('baseline=null（首轮出案）原样收下且占位丢弃', async () => {
@@ -339,7 +339,7 @@ describe('parsePlannerReply 带基准（迭代轮部分更新解析——省略�
     const ex = update!.proposal!.extracted;
     expect(ex.chapters).toHaveLength(2); // 占位回填第1章 + 新第2章
     expect(ex.chapters![0]).toMatchObject({ index: 1, title: '第1章 开店', plot: '首夜营业。' });
-    expect(ex.items).toEqual([{ name: '母亲的银锁', summary: '藏着字条' }]);
+    expect(ex.items).toEqual([{ name: '母亲的银锁', summary: '藏着字条', owner: '无' }]);
     expect(ex.background).toBe('深夜便利店。'); // 省略字段继承基准
     expect(update!.proposal!.title).toBe('夜灯便利屋'); // title 缺省继承基准
   });

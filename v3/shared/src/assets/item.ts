@@ -17,6 +17,8 @@ export const ItemAssetSchema = z.strictObject({
   createdAt: z.number().optional(),
   /** 一句话定位：这是什么、特殊在哪（注入时的引导句） */
   summary: z.string(),
+  /** 主人：物品归属角色（用户要求：所有物品必须有主人，无明确主人写「无」；旧数据 parse 自动补「无」） */
+  owner: z.string().default('无'),
   /** 质感：触感/材质（如「温润的羊脂玉触感」） */
   texture: z.string().optional(),
   /** 形状：外形/尺寸/结构 */
@@ -38,12 +40,15 @@ export type ItemAsset = z.infer<typeof ItemAssetSchema>;
 export const DEFAULT_ITEM = (): Omit<ItemAsset, 'id'> => ({
   name: '',
   summary: '',
+  owner: '无',
 });
 
-/** 拼物品的注入描述（只拼非空段；生成管线伪世界书条目与编辑器摘要共用） */
+/** 拼物品的注入描述（只拼非空段；主人段始终输出——无主人写「无」，用户要求） */
 export function describeItem(it: Omit<ItemAsset, 'id' | 'createdAt' | 'origin'>): string {
   const segs: string[] = [];
   if (it.summary.trim()) segs.push(it.summary.trim());
+  const owner = (it.owner ?? '').trim() || '无';
+  segs.push(`主人：${owner}`);
   const fields: ReadonlyArray<[string, string | undefined]> = [
     ['质感', it.texture],
     ['形状', it.shape],

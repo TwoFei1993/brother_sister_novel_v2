@@ -75,7 +75,7 @@ export async function applyProposalToBook(
     try {
       const a = await apiFetch<{ id: string }>('/api/items', {
         method: 'POST',
-        body: JSON.stringify({ name: it.name, summary: it.summary }),
+        body: JSON.stringify({ name: it.name, summary: it.summary, owner: it.owner }),
       });
       itemIds.push(a.id);
     } catch {
