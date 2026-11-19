@@ -135,6 +135,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
     if (gen.streaming || !lastChapter) return;
     const msg = await gen.extendChapter(work, useWorkStore.getState().messages, lastChapter, mode);
     if (msg) upsertLocal(msg);
+    else alert(`${mode === 'append' ? '续写' : '加长'}未产出有效内容（模型可能过载），请重试`);
   }
 
   // ---------- A 对话流视图（DialogView）动作 ----------

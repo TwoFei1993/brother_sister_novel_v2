@@ -75,6 +75,8 @@ interface RunOptions {
   segment?: SegmentInfo;
   /** 覆盖输出预算（分段轮：只给本段的量 → finish=length 提前停，后续段自动续写） */
   effMaxTokensOverride?: number;
+  /** 关闭思考（扩写轮实测：推理模型思考吞掉输出预算 → meta 空产出；扩写是转换任务不需要深思考） */
+  thinkingOff?: boolean;
 }
 
 /**
@@ -85,7 +87,7 @@ async function assembleGenRequest(
   work: Work,
   messages: Message[],
   directive: string,
-  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId' | 'swipeTarget'>,
+  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId' | 'swipeTarget' | 'thinkingOff'>,
   prefs: LlmPrefs,
 ): Promise<{ body: GenerateBody; fitted: FittedPrompt; assets: AssembleAssets; env: MacroEnv; pending: PendingVars; effMaxTokens: number }> {
   // P2.2 绑定三态：按本章章号过滤增量绑定素材（写第 C 章只带 fromChapter≤C 的生效素材）
@@ -116,7 +118,7 @@ async function assembleGenRequest(
     frequencyPenalty: prefs.frequencyPenalty,
     presencePenalty: prefs.presencePenalty,
     repetitionPenalty: prefs.repetitionPenalty,
-    thinking: thinkingOn,
+    thinking: opts.thinkingOff ? false : thinkingOn,
   });
   return { body, fitted, assets, env, pending, effMaxTokens };
 }
@@ -725,15 +727,19 @@ export function useGenerate(): UseGenerateResult {
       // 上下文含本章（含 target 本体，模型看得到要续写/扩写的正文）；其后章节不进上下文
       const ctx = idx === -1 ? messages : messages.slice(0, idx + 1);
       const tw = work.settings.targetChapterWords ?? 3000;
+      // 加长目标字数（用户实测：对已超目标的章「扩写到 tw」语义矛盾 → 模型原地重写感知为没变化）：
+      // 目标 = max(作品目标字数, 现有字数 + 1500)——「加长」必须比现在更长
+      const expandTarget = Math.max(tw, target.content.length + 1500);
       const directive =
         mode === 'append'
           ? buildContinueDirective(target.content)
-          : `把本章加长扩写（保持情节不变，写到约 ${tw} 字）`;
+          : `把本章加长扩写（保持情节不变，写到约 ${expandTarget} 字）`;
       let msg = await run(work, ctx, directive, {
         targetId: target.id,
         initialBuffer: mode === 'append' ? target.content : '',
         swipeTarget: target,
-        ...(mode === 'append' ? { continuation: true } : { expandChapter: true }),
+        // 扩写轮关思考（生产实测：推理模型思考吞掉输出预算 → meta 空产出静默失败）
+        ...(mode === 'append' ? { continuation: true } : { expandChapter: true, thinkingOff: true }),
         maxTokensScale: 2, // 扩写/续写都是长输出：预算 2 倍（封顶 64000）
       });
       const reason = invalidReasonOf(msg);
@@ -742,7 +748,7 @@ export function useGenerate(): UseGenerateResult {
           targetId: target.id,
           initialBuffer: mode === 'append' ? target.content : '',
           swipeTarget: target,
-          ...(mode === 'append' ? { continuation: true } : { expandChapter: true }),
+          ...(mode === 'append' ? { continuation: true } : { expandChapter: true, thinkingOff: true }),
           promptDirective: directive + RETRY_SUFFIX[reason],
           maxTokensScale: 3,
         });
@@ -776,6 +782,8 @@ export function useGenerate(): UseGenerateResult {
       const store = useWorkStore.getState();
       const idx = store.messages.findIndex((m) => m.id === target.id);
       const ctx = idx === -1 ? store.messages : store.messages.slice(0, idx + 1);
+      // 加长目标字数：max(作品目标, 现有字数 + 1500)——与 extendChapter 同语义（「加长」必须比现在更长）
+      const expandTarget = Math.max(tw, target.content.length + 1500);
       const { body, fitted, assets, env, pending } = await assembleGenRequest(
         work,
         ctx,
@@ -784,9 +792,10 @@ export function useGenerate(): UseGenerateResult {
           initialBuffer: isAppend ? target.content : '',
           promptDirective: isAppend
             ? buildContinueDirective(target.content)
-            : `把本章加长扩写（保持情节不变，写到约 ${tw} 字）`,
+            : `把本章加长扩写（保持情节不变，写到约 ${expandTarget} 字）`,
           continuation: isAppend,
           expandChapter: !isAppend,
+          thinkingOff: !isAppend, // 扩写轮关思考（生产实测思考吞预算 → meta 空产出）
           maxTokensScale: 2,
           swipeTarget: target,
         },

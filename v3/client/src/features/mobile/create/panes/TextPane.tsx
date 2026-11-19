@@ -162,6 +162,9 @@ export function TextPane({
     try {
       const msg = await gen.extendChapterBg(work, current, mode);
       if (msg) onDone(msg);
+      else alert(`${mode === 'append' ? '续写' : '加长'}未产出有效内容（模型可能过载），请重试`);
+    } catch {
+      alert(`${mode === 'append' ? '续写' : '加长'}失败，请重试`);
     } finally {
       setBgBusy(false);
     }
