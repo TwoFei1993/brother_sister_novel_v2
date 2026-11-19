@@ -155,6 +155,18 @@ export function TextPane({
     }
   }
 
+  /** 本章加长/续写（App 后台版）：对当前章 append（续写新剧情）/ expand（扩写加厚） */
+  async function extend(mode: 'append' | 'expand'): Promise<void> {
+    if (!current || myStreaming || otherStreaming || bgBusy) return;
+    setBgBusy(true);
+    try {
+      const msg = await gen.extendChapterBg(work, current, mode);
+      if (msg) onDone(msg);
+    } finally {
+      setBgBusy(false);
+    }
+  }
+
   /** ✍️ 手写第一章（自己写/粘贴正文，写完可 AI 润色）：建空章节并直接进入编辑态 */
   async function createHandwriteChapter(): Promise<void> {
     if (myStreaming || otherStreaming) return;
@@ -439,6 +451,35 @@ export function TextPane({
           {directive.trim() ? '生成' : '续写'}
         </button>
       </div>
+
+      {/* 本章加长/续写（App 后台版，2026-11-19）：有当前章且非编辑/生成态时显示 */}
+      {current && !editing && !myStreaming && !bgBusy && (
+        <div className="mx-4 mt-2 flex gap-2" data-testid="mobile-extend-row">
+          <button
+            type="button"
+            onClick={() => void extend('append')}
+            data-testid="mobile-extend-append"
+            title="从本章结尾续写新剧情，追加为该章新候选（版本切换可回退）"
+            className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+          >
+            ⏩ 本章续写
+          </button>
+          <button
+            type="button"
+            onClick={() => void extend('expand')}
+            data-testid="mobile-extend-expand"
+            title="保持情节不变扩写本章（原地加厚写细），结果追加为新候选"
+            className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+          >
+            📖 本章加长
+          </button>
+        </div>
+      )}
+      {(bgBusy || myStreaming) && current && !myStreaming && (
+        <p className="mx-4 mt-2 text-center text-[11px] text-[hsl(var(--fg-muted))]" data-testid="mobile-bg-hint">
+          后台任务执行中（server 端继续）——可切出 App，回来自动继续
+        </p>
+      )}
 
       {/* 📑 章节目录入口 + 抽屉：portal 挂 body——分区容器带 m-rise 动画（fill both 持有 transform），
           fixed 后代会退化为容器内定位（实测滚动后 fab 被滚走），portal 出去才是真视口固定 */}

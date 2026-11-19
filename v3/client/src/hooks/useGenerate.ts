@@ -85,7 +85,7 @@ async function assembleGenRequest(
   work: Work,
   messages: Message[],
   directive: string,
-  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId'>,
+  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId' | 'swipeTarget'>,
   prefs: LlmPrefs,
 ): Promise<{ body: GenerateBody; fitted: FittedPrompt; assets: AssembleAssets; env: MacroEnv; pending: PendingVars; effMaxTokens: number }> {
   // P2.2 绑定三态：按本章章号过滤增量绑定素材（写第 C 章只带 fromChapter≤C 的生效素材）
@@ -176,6 +176,8 @@ export interface UseGenerateResult {
   generateChapterBg: (work: Work, messages: Message[], directive: string) => Promise<Message | null>;
   /** 挂载/切回恢复：未完成的后台生成链从断点继续 */
   resumeNovelBg: (work: Work) => Promise<Message | null>;
+  /** 本章加长/续写——App 后台版：单 server 任务执行，结果为该章新候选 */
+  extendChapterBg: (work: Work, target: Message, mode: 'append' | 'expand') => Promise<Message | null>;
   /** 一键连写：从下一章自动写到目标章节数（第一章用传入指令、后续空指令自由发挥） */
   runBatch: (work: Work, firstDirective: string) => Promise<void>;
   /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动注入本章大纲要点） */
@@ -759,6 +761,68 @@ export function useGenerate(): UseGenerateResult {
     [run, continueTruncated],
   );
 
+  /**
+   * 本章加长/续写——App 后台版（2026-11-19：移动端/App 场景，切后台安全）：
+   * 单个 server 后台任务执行（assembleGenRequest 同一组装通路），完成经 swipeTarget
+   * 通道追加为该章新候选版本（◀▶ 可回退原文）。无分段链：单任务直达，语义与 extendChapter 相同。
+   */
+  const extendChapterBg = useCallback(
+    async (work: Work, target: Message, mode: 'append' | 'expand'): Promise<Message | null> => {
+      if (useGenerationStore.getState().streaming) return null;
+      const prefs = useSettingsStore.getState().llmPrefs;
+      const slot = `novel-gen-${work.id}`;
+      const tw = work.settings.targetChapterWords ?? 3000;
+      const isAppend = mode === 'append';
+      const store = useWorkStore.getState();
+      const idx = store.messages.findIndex((m) => m.id === target.id);
+      const ctx = idx === -1 ? store.messages : store.messages.slice(0, idx + 1);
+      const { body, fitted, assets, env, pending } = await assembleGenRequest(
+        work,
+        ctx,
+        '',
+        {
+          initialBuffer: isAppend ? target.content : '',
+          promptDirective: isAppend
+            ? buildContinueDirective(target.content)
+            : `把本章加长扩写（保持情节不变，写到约 ${tw} 字）`,
+          continuation: isAppend,
+          expandChapter: !isAppend,
+          maxTokensScale: 2,
+          swipeTarget: target,
+        },
+        prefs,
+      );
+      useGenerationStore.getState().start(work.id, target.id, isAppend ? target.content : '');
+      await submitTask(slot, {
+        source: prefs.source,
+        model: prefs.model,
+        messages: body.messages as never,
+        params: body.params as unknown as Record<string, unknown>,
+        thinking: prefs.thinking !== false,
+        label: isAppend ? '本章续写' : '本章加长',
+      });
+      const raw = await waitAndStore(slot);
+      useGenerationStore.getState().appendChunk(raw);
+      const msg = await finalizeGeneration({
+        work,
+        messages: ctx,
+        directive: target.directive ?? '',
+        swipeTarget: target,
+        assets,
+        env,
+        prefs,
+        promptTokens: fitted.promptTokens,
+        activatedIds: fitted.activatedIds,
+        startedAt: Date.now(),
+        pending,
+      });
+      useGenerationStore.getState().finish();
+      useGenerationStore.getState().reset();
+      return invalidReasonOf(msg) ? null : msg;
+    },
+    [],
+  );
+
   const stop = useCallback(() => {
     batchCancelRef.current = true; // 连写循环下一轮检查后退出
     abortRef.current?.abort();
@@ -795,6 +859,7 @@ export function useGenerate(): UseGenerateResult {
     continueFromPartial,
     swipeRegenerate,
     extendChapter,
+    extendChapterBg,
     generateChapterBg,
     resumeNovelBg,
     runBatch,
