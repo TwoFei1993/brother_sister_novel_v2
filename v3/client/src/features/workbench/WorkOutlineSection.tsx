@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 
 import { updateWork } from '../../api/works';
-import { parseChapterOutlines, toChapterOutlineItems, volumesFromChapters } from '../../lib/outline/chapters';
+import { parseChapterOutlines, toChapterOutlineItems, volumeOfChapter, volumesFromChapters } from '../../lib/outline/chapters';
 import type { ChapterOutlineItem, VolumeOutlineItem, Work } from '@shared/work';
 import DocImport from '../misc/wizard/DocImport';
 import VolumeOutlineList from './outline/VolumeOutlineList';
@@ -183,6 +183,22 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
                   data-testid={`outline-title-${i}`}
                   className={`h-8 min-w-0 flex-1 px-2 ${fieldCls}`}
                 />
+                {/* 所属卷标（卷规划层显示区分：该章按 startChapter 落在哪卷） */}
+                {(() => {
+                  const volName = volumeOfChapter(
+                    volumes.filter((v) => Number.isFinite(v.startChapter)),
+                    it.index,
+                  );
+                  return volName ? (
+                    <span
+                      data-testid={`outline-volume-badge-${i}`}
+                      title={`本章属于「${volName}」（按起始章归卷）`}
+                      className="shrink-0 rounded-full border border-[hsl(var(--border-soft))] px-2 py-0.5 text-[10px] text-[hsl(var(--fg-muted))]"
+                    >
+                      {volName}
+                    </span>
+                  ) : null;
+                })()}
                 <button
                   type="button"
                   onClick={() => removeAt(i)}

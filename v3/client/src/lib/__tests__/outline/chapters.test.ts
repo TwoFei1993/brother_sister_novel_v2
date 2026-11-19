@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { chapterOutlineDirective, parseChapterOutlines, toChapterOutlineItems, volumeOutlineDirective, volumesFromChapters } from '../../outline/chapters';
+import { chapterOutlineDirective, parseChapterOutlines, toChapterOutlineItems, volumeOfChapter, volumeOutlineDirective, volumesFromChapters } from '../../outline/chapters';
 
 /** 用户 docx 同构缩样：单个巨型段落，段内以 U+FEFF 分隔，标记独立"行" */
 const DOCX_LIKE = [
@@ -245,5 +245,24 @@ describe('volumesFromChapters（导入联动：卷标记聚合为分卷规划）
 
   it('无卷归属 → 空数组', () => {
     expect(volumesFromChapters([{ index: 1, title: 't', plot: 'p' }])).toEqual([]);
+  });
+});
+
+describe('volumeOfChapter / locateVolume（显示层归卷：章纲条目/阅读目录标卷）', () => {
+  const volumes = [
+    { index: 1, title: '第一卷', summary: '', startChapter: 1 },
+    { index: 2, title: '第二卷', summary: '', startChapter: 13 },
+  ];
+
+  it('按 startChapter 定位返回卷名', () => {
+    expect(volumeOfChapter(volumes, 1)).toBe('第一卷');
+    expect(volumeOfChapter(volumes, 12)).toBe('第一卷');
+    expect(volumeOfChapter(volumes, 13)).toBe('第二卷');
+  });
+
+  it('空/缺省 → undefined', () => {
+    expect(volumeOfChapter(undefined, 1)).toBeUndefined();
+    expect(volumeOfChapter([], 1)).toBeUndefined();
+    expect(volumeOfChapter([{ index: 1, title: '  ', summary: '', startChapter: 1 }], 1)).toBeUndefined();
   });
 });

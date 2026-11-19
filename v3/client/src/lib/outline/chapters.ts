@@ -188,20 +188,38 @@ export function chapterOutlineDirective(
  * 定位所属卷（取 startChapter ≤ N 的最大者；无匹配回落第一卷），返回本卷主线注入文本。
  * 卷缺 startChapter 不参与归卷（防止顺延错挂）；summary 为空的卷不注入。无则空串。
  */
-export function volumeOutlineDirective(
+export function locateVolume(
   volumes: readonly { index: number; title: string; summary: string; startChapter?: number }[] | undefined,
   chapterIndex: number,
-): string {
+): { index: number; title: string; summary: string; startChapter?: number } | null {
   const located = (volumes ?? [])
     .filter((v) => Number.isFinite(v.startChapter))
     .sort((a, b) => (a.startChapter ?? 1) - (b.startChapter ?? 1));
-  if (located.length === 0) return '';
+  if (located.length === 0) return null;
   let hit = located[0];
   for (const v of located) {
     if ((v.startChapter ?? 1) <= chapterIndex) hit = v;
     else break;
   }
-  if (!hit.summary.trim()) return '';
+  return hit;
+}
+
+/** 章节所属卷名（显示层：章纲条目/阅读目录标卷；无卷或卷名空 → undefined） */
+export function volumeOfChapter(
+  volumes: readonly { index: number; title: string; summary: string; startChapter?: number }[] | undefined,
+  chapterIndex: number,
+): string | undefined {
+  const hit = locateVolume(volumes, chapterIndex);
+  const title = hit?.title.trim();
+  return title ? title : undefined;
+}
+
+export function volumeOutlineDirective(
+  volumes: readonly { index: number; title: string; summary: string; startChapter?: number }[] | undefined,
+  chapterIndex: number,
+): string {
+  const hit = locateVolume(volumes, chapterIndex);
+  if (!hit || !hit.summary.trim()) return '';
   return `\n\n（本卷规划：第${hit.index}卷《${hit.title}》——${hit.summary.trim()}）`;
 }
 
