@@ -1,22 +1,25 @@
 /**
- * 视频提示词库（A1/A2 升级，2026-11-14 对比学习产出）
+ * 视频提示词库（A1/A2 升级，2026-11-14 对比学习产出；v4 = 2026-11-20 官方指南对齐）
  *
- * 依据：飞书课件秒级时间轴写法 + AICG3D h3_general 官方协议（I2VA/FL2VA 模式骨架）
- * - buildLocalVideoPrompt：本地 H3 音画一体提示词 v2——四帧时间轴 + 人物规格交叉验证
- *   + 运镜量化 + flf2va 首尾帧对齐声明（裸 picture 1/2 为 H3 官方约定）+ 正向声音描述
- * - buildVideoPrompt：即梦导出用中文分行格式（D8，保持不变）
- * 铁律：H3 对否定不敏感、对词根敏感——禁「no X」，一律正向描述（A2）。
+ * 依据：HuggingFace MiniMaxAI/MiniMax-H3 官方 VIDEO_PROMPT_WRITING_GUIDE_base_en.md 全文（v4 逐条对齐）
+ * - 首行指令官方精确句式：i2v「…<Picture 1> (from [Shot 1]) is fully referenced.」/ flf2v「How the
+ *   reference pictures align … Picture 1 (from Shot 1) aligns with the 0.00-second mark …」
+ * - 三核心字段名：integrated_multimodal_description / overall_soundscape / non_diegetic_music
+ * - 相机运动三维度（类型+幅度+速度）官方词表，嵌入叙事而非独立标签堆叠
+ * - 单镜头时间推进用官方 MM:SS.mmm 时刻（At 00:02.000, …），不用时间段戳
+ * v2/v3 保留项：人物规格交叉验证 + 锁面逐字 + (S1) 说话人绑定 + 同框闭嘴 + 画面文字边界 + 正向声音。
+ * 铁律不变：H3 对否定不敏感、对词根敏感——禁「no X」，一律正向描述（A2）。
  */
 import type { DuanjuCharacter, DuanjuProject, DuanjuShot } from '@shared/duanju';
 
-/** 运镜量化映射：抽象运镜词 → 模型可执行的英文镜头语言（含幅度与速度） */
+/** 运镜量化映射（v4 官方三维度词表）：类型 + 幅度 + 速度 → 自然英语镜头语言 */
 const CAMERA_QUANTIFY: Record<string, string> = {
-  固定: 'tripod lock-off, no camera movement',
-  推: 'slow dolly-in toward the subject',
-  拉: 'slow dolly-out revealing more of the scene',
-  摇: 'gentle pan following the action',
-  移: 'smooth lateral tracking move',
-  跟: 'camera tracks alongside the moving subject',
+  固定: 'holds a static shot, camera position and lens still',
+  推: 'pushes in with small amplitude at slow speed',
+  拉: 'pulls out with small amplitude at slow speed',
+  摇: 'pans with medium amplitude at slow speed',
+  移: 'trucks sideways with medium amplitude at slow speed',
+  跟: 'does a tracking shot following the moving subject at normal speed',
 };
 
 const quantifyCamera = (move: string): string => CAMERA_QUANTIFY[move] ?? `camera: ${move}`;
@@ -37,8 +40,21 @@ export function styleGuardOf(style: string): string {
 /** 声音正向化：空默认值禁否定式（no music 会渲染出音乐）；用户原文透传 */
 const DEFAULT_AUDIO = 'ambient sound and action sound only: environment tone, footsteps, cloth movement and props';
 
-/** 秒 → 一位小数字符串（时间轴分段用） */
-const sec = (v: number): string => v.toFixed(1);
+/** 景别 → 官方英文景别词（shotSize 首句用） */
+const SHOT_SIZE_EN: Record<string, string> = {
+  远景: 'extreme wide',
+  全景: 'wide',
+  中景: 'medium',
+  近景: 'medium close-up',
+  特写: 'close-up',
+};
+
+/** 秒 → 官方 MM:SS.mmm 时刻（时间推进用，如 00:02.000） */
+const mmss = (v: number): string => {
+  const m = Math.floor(v / 60);
+  const s = v - m * 60;
+  return `${String(m).padStart(2, '0')}:${s.toFixed(3).padStart(6, '0')}`;
+};
 
 /**
  * 四帧时间轴分段：durationSec 均分四段，产出 [start, end] 对齐 gridParts 顺位。
@@ -54,13 +70,14 @@ export function frameTimeline(durationSec: number, partCount: number): Array<[nu
 }
 
 /**
- * 本地 H3 视频提示词 v3（drama-skills H3 方言对照升级，2026-11-14）。
- * v2 基础上补六项：non_diegetic_music 字段 / 字幕禁令 / 说话人绑定 (S1) / 同框闭嘴 /
- * 开口自然停顿 / t2v 画风守护。chars 注入【人物规格】+ lockPhrase 连续性锁面逐字保留。
+ * 本地 H3 视频提示词 v4（官方指南全文逐条对齐，2026-11-20）。
+ * v3 基础上：首行官方精确指令句 / integrated_multimodal_description 字段名 / [Shot 1] 叙事流
+ * （首帧锚定→运镜三维度→MM:SS.mmm 时刻推进→到达尾帧）/ 对白并入叙事流。
+ * v2/v3 保留：人物规格 + 锁面逐字 + (S1) 绑定 + 同框闭嘴 + 文字边界 + 正向声音。
  * 铁律不变：H3 对否定不敏感——除官方 no-clip 系字段外一律正向描述。
  */
 export function buildLocalVideoPrompt(
-  shot: Pick<DuanjuShot, 'gridParts' | 'actionStart' | 'actionEnd' | 'cameraMove' | 'staging' | 'dialog' | 'speaker' | 'onScreenText' | 'durationSec'>,
+  shot: Pick<DuanjuShot, 'gridParts' | 'actionStart' | 'actionEnd' | 'cameraMove' | 'staging' | 'dialog' | 'speaker' | 'onScreenText' | 'durationSec' | 'shotSize'>,
   chars: Pick<DuanjuCharacter, 'name' | 'profile' | 'lockPhrase'>[] = [],
   opts: { hasLastFrame?: boolean; prevEndState?: string; textToVideo?: boolean; styleGuard?: string } = {},
 ): string {
@@ -69,15 +86,21 @@ export function buildLocalVideoPrompt(
   const tl = frameTimeline(duration, parts.length);
   const lines: string[] = [];
 
-  // t2v 画风守护（P0-6）：H3 文生偏真人实拍——动漫项目首句 + 全文媒介声明（styleGuard 由调用方给画风英文）
+  // t2v 画风守护（官方：T2VA 无对齐指令、直接进核心字段——守护句作全文第一行）
   if (opts.textToVideo && opts.styleGuard) {
     lines.push(`${opts.styleGuard}, not live-action, not photographed, no real actors.`);
   }
-  // 跨镜衔接：上一镜段末状态（谁+在哪+姿态+道具）——本镜开场应从此状态自然延续
+  // v4 首行对齐指令（官方精确句式）：i2v 锚首帧 / flf2v 首尾双锚（时刻两位小数）
+  lines.push(
+    opts.hasLastFrame
+      ? `How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the ${duration.toFixed(2)}-second mark of the target video.`
+      : `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`,
+  );
+  // 跨镜衔接：上一镜段末状态（谁+在哪+姿态+道具）——本镜开场应从此状态自然延续（v3 保留）
   if (opts.prevEndState?.trim()) {
     lines.push(`[Continuity] opening continues naturally from the previous shot's final state: ${opts.prevEndState.trim()}`);
   }
-  // 人物规格：交叉验证首尾帧中的人物特征 + 连续性锁面逐字保留（字符串级一致，P1-8）
+  // 人物规格 + 锁面逐字（v3 保留）
   if (chars.length > 0) {
     lines.push(
       `[Character spec] ${chars.map((c) => `${c.name}（${c.profile}）`).join('；')} — appearance must stay identical to the reference frames throughout.`,
@@ -85,45 +108,50 @@ export function buildLocalVideoPrompt(
     const locks = chars.map((c) => c.lockPhrase?.trim()).filter((v): v is string => !!v);
     if (locks.length > 0) lines.push(`[Continuity locks] ${locks.join('; ')} — keep every item verbatim in all frames.`);
   }
-  // 首尾帧对齐声明：FL2VA 用官方裸标签 picture 1/2；i2v 只锚首帧
-  lines.push(
-    opts.hasLastFrame
-      ? `How the reference pictures align: picture 1 matches the opening frame exactly at ${sec(0)}s, picture 2 matches the closing frame exactly at ${sec(duration)}s.`
-      : `For this video, the opening frame at ${sec(0)}s must precisely match the reference picture.`,
-  );
-  // 四帧时间轴：首段复刻首帧（i2v/flf2v 均有首帧）、flf2v 末段到达尾帧，中段走 F2/F3 描述（路径约束）
-  parts.forEach((p, i) => {
-    const [s, e] = tl[i]!;
-    const head = i === 0 ? ' — precisely match the opening state' : '';
-    const tail = i === parts.length - 1 && opts.hasLastFrame ? ' — arrive exactly at the closing frame state' : '';
-    lines.push(`[${sec(s)}s-${sec(e)}s] ${p}${head}${tail}`);
-  });
-  lines.push(`[Camera] ${quantifyCamera(shot.cameraMove || '固定')}${shot.staging ? `; ${shot.staging}` : ''}.`);
 
-  // 说话人绑定（P0-3）：(S1) + 声线描述 + 开口自然停顿（P0-5：H3 首帧开口延迟 1.3-2.4s）
+  // integrated_multimodal_description（官方核心字段）：[Shot 1] 叙事流
+  // 结构＝首帧锚定 → 运镜（三维度自然句）→ 时刻推进（官方 MM:SS.mmm）→（flf2v）到达尾帧 → 对白
+  const narrative: string[] = [];
+  const sizeEn = SHOT_SIZE_EN[shot.shotSize ?? ''] ?? 'cinematic';
+  narrative.push(
+    `[Shot 1] ${sizeEn} shot opening exactly as <Picture 1> — the subjects' appearance, outfits, positions and the scene stay identical to the reference picture throughout.`,
+  );
+  narrative.push(`The camera ${quantifyCamera(shot.cameraMove || '固定')}${shot.staging ? `, ${shot.staging}` : ''}.`);
+  parts.forEach((p, i) => {
+    narrative.push(
+      i === 0
+        ? `At the start, ${p} — precisely matching the opening state.`
+        : `At ${mmss(tl[i]![0])}, ${p}.`,
+    );
+  });
+  if (opts.hasLastFrame) {
+    narrative.push('The shot ends by arriving exactly at the pose, spacing and composition of <Picture 2>.');
+  }
+  // 对白（官方说话人协议）：(S1) + 可见口型 + 自然停顿；同框闭嘴（v3 保留）
   if (shot.dialog) {
     const speaker = shot.speaker?.trim() || chars[0]?.name || '';
     if (speaker) {
-      lines.push(
-        `${speaker} (S1), on-screen, mouth visibly articulating the words, speaks after a brief natural pause from the opening state: <d>[Chinese] ${shot.dialog}</d>`,
+      narrative.push(
+        `${speaker} (S1), on-screen and visibly articulating the words, speaks after a brief natural pause from the opening state: <d>[Chinese] ${shot.dialog}</d>`,
       );
+      const others = chars.map((c) => c.name).filter((n) => n && n !== speaker);
+      if (others.length > 0) {
+        narrative.push(`${others.join(' and ')} ${others.length > 1 ? 'do' : 'does'} not speak; ${others.length > 1 ? 'their' : 'their'} lips remain completely closed throughout.`);
+      }
     } else {
-      lines.push(`<d>[Chinese] ${shot.dialog}</d>`);
-    }
-    // 同框闭嘴（P0-4）：多角色镜不说话者显式闭嘴——防口型误落到近景他人
-    const others = chars.map((c) => c.name).filter((n) => n && n !== speaker);
-    if (others.length > 0) {
-      lines.push(`${others.join(' and ')} ${others.length > 1 ? 'do' : 'does'} not speak; ${others.length > 1 ? 'their' : 'their'} lips remain completely closed throughout.`);
+      narrative.push(`<d>[Chinese] ${shot.dialog}</d>`);
     }
   }
-  // 文字边界（P0-2）：正向声明只有画内文字例外（例外内容逐字——P1-10）
+  lines.push(`integrated_multimodal_description: ${narrative.join(' ')}`);
+
+  // 文字边界：正向声明只有画内文字例外（例外内容逐字）（v3 保留）
   const onScreen = shot.onScreenText?.trim();
   lines.push(
     onScreen
       ? `[Text] The only on-screen text is: "${onScreen}" — rendered exactly as written on its surface; any other captions, subtitles or text overlays must never appear.`
       : `[Text] The frame stays free of any captions, subtitles or text overlays at all times.`,
   );
-  // 声音层（官方字段）：正向环境/动作声 + 显式无画内配乐（P0-1：省略该字段 H3 会自行补乐）
+  // 声音层（官方字段）：正向环境/动作声 + 显式无画内配乐（省略该字段 H3 会自行补乐）
   lines.push(`overall_soundscape: ${DEFAULT_AUDIO}.`);
   lines.push(`non_diegetic_music: N/A`);
   return lines.join('\n');

@@ -11,6 +11,8 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 听书保活桥（熄屏续播）：注册后 JS 经 Capacitor.Plugins.KeepAlive 启停前台服务
+        registerPlugin(KeepAlivePlugin.class);
         // 反馈①：右滑返回手势/返回键 = WebView 退一级历史（配合 manifest 的 enableOnBackInvokedCallback，
         // Android 13+ 预测式返回也走这里）；首页无可退历史时才退出应用（原为直接退回桌面）。
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {

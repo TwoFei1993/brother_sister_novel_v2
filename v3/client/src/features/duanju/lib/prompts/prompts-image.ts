@@ -4,7 +4,7 @@
  * 升级依据（D:\网剧参考 逐文件研读产出）：
  * - 三段式画风层（style/clean/neg）＝character-refs looks.mjs 实测模板中译
  * - 三视图几何三句（正/侧/背逐张朝向指令）＝character-refs core.mjs 实测（不写会微侧身/回头看/背面出正面）
- * - anchorPortraitPrompt 大头照锚点＝H3 实测「加大头照脸最接近」，character-refs face-front 模板
+ * - anchorPortraitPrompt 胸像定妆照（v2，2026-11-20 大头照构图被用户否决后重写；脸部仍占主体保参考一致性）
  * - 皮肤质感属角色属性不属画风层；写实写「真实照片而非渲染图」（写 photorealistic 会往 CG 带）
  */
 
@@ -72,19 +72,22 @@ export function characterSheetPrompt(style: string, name: string, profile: strin
 }
 
 /**
- * 大头照锚点 prompt（B4）：正脸大头照单视图——H3 参考生成实测「加大头照脸最接近」；
- * 三视图整图做参考会把景别往全身带、脸被摊小（character-refs 实测），故单独出锚点图供 refImageId 指向。
+ * 胸像定妆照 prompt（B4 v2）：正脸胸像单视图。
+ * 2026-11-20 用户反馈「大头照很难看」——证件照式极近特写（头顶贴边、切锁骨）构图差，
+ * 改为影棚胸像构图：头顶留白约半个头高，头/颈/肩/上胸完整入画，领口与佩饰可见增加身份感。
+ * 脸部仍占画面主体（作参考图时脸部一致性不受影响）。
+ * 三视图整图做参考会把景别往全身带、脸被摊小（character-refs 实测），故仍单独出锚点图供 refImageId 指向。
  * 尺寸：4:5 竖版 1152×1440（32 对齐）；取景句前置+结尾重申防几何句冲淡取景。
  */
 export function anchorPortraitPrompt(style: string, name: string, profile: string, ageHint?: string): string {
   return [
-    `${stylePrefix(style)}，${name} 的正脸大头照（角色面部锚点图，单视图）。`,
+    `${stylePrefix(style)}，${name} 的正脸胸像定妆照（角色面部锚点图，单视图）。`,
     `【角色：${name}】${profile}`,
-    '取景：拉近到只含头与肩的极近特写，证件照式取景——头顶贴近画面上边，下巴位于画面竖直正中，画面下缘切过锁骨，双臂与袖口在画外。',
-    '几何：正对镜头，鼻尖在画面竖直中线上，双耳同等可见，不侧脸、不抬头低头。',
+    '取景：影棚半身胸像构图——人物完整头部居中，头顶留出约半个头高的空间不裁切，画面包含头部、颈部、双肩与上胸，上装领口纹样与佩饰（如剑柄、护腕、披帛）清晰入画，画面下缘落在胸口下方。',
+    '几何：正对镜头，鼻尖在画面竖直中线上，双耳同等可见，不侧脸、不抬头低头，肩线水平自然。',
     ageHint ? `露出的皮肤是 ${ageHint} 人物的皮肤质感。` : '',
     '一致性：与该角色三视图设定图为完全同一人物——同样的脸型、五官、眉眼、发型与上装领口；下装与鞋不进入画面。',
-    '结尾重申：画面下缘切在锁骨处，只有头与肩。',
+    '结尾重申：头顶有留白不裁切，头、颈、肩、上胸完整入画，下缘在胸口。',
     `${styleClean(style) ?? '纯白背景，均匀柔光'}，无文字无水印。`,
   ]
     .filter(Boolean)
@@ -103,11 +106,11 @@ export function characterSheetSplitPrompts(
 ): { portrait: string; triView: string } {
   return {
     portrait: [
-      `${stylePrefix(style)}，${name} 的单人面部大特写。`,
+      `${stylePrefix(style)}，${name} 的正脸胸像定妆照。`,
       `【角色：${name}】${profile}`,
-      '取景：拉近到只含头与肩的极近特写，头顶贴近画面上边，下巴位于画面竖直正中，画面下缘切过锁骨，双臂与袖口在画外。',
-      '几何：正对镜头，鼻尖在画面竖直中线上，双耳同等可见，不侧脸、不抬头低头。',
-      '结尾重申：画面下缘切在锁骨处，只有头与肩。',
+      '取景：影棚半身胸像构图——头顶留出约半个头高的空间不裁切，画面包含头部、颈部、双肩与上胸，领口纹样与佩饰清晰入画，画面下缘落在胸口下方。',
+      '几何：正对镜头，鼻尖在画面竖直中线上，双耳同等可见，不侧脸、不抬头低头，肩线水平自然。',
+      '结尾重申：头顶有留白不裁切，头、颈、肩、上胸完整入画，下缘在胸口。',
       `${styleClean(style) ?? '纯白背景，均匀柔光'}，无文字无水印`,
     ].join('\n'),
     triView: characterSheetPrompt(style, name, profile),

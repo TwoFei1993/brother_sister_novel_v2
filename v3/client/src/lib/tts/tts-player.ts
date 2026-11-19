@@ -35,6 +35,8 @@ export interface PlayerSnapshot {
   idx: number;
   playing: boolean;
   speed: number;
+  /** 定时停止的到期时间戳；null=未设置（用户需求：听书定时停止） */
+  sleepAt: number | null;
 }
 
 const SPEED_KEY = 'reading-tts-speed';
@@ -48,7 +50,7 @@ function loadSpeed(): number {
   }
 }
 
-let state: PlayerSnapshot = { bookId: null, workId: null, title: '', paraCount: 0, idx: -1, playing: false, speed: loadSpeed() };
+let state: PlayerSnapshot = { bookId: null, workId: null, title: '', paraCount: 0, idx: -1, playing: false, speed: loadSpeed(), sleepAt: null };
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<PlayerSnapshot>): void {
@@ -182,6 +184,49 @@ function playUrl(url: string): Promise<void> {
   });
 }
 
+// ---------- 熄屏续播（用户需求：手机熄屏听书不停） ----------
+
+/**
+ * 原生保活桥（Capacitor 注入 window.Capacitor，动态访问不引依赖）：
+ * 播放中启动 MEDIA_PLAYBACK 前台服务——系统不再冻结 WebView，熄屏后
+ * 当前段播完 JS 仍可加载下一段（纯 Web 方案在国产 ROM 省电策略下不可靠）。
+ */
+function nativeKeepAlive(on: boolean): void {
+  try {
+    const cap = (window as unknown as { Capacitor?: { Plugins?: { KeepAlive?: { start?: () => void; stop?: () => void } } } }).Capacitor;
+    const plugin = cap?.Plugins?.KeepAlive;
+    if (!plugin) return; // 纯网页环境无原生桥，静默跳过
+    if (on) plugin.start?.();
+    else plugin.stop?.();
+  } catch {
+    /* 原生桥异常不影响播放 */
+  }
+}
+
+/** MediaSession：锁屏/通知栏媒体卡片 + 线控按钮（系统对播放中媒体放行后台的正规通道） */
+function updateMediaSession(title: string, paraIdx: number): void {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({ title, artist: `第 ${paraIdx + 1} 段`, album: '兄妹小说' });
+    navigator.mediaSession.playbackState = state.playing ? 'playing' : 'paused';
+  } catch {
+    /* 旧 WebView 无 MediaMetadata 静默 */
+  }
+}
+
+function setupMediaSessionHandlers(): void {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.setActionHandler('play', () => playerResume());
+    navigator.mediaSession.setActionHandler('pause', () => playerPause());
+    navigator.mediaSession.setActionHandler('stop', () => playerStop());
+  } catch {
+    /* 部分 WebView 不支持某些 action */
+  }
+}
+
+if (typeof window !== 'undefined') setupMediaSessionHandlers();
+
 /** 从 fromIdx 起播（token 作废旧循环） */
 function runLoop(fromIdx: number): void {
   const my = ++token;
@@ -191,11 +236,14 @@ function runLoop(fromIdx: number): void {
   clearPrefetch(); // seek/倍速/换书旧预取全部作废
   routed = routeMobileParas(currentBook.paras, currentBook.voiceMap);
   set({ idx: fromIdx, playing: true, paraCount: currentBook.paras.length });
+  nativeKeepAlive(true); // 播放中启动前台保活服务（熄屏续播，App 场景）
+  if (currentBook) updateMediaSession(currentBook.title, fromIdx);
   void (async () => {
     let consecutiveFailures = 0;
     for (let i = Math.max(0, fromIdx); i < routed.length; i += 1) {
       if (!alive()) return;
       set({ idx: i, playing: true });
+      if (currentBook) updateMediaSession(currentBook.title, i);
       // 当前段：命中预取直接用（合成早已在跑），未命中现合成
       const pending = prefetch.get(i) ?? synthWithRetry(routed[i]!.text, routed[i]!.voice, state.speed, alive);
       prefetch.delete(i);
@@ -214,6 +262,7 @@ function runLoop(fromIdx: number): void {
         notifyError(`第 ${i + 1} 段合成失败，已跳过`);
         if (consecutiveFailures >= 3) {
           set({ playing: false });
+          nativeKeepAlive(false);
           notifyError('连续多段合成失败，已停止听书（请稍后重试）');
           return;
         }
@@ -231,6 +280,7 @@ function runLoop(fromIdx: number): void {
     }
     if (alive()) {
       // 整本播完：清空悬浮窗（与番茄一致，播完即收）
+      nativeKeepAlive(false);
       set({ bookId: null, workId: null, idx: -1, playing: false });
     }
   })();
@@ -251,22 +301,69 @@ export function playerStart(book: PlayerBook, fromIdx = 0): void {
   runLoop(fromIdx);
 }
 
+// ---------- 定时停止（用户需求：听书定时停止） ----------
+
+function clearSleepTimer(): void {
+  state.sleepAt = null;
+}
+
+/** 设置定时停止（分钟）；到点自动暂停（保留段锚点，回来可继续听）。分钟 ≤0 = 取消 */
+export function setSleepTimer(minutes: number): void {
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    clearSleepTimer();
+    set({ sleepAt: null });
+    return;
+  }
+  state.sleepAt = Date.now() + minutes * 60_000;
+  set({ sleepAt: state.sleepAt });
+}
+
+/** 常驻秒级 tick（模块级单次注册，开销可忽略）：只在 sleepAt 非空时工作，到点暂停并清定时 */
+if (typeof window !== 'undefined') {
+  window.setInterval(() => {
+    if (state.sleepAt === null) return;
+    if (Date.now() < state.sleepAt) return;
+    clearSleepTimer();
+    if (state.playing) playerPause();
+  }, 1000);
+}
+
+export function sleepRemainMs(): number | null {
+  return state.sleepAt === null ? null : Math.max(0, state.sleepAt - Date.now());
+}
+
+const SLEEP_STEPS = [15, 30, 45, 60]; // 分钟（用户需求：听书定时停止挡位）
+
+/** 挡位循环：关→15→30→45→60→15…；返回新挡位（分钟）。倒计时中切换取「≥剩余」的下一挡 */
+export function cycleSleepTimer(): number {
+  const cur = sleepRemainMs() ?? 0;
+  const curMin = Math.ceil(cur / 60000);
+  const idx = curMin > 0 ? SLEEP_STEPS.findIndex((m) => m >= curMin) : -1;
+  const next = idx === -1 || idx === SLEEP_STEPS.length - 1 ? SLEEP_STEPS[0]! : SLEEP_STEPS[idx + 1]!;
+  setSleepTimer(next);
+  return next;
+}
+
 export function playerStop(): void {
   token += 1;
   audioRef.current?.pause();
   clearPrefetch();
   currentBook = null;
+  nativeKeepAlive(false);
+  clearSleepTimer();
   set({ bookId: null, workId: null, idx: -1, playing: false });
 }
 
 export function playerPause(): void {
   token += 1;
   audioRef.current?.pause();
+  nativeKeepAlive(false);
   set({ playing: false });
 }
 
 export function playerResume(): void {
   if (state.playing || !currentBook) return;
+  nativeKeepAlive(true);
   runLoop(Math.max(0, state.idx));
 }
 

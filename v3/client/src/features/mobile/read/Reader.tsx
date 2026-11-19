@@ -19,7 +19,7 @@ import type { Comment, CommentType } from '@shared/comment';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
-import { playerSetSpeed, setPlayerErrorSink, useBookPlayer, type PlayerBook } from '../../../lib/tts/tts-player';
+import { cycleSleepTimer, playerSetSpeed, setPlayerErrorSink, sleepRemainMs, useBookPlayer, type PlayerBook } from '../../../lib/tts/tts-player';
 import CatalogPanel from './CatalogPanel';
 import CommentSummary from './CommentSummary';
 import { CommentsSection, CommentSheet } from './CommentViews';
@@ -298,6 +298,22 @@ export default function Reader() {
           className="flex h-8 items-center gap-1.5 rounded-lg border border-[hsl(var(--border-soft))] px-2.5 text-xs"
         >
           {tts.playing ? '⏸ 暂停' : tts.paused ? '▶ 继续' : ttsIdx >= 0 ? '⏹ 停止' : '🔊 听本章'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const min = cycleSleepTimer();
+            window.alert(min > 0 ? `定时停止：${min} 分钟后自动暂停` : '定时停止已关闭');
+          }}
+          data-testid="tts-sleep-btn"
+          title="定时停止：到点自动暂停（循环挡位 15/30/45/60 分钟，关=不定时）"
+          className={`flex h-8 items-center gap-1 rounded-lg border px-2 text-xs ${
+            sleepRemainMs() !== null
+              ? 'border-[hsl(var(--accent))]/50 text-[hsl(var(--accent))]'
+              : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
+          }`}
+        >
+          ⏲{sleepRemainMs() !== null ? `${Math.ceil((sleepRemainMs() ?? 0) / 60000)}分` : '定时'}
         </button>
       </header>
 

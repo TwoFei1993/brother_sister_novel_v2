@@ -362,19 +362,20 @@ describe('buildLocalVideoPrompt v2（四帧时间轴 + 人物规格 + 首尾帧�
 
   it('flf2v：picture 1/2 对齐声明 + 四段均分时间轴 + 首尾呼应 + 人物规格 + 量化运镜', () => {
     const p = buildLocalVideoPrompt(voiced, [{ name: '小满', profile: '蓝发双马尾红瞳' }], { hasLastFrame: true });
-    expect(p).toContain('picture 1 matches the opening frame exactly at 0.0s');
-    expect(p).toContain('picture 2 matches the closing frame exactly at 8.0s');
-    expect(p).toContain('[0.0s-2.0s] 起手描述 — precisely match the opening state');
-    expect(p).toContain('[2.0s-4.0s] 进行描述');
-    expect(p).toContain('[6.0s-8.0s] 收势描述 — arrive exactly at the closing frame state');
+    expect(p).toContain('Picture 1 (from Shot 1) aligns with the 0.00-second mark');
+    expect(p).toContain('Picture 2 (from Shot 1) aligns with the 8.00-second mark');
+    expect(p).toContain('At the start, 起手描述 — precisely matching the opening state');
+    expect(p).toContain('At 00:02.000, 进行描述');
+    expect(p).toContain('At 00:06.000, 收势描述');
+    expect(p).toContain('arriving exactly at the pose, spacing and composition of <Picture 2>');
     expect(p).toContain('[Character spec] 小满（蓝发双马尾红瞳）');
-    expect(p).toContain('slow dolly-in'); // 「推」量化
+    expect(p).toContain('pushes in with small amplitude at slow speed'); // 「推」官方三维度
     expect(p).toContain('<d>[Chinese] 快跑！</d>');
   });
 
   it('i2v（无尾帧）：只锚首帧，无 picture 2；上一镜段末状态注入 Continuity', () => {
     const p = buildLocalVideoPrompt(voiced, [], { prevEndState: '小满站在崖边回望' });
-    expect(p).toContain('opening frame at 0.0s must precisely match the reference picture');
+    expect(p).toContain('<Picture 1> (from [Shot 1]) is fully referenced.');
     expect(p).not.toContain('picture 2');
     expect(p).toContain('[Continuity] opening continues naturally from the previous shot');
     expect(p).toContain('小满站在崖边回望');
@@ -392,8 +393,8 @@ describe('buildLocalVideoPrompt v2（四帧时间轴 + 人物规格 + 首尾帧�
   it('gridParts 不足 4 段时时间轴收缩；空时 fallback 动作起终点', () => {
     const two = makeShot({ gridParts: ['起', '收'], durationSec: 6 });
     const p2 = buildLocalVideoPrompt(two, [], { hasLastFrame: true });
-    expect(p2).toContain('[0.0s-3.0s] 起');
-    expect(p2).toContain('[3.0s-6.0s] 收');
+    expect(p2).toContain('At the start, 起');
+    expect(p2).toContain('At 00:03.000, 收');
     const none = buildLocalVideoPrompt(makeShot({ gridParts: [] }));
     expect(none).toContain('起身 → 奔跑');
   });
