@@ -16,15 +16,17 @@ import type { Work } from '@shared/work';
 
 import { apiFetch } from '../api/client';
 
-import { buildGenerateBody, cachedOutputBudget } from '../api/llm';
+import { buildGenerateBody, cachedOutputBudget, type GenerateBody } from '../api/llm';
 import { isCollapsedText } from '../engine/prompt/novel/collapse-detect';
 import { useGenerationStore } from '../stores/generation';
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore, type LlmPrefs } from '../stores/settings';
 import { useWorkStore } from '../stores/work';
+import { consumeResult, peekResult, submitTask, taskPending, waitAndStore } from '../lib/llmTask';
 
 import {
   MAX_SWIPES,
   buildContinueDirective,
+  toGenerationError,
   calcOutputBudget,
   historyBeforeTarget,
   isChapterRestart,
@@ -48,7 +50,9 @@ import {
   type AssembleAssets,
   type AssembleTail,
   type PendingVars,
+  type FittedPrompt,
 } from './generation-pipeline';
+import type { MacroEnv } from '../engine/types';
 
 import { uuid } from '../lib/uuid';
 /** 单次生成的编排参数（targetId 预生成 uuid 作入库幂等键） */
@@ -71,6 +75,75 @@ interface RunOptions {
   segment?: SegmentInfo;
   /** 覆盖输出预算（分段轮：只给本段的量 → finish=length 提前停，后续段自动续写） */
   effMaxTokensOverride?: number;
+}
+
+/**
+ * 组装章级生成请求（SSE 与后台任务共用——2026-11-19 App 后台生成：同一组装两条通路，
+ * 切后台/锁屏时前台 SSE 必断（WebView 暂停），后台任务在 server 端继续执行）。
+ */
+async function assembleGenRequest(
+  work: Work,
+  messages: Message[],
+  directive: string,
+  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId'>,
+  prefs: LlmPrefs,
+): Promise<{ body: GenerateBody; fitted: FittedPrompt; assets: AssembleAssets; env: MacroEnv; pending: PendingVars; effMaxTokens: number }> {
+  // P2.2 绑定三态：按本章章号过滤增量绑定素材（写第 C 章只带 fromChapter≤C 的生效素材）
+  const assets: AssembleAssets = await loadAssembleAssets(work, nextChapterIndex(messages));
+  const pending: PendingVars = { work: new Map(), global: new Map() };
+  const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
+  const tail: AssembleTail = {
+    kind: 'directive',
+    text: opts.promptDirective ?? directive,
+    ...(opts.continuation ? { continuation: true } : {}),
+    ...(opts.expandChapter ? { expandChapter: true } : {}),
+    ...(opts.segment ? { segment: opts.segment } : {}),
+  };
+  const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
+  const thinkingOn = prefs.thinking !== false;
+  const targetWords = work.settings.targetChapterWords ?? 3000;
+  const known = cachedOutputBudget(prefs.source, prefs.model);
+  const effMaxTokens = Math.min(
+    opts.effMaxTokensOverride ?? calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1),
+    known ?? Number.MAX_SAFE_INTEGER,
+  );
+  const body = buildGenerateBody({
+    source: prefs.source,
+    model: prefs.model,
+    messages: fitted.messages,
+    temperature: prefs.temperature,
+    maxTokens: effMaxTokens,
+    frequencyPenalty: prefs.frequencyPenalty,
+    presencePenalty: prefs.presencePenalty,
+    repetitionPenalty: prefs.repetitionPenalty,
+    thinking: thinkingOn,
+  });
+  return { body, fitted, assets, env, pending, effMaxTokens };
+}
+
+// ---------- App 后台生成（用户需求：切后台/锁屏不再「流式连接中断」白跑） ----------
+// 复用向导的 bg 任务基建（server 端执行 + 轮询取回，三级稳定性防线在 server 侧）；
+// 分段链在客户端驱动：每段一个 server 任务，完成即按消息 id 幂等覆盖累积落库（中断只损当段）。
+
+/** 链状态持久化键（页面重载后恢复剩余段；partial 从库中 targetId 行读，不落 localStorage） */
+function novelBgPendingKey(workId: string): string {
+  return `novel-gen-bg-pending-${workId}`;
+}
+
+interface NovelBgPending {
+  directive: string;
+  targetId: string;
+  /** 下一段（1 起）；已完成的段已入库 */
+  part: number;
+  parts: number;
+}
+
+function readNovelBgPending(workId: string): NovelBgPending | null {
+  try {
+    return JSON.parse(localStorage.getItem(novelBgPendingKey(workId)) ?? 'null') as NovelBgPending | null;
+  } catch {
+    return null;
+  }
 }
 
 /** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
@@ -99,6 +172,10 @@ export interface UseGenerateResult {
     target: Message,
     mode: 'append' | 'expand',
   ) => Promise<Message | null>;
+  /** App 后台生成：server 后台任务执行 + 轮询取回（切后台/锁屏安全）；分段链自动拼接 */
+  generateChapterBg: (work: Work, messages: Message[], directive: string) => Promise<Message | null>;
+  /** 挂载/切回恢复：未完成的后台生成链从断点继续 */
+  resumeNovelBg: (work: Work) => Promise<Message | null>;
   /** 一键连写：从下一章自动写到目标章节数（第一章用传入指令、后续空指令自由发挥） */
   runBatch: (work: Work, firstDirective: string) => Promise<void>;
   /** 📖按大纲生成：从下一章起按章节大纲逐章写到覆盖的最大章号（每章自动注入本章大纲要点） */
@@ -143,42 +220,7 @@ export function useGenerate(): UseGenerateResult {
         },
         prepare: async ({ prefs, startedAt }) => {
           // ---------- 组装阶段（重试不复用之外的流请求） ----------
-          // P2.2 绑定三态：按本章章号过滤增量绑定素材（写第 C 章只带 fromChapter≤C 的生效素材）
-          const assets: AssembleAssets = await loadAssembleAssets(work, nextChapterIndex(messages));
-          const pending: PendingVars = { work: new Map(), global: new Map() };
-          const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending);
-          // 重试后缀只进提示词；入库 directive 元数据保持干净原指令（A 视图编辑/重roll 不见机器文本）；
-          // 续写轮标记 continuation：要求块与输出守卫切「无缝续写」变体（反馈③）；
-          // 扩写轮标记 expandChapter：要求块切「本章加长」变体
-          const tail: AssembleTail = {
-            kind: 'directive',
-            text: opts.promptDirective ?? directive,
-            ...(opts.continuation ? { continuation: true } : {}),
-            ...(opts.expandChapter ? { expandChapter: true } : {}),
-            ...(opts.segment ? { segment: opts.segment } : {}),
-          };
-          const fitted = await scanAndAssemble(work, messages, tail, assets, env, prefs);
-          // 输出预算按章节目标字数动态反推（calcOutputBudget，见函数注释——「写到一半就没了」
-          // 的第一性修复：旧固定值与目标字数脱钩，推理模型思考吃多后正文半途预算枯竭被腰斩）；
-          // 再避开该模型已知被拒的预算上界（协商缓存——generation-runtime/generateTextOnce 降级后回写）
-          const thinkingOn = prefs.thinking !== false;
-          const targetWords = work.settings.targetChapterWords ?? 3000;
-          const known = cachedOutputBudget(prefs.source, prefs.model);
-          const effMaxTokens = Math.min(
-            opts.effMaxTokensOverride ?? calcOutputBudget(targetWords, thinkingOn, opts.maxTokensScale ?? 1),
-            known ?? Number.MAX_SAFE_INTEGER,
-          );
-          const body = buildGenerateBody({
-            source: prefs.source,
-            model: prefs.model,
-            messages: fitted.messages,
-            temperature: prefs.temperature,
-            maxTokens: effMaxTokens,
-            frequencyPenalty: prefs.frequencyPenalty,
-            presencePenalty: prefs.presencePenalty,
-            repetitionPenalty: prefs.repetitionPenalty,
-            thinking: prefs.thinking !== false, // D4：缺省视为开（老用户 localStorage 无此字段也有💭）
-          });
+          const { body, fitted, assets, env, pending } = await assembleGenRequest(work, messages, directive, opts, prefs);
           return {
             body,
             // ---------- 完成收尾：后处理 → 幂等入库 → 变量回写 → 记录截断 ----------
@@ -541,6 +583,132 @@ export function useGenerate(): UseGenerateResult {
   );
 
   /**
+   * 分段链驱动（App 后台生成内核，可重入）：state.part 起逐段提交 server 后台任务
+   * （切后台/锁屏安全——任务在 server 端继续执行，三级稳定性防线同样生效），
+   * 每段完成即时按消息 id 幂等覆盖累积落库（中断只损当段）；段间以续写语义衔接
+   * （无缝续写要求块 + 半章进历史 grounding），重放检测回滚累积文本。
+   * UI 一致性：每段结果写进 generation store buffer（打字机视图展示累积全文）。
+   */
+  const driveNovelBgChain = useCallback(
+    async (work: Work, messages: Message[], state: NovelBgPending): Promise<Message | null> => {
+      const prefs = useSettingsStore.getState().llmPrefs;
+      const slot = `novel-gen-${work.id}`;
+      const segmentBudget = calcOutputBudget(SEGMENT_WORDS + 600, prefs.thinking !== false, 1);
+      // 累积正文来源：库中 targetId 行（断点续跑；段 1 完成即以该 id 落库）
+      const store = useWorkStore.getState();
+      const row = store.messages.find((m) => m.id === state.targetId);
+      let accumulated = row?.content ?? '';
+      let msg: Message | null = row ?? null;
+      useGenerationStore.getState().start(work.id, state.targetId, accumulated);
+      try {
+        for (let part = state.part; part <= state.parts; part += 1) {
+          const isContinue = part > 1;
+          const seg = state.parts > 1 ? { part, parts: state.parts, words: SEGMENT_WORDS } : undefined;
+          const ctx = isContinue ? withPartialInHistory(messages, accumulated) : messages;
+          const { body, fitted, assets, env, pending } = await assembleGenRequest(
+            work,
+            ctx,
+            state.directive,
+            {
+              initialBuffer: accumulated,
+              promptDirective: isContinue ? buildContinueDirective(accumulated) : state.directive,
+              continuation: isContinue,
+              segment: seg,
+              effMaxTokensOverride: state.parts > 1 ? segmentBudget : undefined,
+              persistMessageId: isContinue ? (row?.id ?? state.targetId) : undefined,
+            },
+            prefs,
+          );
+          await submitTask(slot, {
+            source: prefs.source,
+            model: prefs.model,
+            messages: body.messages as never,
+            params: body.params as unknown as Record<string, unknown>,
+            thinking: prefs.thinking !== false,
+            label: '章节生成',
+          });
+          const raw = await waitAndStore(slot);
+          // 结果写进 generation store buffer（finalizeGeneration 从 store 读原文；打字机视图展示累积全文）
+          useGenerationStore.getState().reset();
+          useGenerationStore.getState().start(work.id, state.targetId, accumulated);
+          useGenerationStore.getState().appendChunk(raw);
+          const roundDirective = isContinue ? buildContinueDirective(accumulated) : state.directive;
+          msg = await finalizeGeneration({
+            work,
+            messages: ctx,
+            directive: roundDirective,
+            swipeTarget: null,
+            assets,
+            env,
+            prefs,
+            promptTokens: fitted.promptTokens,
+            activatedIds: fitted.activatedIds,
+            startedAt: Date.now(),
+            pending,
+            messageId: isContinue ? (row?.id ?? state.targetId) : undefined,
+          });
+          if (!msg) break;
+          if (isContinue && isReplayedContinuation(accumulated, msg.content)) {
+            // 上游重放（改写式重述前文）：回滚为累积文本，链结束（已写部分完好）
+            msg = { ...msg, content: accumulated };
+            await persistMessage(work.id, msg);
+            break;
+          }
+          accumulated = msg.content;
+          localStorage.setItem(novelBgPendingKey(work.id), JSON.stringify({ ...state, part: part + 1 }));
+        }
+      } catch (err) {
+        const ge = toGenerationError(err);
+        useGenerationStore.getState().fail(ge, accumulated.length > 0);
+      } finally {
+        useGenerationStore.getState().finish();
+        useGenerationStore.getState().reset();
+        localStorage.removeItem(novelBgPendingKey(work.id));
+      }
+      return invalidReasonOf(msg) ? null : msg;
+    },
+    [],
+  );
+
+  /**
+   * App 后台生成（用户需求②：切后台/锁屏不再「流式连接中断」白跑）：
+   * 生成交由 server 后台任务执行，客户端轮询取回；分段链同前台语义（每段独立任务，
+   * 完成即落库）。返回入库消息（失败/部分完成返回 null，已落库段落保留在作品里）。
+   */
+  const generateChapterBg = useCallback(
+    async (work: Work, messages: Message[], directive: string): Promise<Message | null> => {
+      if (useGenerationStore.getState().streaming) return null;
+      const prefs = useSettingsStore.getState().llmPrefs;
+      if (!prefs.model) {
+        useGenerationStore.getState().fail({ code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
+        return null;
+      }
+      const tw = work.settings.targetChapterWords ?? 3000;
+      const parts = Math.max(1, Math.ceil(tw / SEGMENT_WORDS));
+      const state: NovelBgPending = { directive, targetId: uuid(), part: 1, parts };
+      localStorage.setItem(novelBgPendingKey(work.id), JSON.stringify(state));
+      return driveNovelBgChain(work, messages, state);
+    },
+    [driveNovelBgChain],
+  );
+
+  /** 挂载/切回恢复：有未完成的后台生成链（PENDING + slot）时从断点继续剩余段 */
+  const resumeNovelBg = useCallback(
+    async (work: Work): Promise<Message | null> => {
+      const state = readNovelBgPending(work.id);
+      if (!state) return null;
+      const slot = `novel-gen-${work.id}`;
+      // 链已无在跑任务也无待取结果（如任务过期丢失）→ 清 PENDING，提示层由调用方按 null 处理
+      if (!taskPending(slot) && peekResult(slot) === null && consumeResult(slot) === null) {
+        localStorage.removeItem(novelBgPendingKey(work.id));
+        return null;
+      }
+      return driveNovelBgChain(work, useWorkStore.getState().messages, state);
+    },
+    [driveNovelBgChain],
+  );
+
+  /**
    * 本章加长/续写（用户需求：卷章之外允许对当前章要求加长或续写）：
    * - append（续写本章）：上下文含本章（末条）→ continuation 语义从本章结尾续写新剧情；
    *   initialBuffer=章全文 → buffer 流式呈现「旧文+新文」，结果为完整扩展文本
@@ -627,6 +795,8 @@ export function useGenerate(): UseGenerateResult {
     continueFromPartial,
     swipeRegenerate,
     extendChapter,
+    generateChapterBg,
+    resumeNovelBg,
     runBatch,
     runByOutline,
     batch,

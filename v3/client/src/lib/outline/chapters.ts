@@ -184,24 +184,42 @@ export function chapterOutlineDirective(
 }
 
 /**
- * 分卷规划联动（卷规划层，用户反馈：卷大纲与章细纲分开）：第 N 章按 startChapter
- * 定位所属卷（取 startChapter ≤ N 的最大者；无匹配回落第一卷），返回本卷主线注入文本。
- * 卷缺 startChapter 不参与归卷（防止顺延错挂）；summary 为空的卷不注入。无则空串。
+ * 卷边界推算（用户需求：每卷章数用户可选）——两遍算法：
+ * ① 有效起始 effStart = 显式 startChapter ?? 前卷 effStart + 前卷 chapterCount（缺 cc 视为 1 章顺延）；
+ * ② 有效末章 effEnd = 下一卷 effStart − 1（卷与卷无缝连续覆盖；末卷有 cc 用 cc 收口，无 cc 为无穷）。
+ * 显式 startChapter 优先于顺延推算（冲突时缝隙章归前卷延伸）。
  */
-export function locateVolume(
-  volumes: readonly { index: number; title: string; summary: string; startChapter?: number }[] | undefined,
-  chapterIndex: number,
-): { index: number; title: string; summary: string; startChapter?: number } | null {
-  const located = (volumes ?? [])
-    .filter((v) => Number.isFinite(v.startChapter))
-    .sort((a, b) => (a.startChapter ?? 1) - (b.startChapter ?? 1));
-  if (located.length === 0) return null;
-  let hit = located[0];
-  for (const v of located) {
-    if ((v.startChapter ?? 1) <= chapterIndex) hit = v;
-    else break;
+function volumeBounds(
+  volumes: readonly { index: number; title: string; summary: string; startChapter?: number; chapterCount?: number }[],
+): Array<{ index: number; title: string; summary: string; startChapter?: number; chapterCount?: number; effStart: number; effEnd: number }> {
+  const sorted = [...volumes].sort((a, b) => a.index - b.index);
+  const out: Array<{ index: number; title: string; summary: string; startChapter?: number; chapterCount?: number; effStart: number; effEnd: number }> = [];
+  let cursor = 1;
+  for (const v of sorted) {
+    const effStart = v.startChapter ?? cursor;
+    out.push({ ...v, effStart, effEnd: Number.POSITIVE_INFINITY });
+    cursor = effStart + (v.chapterCount ?? 1);
   }
-  return hit;
+  for (let i = 0; i < out.length; i += 1) {
+    const v = out[i]!;
+    if (i < out.length - 1) {
+      v.effEnd = (out[i + 1]!.effStart ?? 1) - 1;
+    } else {
+      v.effEnd = v.chapterCount ? v.effStart + v.chapterCount - 1 : Number.POSITIVE_INFINITY;
+    }
+  }
+  return out;
+}
+
+/** 章节归卷：n 落在 [effStart, effEnd] 的卷；超出全部有界卷 → 最后一卷（承接后续章） */
+export function locateVolume(
+  volumes: readonly { index: number; title: string; summary: string; startChapter?: number; chapterCount?: number }[] | undefined,
+  chapterIndex: number,
+): { index: number; title: string; summary: string; startChapter?: number; chapterCount?: number; effStart: number; effEnd: number } | null {
+  const bounds = volumeBounds(volumes ?? []);
+  if (bounds.length === 0) return null;
+  const hit = bounds.find((v) => chapterIndex >= v.effStart && chapterIndex <= v.effEnd);
+  return hit ?? bounds[bounds.length - 1]!;
 }
 
 /** 章节所属卷名（显示层：章纲条目/阅读目录标卷；无卷或卷名空 → undefined） */

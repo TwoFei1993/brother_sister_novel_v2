@@ -223,9 +223,9 @@ describe('volumeOutlineDirective（分卷规划联动——卷按 startChapter �
     expect(volumeOutlineDirective([{ index: 1, title: '卷', summary: '', startChapter: 1 }], 1)).toBe('');
   });
 
-  it('缺 startChapter 的卷不参与归卷（防顺延错挂）', () => {
+  it('缺 startChapter 的卷按顺延参与归卷（chapterCount/顺延语义，2026-11-19 更新）', () => {
     const partial = [{ index: 1, title: '无起始卷', summary: '概述。' }];
-    expect(volumeOutlineDirective(partial, 1)).toBe('');
+    expect(volumeOutlineDirective(partial, 1)).toContain('无起始卷'); // 首卷顺延为第 1 章起
   });
 });
 
@@ -264,5 +264,37 @@ describe('volumeOfChapter / locateVolume（显示层归卷：章纲条目/阅读
     expect(volumeOfChapter(undefined, 1)).toBeUndefined();
     expect(volumeOfChapter([], 1)).toBeUndefined();
     expect(volumeOfChapter([{ index: 1, title: '  ', summary: '', startChapter: 1 }], 1)).toBeUndefined();
+  });
+});
+
+describe('chapterCount 归卷（用户需求：每卷章数用户选择，下一卷自动顺延）', () => {
+  it('按 chapterCount 推导边界：12 章一卷，第 12 章卷一、第 13 章卷二', () => {
+    const volumes = [
+      { index: 1, title: '卷一', summary: '', chapterCount: 12 },
+      { index: 2, title: '卷二', summary: '', startChapter: 13, chapterCount: 12 },
+    ];
+    expect(volumeOfChapter(volumes, 1)).toBe('卷一');
+    expect(volumeOfChapter(volumes, 12)).toBe('卷一');
+    expect(volumeOfChapter(volumes, 13)).toBe('卷二');
+    expect(volumeOfChapter(volumes, 40)).toBe('卷二');
+  });
+
+  it('缺 startChapter 的后续卷由前卷 startChapter+chapterCount 顺延定位', () => {
+    const volumes = [
+      { index: 1, title: '卷一', summary: '', startChapter: 1, chapterCount: 10 },
+      { index: 2, title: '卷二', summary: '' }, // 隐式起始 = 11
+    ];
+    expect(volumeOfChapter(volumes, 10)).toBe('卷一');
+    expect(volumeOfChapter(volumes, 11)).toBe('卷二');
+    expect(volumeOfChapter(volumes, 999)).toBe('卷二');
+  });
+
+  it('混合形态：显式 startChapter 优先于顺延推算', () => {
+    const volumes = [
+      { index: 1, title: '卷一', summary: '', startChapter: 1, chapterCount: 10 },
+      { index: 2, title: '卷二', summary: '', startChapter: 20 }, // 显式 20 覆盖顺延的 11
+    ];
+    expect(volumeOfChapter(volumes, 15)).toBe('卷一'); // 11-19 落回卷一（卷一无上界前段）
+    expect(volumeOfChapter(volumes, 20)).toBe('卷二');
   });
 });

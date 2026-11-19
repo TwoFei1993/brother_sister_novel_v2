@@ -66,6 +66,22 @@ export default function VolumeOutlineList({ volumes, onUpdate, onRemove, onAdd }
                     className={`h-8 w-14 px-2 ${fieldCls}`}
                   />
                 </label>
+                <label className="flex shrink-0 items-center gap-1 text-xs text-[hsl(var(--fg-muted))]">
+                  章数
+                  <input
+                    type="number"
+                    min={1}
+                    value={v.chapterCount ?? ''}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      onUpdate(i, { chapterCount: Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined });
+                    }}
+                    aria-label="本卷章数"
+                    data-testid={`volume-count-${i}`}
+                    title="本卷包含几章（用户选择）；下一卷起始章自动顺延"
+                    className={`h-8 w-14 px-2 ${fieldCls}`}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => onRemove(i)}

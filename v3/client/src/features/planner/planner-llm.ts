@@ -80,7 +80,7 @@ outline 结构：
 {"characters":[{"name":"姓名","role":"身份（哥哥/妹妹/反派等）","traits":["特质"]}],"background":"世界观与背景（200-400字）","abilities":["金手指/特殊能力"],"factions":["势力"],"conflict":"核心矛盾一句话","items":[{"name":"物品名","summary":"一句话：这是什么、特殊在哪（外观/功能/情感意义，会建成物品资料卡）"}],"volumes":[{"index":1,"title":"卷名","summary":"本卷主线概述150-300字（本卷起止事件与主线推进）","startChapter":1}],"chapters":[{"index":1,"title":"第1章 标题","plot":"本章剧情要点80-150字，具体到可直接写成文"}]}
 items 规则：只列**对剧情有实际作用的特殊物品/道具**（金手指载体、信物、关键武器等），普通日常物品不列；2-6 条为宜，没有就传空数组。
 大纲规模规则（反馈⑥：超长大纲一次输出会截断断流；用户反馈：卷大纲与章细纲严格分层）：
-- 卷与章分层：**volumes 放卷规划**（每卷一条：卷名 + 本卷主线概述 + startChapter 起始章号，默认每卷约 12 章）；**chapters 只放逐章细纲**，禁止把卷规划混进 chapters。
+- 卷与章分层：**volumes 放卷规划**（每卷一条：卷名 + 本卷主线概述 + startChapter 起始章号 + chapterCount 本卷章数【用户可选择每卷几章，默认约 12 章】，下一卷 startChapter = 本卷起始 + chapterCount）；**chapters 只放逐章细纲**，禁止把卷规划混进 chapters。
 - 默认首轮规划 8-12 章细纲；用户要求总章数 > 30 时，先出全部分卷规划（volumes 填全），chapters 只给第一卷的前 12-15 章细纲，并在 reply 里说明「后续各卷细纲按卷续出」。
 - characters 至少 2 名，兄妹核心关系优先；连续多轮续出细纲时，下一轮从上次输出的最后章号 +1 继续（新开的卷同步在 volumes 追加条目）。`;
 
@@ -228,18 +228,20 @@ function tryParseReply(candidate: string, baseline: PlannerProposal | null): Par
 /** 卷规划归一化（与 normalizeOutlineChapters 同思路）：缺 index 按数组序补正整数、字段字符串化、
  *  startChapter 非正数丢弃；title 与 summary 全空的条目剔除 */
 export function normalizeOutlineVolumes(
-  volumes: ReadonlyArray<{ index?: unknown; title?: unknown; summary?: unknown; startChapter?: unknown }> | undefined,
+  volumes: ReadonlyArray<{ index?: unknown; title?: unknown; summary?: unknown; startChapter?: unknown; chapterCount?: unknown }> | undefined,
 ): VolumeOutlineItem[] {
   if (!Array.isArray(volumes)) return [];
   return volumes
     .map((v, i) => {
       const raw = Number(v.index);
       const sc = Number(v.startChapter);
+      const cc = Number(v.chapterCount);
       return {
         index: Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : i + 1,
         title: String(v.title ?? '').trim(),
         summary: String(v.summary ?? '').trim(),
         ...(Number.isFinite(sc) && sc > 0 ? { startChapter: Math.floor(sc) } : {}),
+        ...(Number.isFinite(cc) && cc > 0 ? { chapterCount: Math.floor(cc) } : {}),
       };
     })
     .filter((v) => v.title !== '' || v.summary !== '');

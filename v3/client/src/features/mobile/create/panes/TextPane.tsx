@@ -115,12 +115,44 @@ export function TextPane({
     }
   }
 
+  /** App 后台生成进行中（server 任务执行，切后台/锁屏安全——2026-11-19 断流修复） */
+  const [bgBusy, setBgBusy] = useState(false);
+  const bgBusyForThisWork = bgBusy;
+
+  /** 挂载/切回恢复：有未完成的后台生成链时从断点继续剩余段（结果照常 onDone 入列表） */
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const pendingKey = localStorage.getItem(`novel-gen-bg-pending-${work.id}`);
+      if (!pendingKey) return;
+      setBgBusy(true);
+      try {
+        const msg = await gen.resumeNovelBg(work);
+        if (alive && msg) onDone(msg);
+      } finally {
+        if (alive) setBgBusy(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [work.id]);
+
   async function generate(): Promise<void> {
-    if (myStreaming || otherStreaming) return;
+    if (myStreaming || otherStreaming || bgBusy) return;
     const d = directive.trim();
     setDirective('');
     // 空指令=自动续写（同 ⚡连写语义：仅写作要求；绑定了章节大纲时本章要点仍自动注入）
-    onDone(await gen.generateChapter(work, useWorkStore.getState().messages, d));
+    // App 后台生成（2026-11-19）：server 后台任务执行 + 轮询取回，切后台/锁屏不再「流式连接中断」白跑；
+    // 分段链自动拼接，每段完成即落库（中断只损当段）
+    setBgBusy(true);
+    try {
+      const msg = await gen.generateChapterBg(work, useWorkStore.getState().messages, d);
+      if (msg) onDone(msg);
+    } finally {
+      setBgBusy(false);
+    }
   }
 
   /** ✍️ 手写第一章（自己写/粘贴正文，写完可 AI 润色）：建空章节并直接进入编辑态 */
@@ -367,7 +399,7 @@ export function TextPane({
         <button
           type="button"
           onClick={() => void gen.runBatch(work, directive.trim() || '自由发挥第一章').then(() => setDirective(''))}
-          disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
+          disabled={myStreaming || otherStreaming || bgBusy || Boolean(gen.batch)}
           data-testid="mobile-batch-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
@@ -377,7 +409,7 @@ export function TextPane({
         <button
           type="button"
           onClick={() => void gen.runByOutline(work, useWorkStore.getState().messages)}
-          disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
+          disabled={myStreaming || otherStreaming || bgBusy || Boolean(gen.batch)}
           data-testid="mobile-outline-run-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
@@ -393,14 +425,14 @@ export function TextPane({
           onChange={(e) => setDirective(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && void generate()}
           placeholder={chapters.length === 0 ? '第一章剧情指令（留空=自由发挥）' : `第${chapters.length + 1}章指令（留空=自动续写）`}
-          disabled={myStreaming || otherStreaming}
+          disabled={myStreaming || otherStreaming || bgBusy}
           data-testid="mobile-directive-input"
           className="h-11 min-w-0 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))] disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => void generate()}
-          disabled={myStreaming || otherStreaming}
+          disabled={myStreaming || otherStreaming || bgBusy}
           data-testid="mobile-generate-btn"
           className="h-11 shrink-0 rounded-xl bg-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
         >

@@ -116,6 +116,8 @@ function makeGen(overrides: Partial<Gen> = {}): Gen {
     generateChapter: vi.fn(),
     continueFromPartial: vi.fn(async () => null),
     swipeRegenerate: vi.fn(async () => null),
+    generateChapterBg: vi.fn(async () => null),
+    resumeNovelBg: vi.fn(async () => null),
     runBatch: vi.fn(),
     runByOutline: vi.fn(),
     batch: null,

@@ -105,8 +105,10 @@ export const VolumeOutlineItemSchema = z.object({
   title: z.string(),
   /** 本卷主线概述（150-300 字：本卷起止事件与主线推进） */
   summary: z.string(),
-  /** 本卷起始章号（定位章节归卷；首卷缺省视为第 1 章） */
+  /** 本卷起始章号（定位章节归卷；首卷缺省视为第 1 章；缺省时由前卷 startChapter+chapterCount 推导） */
   startChapter: z.number().int().positive().optional(),
+  /** 本卷章数（用户选择每卷几章；下一卷起始章 = 本卷起始 + 本卷章数；展示与归卷共用） */
+  chapterCount: z.number().int().positive().optional(),
 });
 export type VolumeOutlineItem = z.infer<typeof VolumeOutlineItemSchema>;
 

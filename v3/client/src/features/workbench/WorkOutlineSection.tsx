@@ -2,7 +2,7 @@
  * 章节大纲编辑区（作品设置抽屉子区，反馈⑦拆分自 WorkSettingsSheet）
  *
  * - 分卷规划编辑区（卷规划层，用户反馈：卷大纲与章细纲分开写别混为一谈）：
- *   每卷 = 卷号 + 卷名 + 起始章 + 本卷概述；生成第 N 章时按 startChapter 定位所属卷注入本卷主线
+ *   每卷 = 卷号 + 卷名 + 起始章 + 章数（用户选择每卷几章）+ 本卷概述；生成第 N 章时按 startChapter 定位所属卷注入本卷主线
  * - 完整可编辑列表：每章 = 章号 + 标题 input + 剧情 textarea（3 行起）+ 删除章按钮，
  *   外层 max-h + overflow-y-auto 滚动（此前只露一小截，长大纲不可维护）
  * - 添加章：追加「现有最大章号+1」的空章；保存时按章号升序、剔出全空章
@@ -86,6 +86,7 @@ export default function WorkOutlineSection({ work, onSaved }: WorkOutlineSection
         title: v.title.trim(),
         summary: v.summary.trim(),
         ...(Number.isFinite(v.startChapter) && v.startChapter ? { startChapter: clampIndex(String(v.startChapter), v.startChapter) } : {}),
+        ...(Number.isFinite(v.chapterCount) && v.chapterCount ? { chapterCount: clampIndex(String(v.chapterCount), v.chapterCount) } : {}),
       }))
       .filter((v) => v.title !== '' || v.summary !== '')
       .sort((a, b) => a.index - b.index);

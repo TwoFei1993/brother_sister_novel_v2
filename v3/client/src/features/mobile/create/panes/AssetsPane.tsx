@@ -80,6 +80,7 @@ export function AssetsPane({ work, nextIndex, onUpdated }: { work: Work; nextInd
           title: v.title.trim(),
           summary: v.summary.trim(),
           ...(Number.isFinite(v.startChapter) && v.startChapter ? { startChapter: Math.max(1, Math.floor(v.startChapter)) } : {}),
+          ...(Number.isFinite(v.chapterCount) && v.chapterCount ? { chapterCount: Math.max(1, Math.floor(v.chapterCount)) } : {}),
         }))
         .sort((a, b) => a.index - b.index);
       const latest = await apiFetch<Work>(`/api/works/${work.id}`);
@@ -134,6 +135,7 @@ export function AssetsPane({ work, nextIndex, onUpdated }: { work: Work; nextInd
                   <span className="font-medium">
                     第{v.index}卷《{v.title || '未命名'}</span>
                   {v.startChapter ? <span className="text-[hsl(var(--fg-muted))]"> · 第{v.startChapter}章起</span> : null}
+                  {v.chapterCount ? <span className="text-[hsl(var(--fg-muted))]"> · 共{v.chapterCount}章</span> : null}
                   <p className="mt-0.5 line-clamp-2 text-[hsl(var(--fg-muted))]">{v.summary || '（概述待补写）'}</p>
                 </button>
               </li>
@@ -172,8 +174,22 @@ export function AssetsPane({ work, nextIndex, onUpdated }: { work: Work; nextInd
                   aria-label="本卷起始章号"
                   className="h-9 w-14 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none focus:border-[hsl(var(--accent))]"
                 />
-              </label>
-            </div>
+                </label>
+                <label className="flex items-center gap-1 text-[10px] text-[hsl(var(--fg-muted))]">
+                  章数
+                  <input
+                    type="number"
+                    min={1}
+                    value={volDraft.chapterCount ?? ''}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setVolDraft({ ...volDraft, chapterCount: Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined });
+                    }}
+                    aria-label="本卷章数"
+                    className="h-9 w-14 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-xs outline-none focus:border-[hsl(var(--accent))]"
+                  />
+                </label>
+              </div>
             <textarea
               value={volDraft.summary}
               onChange={(e) => setVolDraft({ ...volDraft, summary: e.target.value })}
