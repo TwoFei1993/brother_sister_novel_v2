@@ -10,6 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { patchMessage } from '../../../api/works';
 import { apiFetch } from '../../../api/client';
 import DuanjuWorkbench from '../../duanju/DuanjuWorkbench';
+import WorkTitleInline from '../../../components/WorkTitleInline';
 import { useGenerate } from '../../../hooks/useGenerate';
 import { useWorkStore } from '../../../stores/work';
 import type { Message } from '@shared/message';
@@ -109,12 +110,20 @@ export default function MobileWork() {
         >
           ←
         </button>
-        <h1 className="m-serif min-w-0 flex-1 truncate text-[15px] font-semibold">
-          {work?.title ?? '…'}
-          {chapters.length > 0 && (
-            <span className="ml-1.5 text-xs font-normal text-[hsl(var(--fg-muted))]">{chapters.length} 章</span>
-          )}
-        </h1>
+        {work ? (
+          <>
+            <WorkTitleInline
+              work={work}
+              onUpdated={(updated) => useWorkStore.getState().setWork(updated)}
+              titleClassName="m-serif min-w-0 truncate text-[15px] font-semibold"
+            />
+            {chapters.length > 0 && (
+              <span className="shrink-0 text-xs font-normal text-[hsl(var(--fg-muted))]">{chapters.length} 章</span>
+            )}
+          </>
+        ) : (
+          <span className="m-serif min-w-0 flex-1 truncate text-[15px] font-semibold">…</span>
+        )}
         {work?.mode === 'novel' && chapters.length > 0 && (
           <button
             type="button"

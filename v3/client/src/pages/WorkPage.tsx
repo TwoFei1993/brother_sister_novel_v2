@@ -18,6 +18,7 @@ import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDra
 import { useTtsStore } from '../stores/tts';
 import WorkSettingsSheet from '../features/workbench/WorkSettingsSheet';
 import WorkViewRouter from '../features/workbench/WorkViewRouter';
+import WorkTitleInline from '../components/WorkTitleInline';
 import { useGenerate } from '../hooks/useGenerate';
 import { useLogout } from '../hooks/useLogout';
 import { useWorkTheme } from '../lib/theme';
@@ -151,12 +152,20 @@ export default function WorkPage() {
         <button type="button" onClick={() => navigate('/')} className={iconBtn} title="返回书架" aria-label="返回书架">
           ←
         </button>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold sm:text-base">
-          {work?.title ?? '…'}
-          {chapters.length > 0 && (
-            <span className="ml-2 text-xs font-normal text-[hsl(var(--fg-muted))]">共 {chapters.length} 章</span>
-          )}
-        </h1>
+        {work ? (
+          <>
+            <WorkTitleInline
+              work={work}
+              onUpdated={(updated) => setWork(updated)}
+              titleClassName="min-w-0 truncate text-sm font-semibold sm:text-base"
+            />
+            {chapters.length > 0 && (
+              <span className="shrink-0 text-xs font-normal text-[hsl(var(--fg-muted))]">共 {chapters.length} 章</span>
+            )}
+          </>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold sm:text-base">…</span>
+        )}
         {work && work.mode === 'novel' && chapters.length > 0 && (
           <button
             type="button"
