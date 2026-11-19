@@ -66,9 +66,9 @@ describe('MINIMAX_H3_IMAGE_EDIT_WORKFLOW（双参考分镜帧）', () => {
     expect(MINIMAX_H3_IMAGE_EDIT_WORKFLOW).toContain('<<SEED>>');
   });
 
-  it('分镜帧尺寸固定 768×1344', () => {
-    expect((g['30'].inputs.width as number)).toBe(768);
-    expect((g['30'].inputs.height as number)).toBe(1344);
+  it('分镜帧尺寸固定 2016×3584（8 MP 档——四参考编辑实测可用上限，远景脸像素 ×7.5）', () => {
+    expect((g['30'].inputs.width as number)).toBe(2016);
+    expect((g['30'].inputs.height as number)).toBe(3584);
   });
 });
 
