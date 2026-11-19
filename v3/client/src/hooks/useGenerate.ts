@@ -632,8 +632,9 @@ export function useGenerate(): UseGenerateResult {
             label: '章节生成',
           });
           const raw = await waitAndStore(slot);
-          // 结果写进 generation store buffer（finalizeGeneration 从 store 读原文；打字机视图展示累积全文）
-          useGenerationStore.getState().reset();
+          // 结果写进 generation store buffer（finalizeGeneration 从 store 读原文；打字机视图展示累积全文）。
+          // 不调 reset()：reset 会清空 buffer 让「正在看的内容」瞬间消失（用户实测感知为截断），
+          // start(initialBuffer=累积) 本身即完成 buffer 重置
           useGenerationStore.getState().start(work.id, state.targetId, accumulated);
           useGenerationStore.getState().appendChunk(raw);
           const roundDirective = isContinue ? buildContinueDirective(accumulated) : state.directive;
@@ -657,6 +658,12 @@ export function useGenerate(): UseGenerateResult {
             msg = { ...msg, content: accumulated };
             await persistMessage(work.id, msg);
             break;
+          }
+          // 续写段 title 还原（生产实证污染：续写输出无标题行时 parseChapterTitle 用
+          // 续写指令首句兜底 → title=「接着写完这一章：…」）——无标题行的段沿用基准标题
+          if (isContinue && msg.chapter && (!msg.chapter.title.trim() || msg.chapter.title.startsWith('接着写完这一章'))) {
+            const baseTitle = row?.chapter?.title ?? msg.chapter.title;
+            msg = { ...msg, chapter: { ...msg.chapter, title: baseTitle } };
           }
           accumulated = msg.content;
           localStorage.setItem(novelBgPendingKey(work.id), JSON.stringify({ ...state, part: part + 1 }));

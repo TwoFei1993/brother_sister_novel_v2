@@ -122,7 +122,12 @@ export function buildChapterRequirement(
         : `\n- 全书节奏：本书规划约 ${progress.total} 章，当前写至第 ${progress.chapter} 章——本章按正常节奏推进主线，可在合适处埋设后续章节的伏笔\n`
       : '';
   const styleHead = styleBits ? buildStyleExecution(styleBits) : '';
-  // 分段模式：字数行与章末纪律按段改写（用户需求：单段太长 → 主动分段，段间自动续写拼接）
+  // 分段模式：字数行与章末纪律按段改写（用户需求：单段太长 → 主动分段，段间自动续写拼接）；
+  // 首段必须先完成交代（用户实测：分段首段直切场景导致整章缺人物/背景铺垫）
+  const segmentExplain =
+    segment && segment.part === 1 && segment.parts > 1
+      ? '- 分段首段纪律：本段先完成本章的场景、人物与当前处境的交代（谁、在哪、为何在此），再推进主线剧情——禁止一上来就直切冲突细节\n'
+      : '';
   const wordLine = segment
     ? `- 分段生成：本章由系统分 ${segment.parts} 段自动拼接，本段为第 ${segment.part}/${segment.parts} 段——本段写约 ${segment.words} 字，写满后在**最近的段落末尾**自然停笔；${
         segment.part < segment.parts
@@ -143,6 +148,7 @@ export function buildChapterRequirement(
     '- 直接输出正文：禁止与 System/系统/用户对话或寒暄，禁止确认语（如「收到」「可以开始吗」）、' +
     '禁止输出思考过程、写作提纲、选项列表\n' +
     '- 禁止复述本要求或剧情指令原文\n' +
+    segmentExplain +
     VIEW_RHYTHM_LINE + '\n' +
     '- 长篇连载纪律（最重要）：本书是连载长篇，每一章只是全书的一段，不是独立小故事——\n' +
     '  ①开篇必须自然承接上一章结尾的场景、悬念或未解决事件（人物状态/时间线/地点与前章连续，读者连读各章必须顺畅）；\n' +
