@@ -303,6 +303,10 @@ export async function scanAndAssemble(
   // 骨架块纯本地压缩（标题+首段）永不在场失败，与摘要/回忆并存（仅进提示词）
   const skeletonHint =
     tail.kind === 'directive' && plan.dropped.length > 0 ? skeletonBlock(plan.dropped) : '';
+  // 按风格挂载的附加预设（用户需求：通用预设常驻+风格预设按需）合并进主预设栈：
+  // 附加预设的 prompts 追加到主栈尾部（identifier 唯一化防冲突），风格细则贴近生成点生效
+  const basePreset = assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords);
+  const preset = await mergeStylePresets(work, basePreset, prefs);
   // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）；
   // 续写轮用「无缝续写」守卫变体（反馈③：常规守卫的「第一行输出标题」会诱发模型重新开章）
   const guardPlan =
@@ -311,7 +315,7 @@ export async function scanAndAssemble(
       : { allowance: 0, withGuard: (msgs: GenerateMessage[]): GenerateMessage[] => msgs };
   for (;;) {
     const result = assemblePrompt({
-      preset: assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords),
+      preset,
       cards: assets.cards,
       bios: assets.bios, // 人物小传（作者手写）随卡注入人设块
       // §4.4 卡覆盖预设开关：作品级设置，缺省视为开（与酒馆一致）
@@ -527,4 +531,35 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
   useGenerationStore.getState().finish();
   useGenerationStore.getState().reset();
   return message;
+}
+
+/**
+ * 按风格挂载的附加预设（stylePresetIds）合并进主预设栈（用户需求：通用预设常驻 +
+ * 风格预设按需，选好后用户确认写入 stylePresetIds）：
+ * - 附加预设的每个 prompt 追加到主栈尾部，identifier 前缀唯一化防冲突；
+ * - enabled 跟随附加预设自身 prompt_order，主栈顺序不被打乱（附加块贴近生成点生效）。
+ * 任一附加预设拉取失败静默跳过（不影响主预设生成）。
+ */
+async function mergeStylePresets(work: Work, base: TavernPreset, prefs: LlmPrefs): Promise<TavernPreset> {
+  const ids = work.settings.stylePresetIds ?? [];
+  if (ids.length === 0) return base;
+  const extras = await Promise.all(
+    ids.map((presetId) => apiFetch<PresetAsset>(`/api/presets/${presetId}`).catch(() => null)),
+  );
+  const prompts = [...base.prompts];
+  const baseOrder = base.prompt_order?.[0]?.order ?? [];
+  const order = [...baseOrder];
+  for (const asset of extras) {
+    if (!asset) continue;
+    const list = asset.raw.prompt_order?.[0]?.order ?? [];
+    for (const entry of list) {
+      const src = asset.raw.prompts.find((x) => x.identifier === entry.identifier);
+      if (!src || !src.content?.trim()) continue;
+      const uid = `sty${asset.id.slice(0, 6)}-${src.identifier}`;
+      if (order.some((o) => o.identifier === uid)) continue;
+      prompts.push({ ...src, identifier: uid });
+      order.push({ identifier: uid, enabled: entry.enabled });
+    }
+  }
+  return { ...base, prompts, prompt_order: [{ character_id: 100001, order }] };
 }

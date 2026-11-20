@@ -13,6 +13,9 @@ export const PresetAssetSchema = z.strictObject({
   name: z.string(),
   /** 入库时间（毫秒时间戳；服务端生成，列表排序用） */
   createdAt: z.number().optional(),
+  /** 风格标签（用户需求：按风格挂预设）——如「通用」「治愈」「热血」「古风」；
+   *  「通用」标签的预设对所有作品常驻启用，其余按作品风格匹配勾选（勾选后用户确认） */
+  tags: z.array(z.string()).optional(),
   /** 酒馆原生预设文件 */
   raw: TavernPresetSchema,
 });

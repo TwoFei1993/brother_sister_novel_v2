@@ -19,6 +19,7 @@ import WorkOutlineSection from './WorkOutlineSection';
 import MemorySection from './MemorySection';
 import WizardAssetsBind from './WizardAssetsBind';
 import StyleClonePanel from './dialog/StyleClonePanel';
+import StylePresetSection from './StylePresetSection';
 
 /** 数字输入兜底：空串/非法值回退 fallback，最小 1（防 PATCH 出非法设置值） */
 function clampInt(value: string, fallback: number): number {
@@ -183,6 +184,9 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
               <span className="text-xs text-[hsl(var(--fg-muted))]">章（连写上界；连写每次写 3 章）</span>
             </div>
           </section>
+
+          {/* 写作风格 + 按风格挂预设（用户需求：资料里调风格；选好后确认应用） */}
+          <StylePresetSection work={work} onSaved={onSaved} />
 
           {/* 章节大纲（反馈⑦）：完整可滚动可编辑列表 + 导入覆盖，独立 PATCH（乐观锁） */}
           <WorkOutlineSection work={work} onSaved={onSaved} />

@@ -65,6 +65,15 @@ export type StoryTone = z.infer<typeof StoryToneSchema>;
 export const WritingStyleSchema = z.enum(['default', 'qidian', 'jjwxc', 'fanqie', 'custom']);
 export type WritingStyle = z.infer<typeof WritingStyleSchema>;
 
+/** 写作风格中文标签（书资料分区选择/预设 tag 匹配共用） */
+export const WRITING_STYLE_LABELS: Record<WritingStyle, string> = {
+  default: '经典网文',
+  qidian: '起点·男频爽文',
+  jjwxc: '晋江·言情细腻',
+  fanqie: '番茄·快节奏',
+  custom: '自定义',
+};
+
 // ---------- 小说设定（旧站 NovelSettings 全字段 + authorNote/noteDepth） ----------
 
 /** chat 回复长度档位：short=150-300 字 / medium=400-900 字 / long=800-1500 字 */
@@ -165,6 +174,9 @@ export const NovelSettingsSchema = z.strictObject({
   styleGuide: z.string().optional(),
   /** 章节大纲（一键导入大纲）：生成第 N 章时按 index 匹配把本章要点追加进指令；缺省视为无 */
   chapterOutlines: z.array(ChapterOutlineItemSchema).optional(),
+  /** 按风格挂载的预设 id 列表（用户需求：通用预设常驻+风格预设按需；组装时叠加进主预设栈；
+   *  风格变化后在资料分区勾选并经用户确认写入） */
+  stylePresetIds: z.array(z.string()).optional(),
   /** 分卷大纲（卷规划层，与章细纲分层）：生成第 N 章时按 startChapter 定位所属卷注入本卷主线；缺省视为无 */
   volumeOutlines: z.array(VolumeOutlineItemSchema).optional(),
   /** 人物状态卡（自动记忆）：AI 每 N 章抽取的动态事实（位置/伤势/持有物/关系），随【作品设定】注入；作者可编辑=最终事实源 */
