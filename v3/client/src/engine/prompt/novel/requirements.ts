@@ -169,10 +169,14 @@ export function buildChapterRequirement(
  * 常规要求块的「第一行输出章标题」在续写轮等于命令模型重新开章（实测形态：
  * 已写半章 + 模型重新输出标题从开头另写，拼接后一章两个开头）。续写轮整体替换为：
  * 从已写正文结尾无缝续写，禁止任何形式的重新开始。
+ * remaining（可选）：本章还需补写的字数——传入时字数行按「补完剩余后收束（本章总计
+ * 约 targetWords）」改写（用户实测：续写轮再写满额字数导致章节越来越长的直接根因）。
  */
-export function buildContinueRequirement(targetWords: number, final = true): string {
+export function buildContinueRequirement(targetWords: number, final = true, remaining?: number): string {
   const stopLine = final
-    ? `- 直接从剧情的当前时刻继续推进，写约 ${targetWords}-${targetWords + 1500} 字后自然收束本章（章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n`
+    ? remaining !== undefined
+      ? `- 直接从剧情的当前时刻继续推进，补写约 ${remaining} 字后自然收束本章（含前面已写部分，本章总计约 ${targetWords} 字；章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n`
+      : `- 直接从剧情的当前时刻继续推进，写约 ${targetWords}-${targetWords + 1500} 字后自然收束本章（章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n`
     : `- 直接从剧情的当前时刻继续推进，本段写约 ${targetWords} 字——写满后在**最近的段落末尾**自然停笔（本章由系统分段拼接，后续还会继续写；不要收尾、不要结局感）\n`;
   return (
     '【续写要求（本章已写了一半）】\n' +
@@ -212,13 +216,19 @@ export function pickChapterRequirement(opts: {
   continuation?: boolean;
   expandChapter?: boolean;
   segment?: SegmentInfo;
+  /** 续写轮剩余字数（target − 已有；传入时字数行按「补完剩余后收束」改写，防章节膨胀） */
+  continueRemaining?: number;
   targetWords: number;
   progress?: { chapter: number; total: number };
   styleBits?: StyleBits;
 }): string {
   if (opts.continuation) {
     const seg = opts.segment;
-    return buildContinueRequirement(seg ? seg.words : opts.targetWords, seg ? seg.part >= seg.parts : true);
+    return buildContinueRequirement(
+      seg ? seg.words : opts.targetWords,
+      seg ? seg.part >= seg.parts : true,
+      seg ? undefined : opts.continueRemaining,
+    );
   }
   if (opts.expandChapter) return buildExpandRequirement(opts.targetWords);
   return buildChapterRequirement(opts.targetWords, opts.progress, opts.styleBits, opts.segment);

@@ -139,7 +139,15 @@ export function novelGuardPlan(
  *  directive.expandChapter（用户需求：本章加长）：扩写轮置 true——要求块切「扩写本章」变体
  *  （基于上下文最后的当前版本输出更长完整章，守卫保持常规带标题形态）。 */
 export type AssembleTail =
-  | { kind: 'directive'; text: string; continuation?: boolean; expandChapter?: boolean; segment?: SegmentInfo }
+  | {
+      kind: 'directive';
+      text: string;
+      continuation?: boolean;
+      expandChapter?: boolean;
+      segment?: SegmentInfo;
+      /** 续写轮剩余字数（target−已有）：要求块按「补完剩余后收束」改写，防章节膨胀 */
+      continueRemaining?: number;
+    }
   | { kind: 'userMessage'; text: string };
 
 /** 组装产物（自 generation-pipeline 迁出；预算校验后的上下文规划层结果） */

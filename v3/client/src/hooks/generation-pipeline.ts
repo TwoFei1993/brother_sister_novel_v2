@@ -331,6 +331,7 @@ export async function scanAndAssemble(
               continuation: tail.continuation,
               expandChapter: tail.expandChapter,
               segment: tail.segment,
+              continueRemaining: tail.continueRemaining,
               targetWords,
               progress: {
                 chapter: nextChapterIndex(messages),
@@ -456,6 +457,8 @@ export interface FinalizeInput {
   /** 无效输出重试覆盖语义：重跑携带首次消息 id，落库行按 messageId 幂等覆盖 */
   messageId?: string;
   pending: PendingVars;
+  /** title 兜底（续写轮沿用原章标题——防续写指令首句污染 title，生产实证） */
+  keepTitle?: string;
 }
 
 /** 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → 幂等入库 → 变量回写 → store 收束 */
@@ -469,6 +472,8 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
   const pp = postprocessMessage(raw, {
     directive: directive || undefined,
     chapterIndex: chapterIndex - 1,
+    // 续写轮 title 兜底（keepTitle）：沿用原章标题，防续写指令首句污染 chapter.title
+    ...(input.keepTitle ? { fallbackTitle: input.keepTitle } : {}),
     regexScripts: assets.regexScripts,
     macroEnv: env,
     speakerName: '小说家',

@@ -77,6 +77,10 @@ interface RunOptions {
   effMaxTokensOverride?: number;
   /** 关闭思考（扩写轮实测：推理模型思考吞掉输出预算 → meta 空产出；扩写是转换任务不需要深思考） */
   thinkingOff?: boolean;
+  /** 续写轮剩余字数（target − 已有）：要求块按「补完剩余后收束」改写，防章节膨胀 */
+  continueRemaining?: number;
+  /** 章节 title 兜底（续写轮沿用原章标题，防指令首句污染 title） */
+  keepTitle?: string;
 }
 
 /**
@@ -87,7 +91,7 @@ async function assembleGenRequest(
   work: Work,
   messages: Message[],
   directive: string,
-  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId' | 'swipeTarget' | 'thinkingOff'>,
+  opts: Pick<RunOptions, 'initialBuffer' | 'promptDirective' | 'continuation' | 'expandChapter' | 'segment' | 'effMaxTokensOverride' | 'maxTokensScale' | 'persistMessageId' | 'swipeTarget' | 'thinkingOff' | 'continueRemaining' | 'keepTitle'>,
   prefs: LlmPrefs,
 ): Promise<{ body: GenerateBody; fitted: FittedPrompt; assets: AssembleAssets; env: MacroEnv; pending: PendingVars; effMaxTokens: number }> {
   // P2.2 绑定三态：按本章章号过滤增量绑定素材（写第 C 章只带 fromChapter≤C 的生效素材）
@@ -233,6 +237,7 @@ export function useGenerate(): UseGenerateResult {
                 work,
                 messages,
                 directive,
+                ...(opts.keepTitle ? { keepTitle: opts.keepTitle } : {}),
                 swipeTarget: opts.swipeTarget ?? null,
                 assets,
                 env,
@@ -294,6 +299,7 @@ export function useGenerate(): UseGenerateResult {
     ctxMessages: Message[],
     directive: string,
     first: Message | null,
+    tw: number,
     runOpts: (partial: string) => Parameters<typeof run>[3],
   ): Promise<Message | null> => {
     let msg = first;
@@ -303,11 +309,13 @@ export function useGenerate(): UseGenerateResult {
       if (!looksTruncated(finish, msg.content, targetWords)) break;
       const prev = msg;
       const partial = msg.content;
+      // 续写轮按「补完剩余字数后收束」（target − 已有）：防每轮再写满额字数导致章节膨胀（生产实测）
+      const remaining = Math.max(400, targetWords - partial.length);
       const next = await run(
         work,
         withPartialInHistory(ctxMessages, partial),
         buildContinueDirective(partial),
-        { ...runOpts(partial), continuation: true },
+        { ...runOpts(partial), continuation: true, continueRemaining: remaining },
       );
       // 重放保护：上游把已有内容从头复述（短流×字数兜底误判组合）→ 整体回滚本轮并停止——
       // content 之外 chapter.title/directive 也一并还原（续写轮 finalize 会把指令文本污染进
@@ -449,13 +457,17 @@ export function useGenerate(): UseGenerateResult {
             : next;
         }
       } else {
-        // 截断自动续写（补完结果同 id 幂等覆盖；腰斩常因思考挤占预算——续写轮抬预算 2 倍）
+        // 截断自动续写（补完结果同 id 幂等覆盖；腰斩常因思考挤占预算——续写轮抬预算 2 倍）。
+        // 传 tw/原章标题：续写轮按「补完剩余字数后收束」改写字数行（防章节越来越长，生产实测）
         const baseId = msg?.id ?? targetId;
-        msg = await continueTruncated(work, messages, directive, msg, (partial) => ({
+        const keepTitle = msg?.chapter?.title;
+        msg = await continueTruncated(work, messages, directive, msg, tw, (partial) => ({
           targetId,
           initialBuffer: partial,
           promptDirective: directive,
           persistMessageId: baseId,
+          keepTitle,
+          continueRemaining: Math.max(400, tw - partial.length),
           maxTokensScale: 2,
         }));
       }
@@ -559,13 +571,23 @@ export function useGenerate(): UseGenerateResult {
         });
       }
       // 重roll 同样走截断自动续写（与 generateChapter 同判据同轮数；候选经 swipeTarget 更新落库）
-      msg = await continueTruncated(work, ctx, directive, msg, (partial) => ({
-        targetId: target.id,
-        initialBuffer: partial,
-        swipeTarget: target,
-        promptDirective: directive,
-        maxTokensScale: 2,
-      }));
+      const keepTitle = target.chapter?.title;
+      msg = await continueTruncated(
+        work,
+        ctx,
+        directive,
+        msg,
+        work.settings.targetChapterWords ?? 3000,
+        (partial) => ({
+          targetId: target.id,
+          initialBuffer: partial,
+          swipeTarget: target,
+          promptDirective: directive,
+          keepTitle,
+          continueRemaining: Math.max(400, (work.settings.targetChapterWords ?? 3000) - partial.length),
+          maxTokensScale: 2,
+        }),
+      );
       // 最后防线同 generateChapter：仅对有效产出标记（占位崩溃稿已 append 进 swipes，误标会
       // 指向崩溃候选导致提示条误显），新候选位于末位 swipe
       if (msg && invalidReasonOf(msg) === null) {
@@ -761,13 +783,20 @@ export function useGenerate(): UseGenerateResult {
         });
       }
       // 截断自动续写：append 走续写轮语义（无缝续写），expand 走常规语义（finish=length 时补写）
-      msg = await continueTruncated(work, ctx, directive, msg, (partial) => ({
-        targetId: target.id,
-        initialBuffer: partial,
-        swipeTarget: target,
-        ...(mode === 'append' ? { continuation: true } : {}),
-        maxTokensScale: 2,
-      }));
+      msg = await continueTruncated(
+        work,
+        ctx,
+        directive,
+        msg,
+        work.settings.targetChapterWords ?? 3000,
+        (partial) => ({
+          targetId: target.id,
+          initialBuffer: partial,
+          swipeTarget: target,
+          ...(mode === 'append' ? { continuation: true } : {}),
+          maxTokensScale: 2,
+        }),
+      );
       return invalidReasonOf(msg) ? null : msg;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -66,6 +66,8 @@ export function parseChapterTitle(
   raw: string,
   directive?: string,
   chapterIndex = 0,
+  /** title 兜底优先于 directive 首句（续写轮沿用原章标题，防指令首句污染 title——生产实证） */
+  fallbackTitle?: string,
 ): ParsedChapter {
   const probe = raw.trimStart();
   const matched = TITLE_LINE_RE.exec(probe);
@@ -76,6 +78,10 @@ export function parseChapterTitle(
       title: stripped || `第${chapterIndex + 1}章`,
       content: probe.slice(matched[0].length).replace(/^\s+/, ''),
     };
+  }
+
+  if (fallbackTitle && fallbackTitle.trim()) {
+    return { title: fallbackTitle.trim(), content: raw };
   }
 
   if (directive && directive.trim()) {
@@ -117,6 +123,8 @@ export interface PostprocessOpts {
   directive?: string;
   /** 章节下标（0 起，兜底 `第N章` 用） */
   chapterIndex?: number;
+  /** title 兜底优先级高于 directive 首句（续写轮沿用原章标题，防指令首句污染 title） */
+  fallbackTitle?: string;
   /** 正则脚本（仅双 false 全时轨参与显示清理） */
   regexScripts?: TavernRegexScript[];
   /** 宏环境（脚本 findRegex/replaceString 的宏注入） */
@@ -174,6 +182,7 @@ export function postprocessMessage(raw: string, opts: PostprocessOpts = {}): Pos
     englishCleaned,
     opts.directive,
     opts.chapterIndex ?? 0,
+    opts.fallbackTitle,
   );
   // 句号收尾规范化（联测反馈）：正文非空且结尾不是收尾标点（句号/问叹号/引号/括号/省略号）时补句号。
   // 豁免：重复循环崩溃文本不补——裸尾（无标点结尾）是「截断续写接管」链式补救的判定信号，补了会吞掉该链路
