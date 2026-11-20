@@ -540,7 +540,7 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
  * - enabled 跟随附加预设自身 prompt_order，主栈顺序不被打乱（附加块贴近生成点生效）。
  * 任一附加预设拉取失败静默跳过（不影响主预设生成）。
  */
-async function mergeStylePresets(work: Work, base: TavernPreset, prefs: LlmPrefs): Promise<TavernPreset> {
+export async function mergeStylePresets(work: Work, base: TavernPreset, prefs: LlmPrefs): Promise<TavernPreset> {
   const ids = work.settings.stylePresetIds ?? [];
   if (ids.length === 0) return base;
   const extras = await Promise.all(

@@ -41,6 +41,8 @@ export interface CrudOptions<Asset extends { id: string; name: string; createdAt
   schema: z.ZodType<Asset, z.ZodTypeDef, unknown>;
   /** 错误消息中的资源名（如"角色卡"） */
   label: string;
+  /** 浅列表附加字段（如预设的 tags——风格挂载推荐需要；默认只回 id/name/createdAt） */
+  extraListFields?: (asset: Asset) => Record<string, unknown>;
   /**
    * POST 按 name 幂等（深度测试报告缺陷「批量导入失败重试产生重复卡」）：
    * 已存在同名资产时直接返回既有资产（200，无新文件落盘），否则照常 201 新建。
@@ -92,7 +94,7 @@ export function crudRouter<Asset extends { id: string; name: string; createdAt?:
               createdAt = 0;
             }
           }
-          return { id: asset.id, name: asset.name, createdAt };
+          return { id: asset.id, name: asset.name, createdAt, ...opts.extraListFields?.(asset) };
         }),
       );
       res.json(assets.filter((it) => it !== null));

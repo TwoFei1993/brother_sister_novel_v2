@@ -21,6 +21,7 @@ import { getPreset, updatePresetRaw } from '../../../api/library';
 
 import PromptRow from './PromptRow';
 import { NewPromptForm, PasteImportForm } from './PromptForms';
+import PresetTagEditor from './PresetTagEditor';
 import { describePrompt, isSudachiPreset } from './guides/preset-guides';
 import SudachiGuideCard from './guides/SudachiGuideCard';
 
@@ -80,6 +81,7 @@ export interface PromptManagerProps {
 export default function PromptManager({ presetId, onImportedNew, notify }: PromptManagerProps) {
   const [raw, setRaw] = useState<TavernPreset | null>(null);
   const [presetName, setPresetName] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -98,6 +100,7 @@ export default function PromptManager({ presetId, onImportedNew, notify }: Promp
         if (alive) {
           setRaw(normalizePreset(a.raw));
           setPresetName(a.name);
+          setTags(a.tags ?? []);
         }
       })
       .catch((err: unknown) => {
@@ -259,6 +262,13 @@ export default function PromptManager({ presetId, onImportedNew, notify }: Promp
       </div>
 
       {isSudachiPreset(presetName) && <SudachiGuideCard />}
+
+      <PresetTagEditor
+        presetId={presetId}
+        tags={tags}
+        onChanged={setTags}
+        notify={notifyRef.current}
+      />
 
       <ol className="flex flex-col gap-2">
         {order.map((entry, index) => {

@@ -69,6 +69,11 @@ export async function updatePresetRaw(id: string, raw: TavernPreset): Promise<vo
   await apiFetch(`/api/presets/${id}`, { method: 'PATCH', body: JSON.stringify({ raw }) });
 }
 
+/** 更新预设风格标签：PATCH 顶层 tags（浅合并；独立于 raw 保存流） */
+export async function updatePresetTags(id: string, tags: string[]): Promise<void> {
+  await apiFetch(`/api/presets/${id}`, { method: 'PATCH', body: JSON.stringify({ tags }) });
+}
+
 /** 完整复制预设：GET 全量 → POST 新建（去掉服务端元数据，改名副本；提示词与排序原样带走） */
 export async function duplicatePreset(id: string, name: string): Promise<LibraryAssetRef> {
   const { id: _omitId, createdAt: _omitAt, ...body } = await getPreset(id);

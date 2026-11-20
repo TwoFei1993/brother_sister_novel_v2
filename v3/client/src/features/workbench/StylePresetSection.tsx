@@ -70,9 +70,6 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
     [s.subGenre, s.storyTones, s.writingStyle],
   );
 
-  const mainPresetName = useMemo(async () => '', []);
-  void mainPresetName;
-
   function togglePick(id: string): void {
     setDirty(true);
     setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
