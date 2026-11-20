@@ -170,6 +170,20 @@ export function TextPane({
     }
   }
 
+  /** 章节改名（用户需求）：PATCH 消息整行（chapter.title），失败回滚并抛错给行内编辑提示 */
+  async function renameChapter(msgId: string, title: string): Promise<void> {
+    const m = useWorkStore.getState().messages.find((x) => x.id === msgId && x.chapter);
+    if (!m || !m.chapter) throw new Error('章节不存在');
+    const updated = { ...m, chapter: { index: m.chapter.index, title, publishedVersionId: m.chapter.publishedVersionId } };
+    useWorkStore.getState().upsertLocal(updated);
+    try {
+      await patchMessage(work.id, updated);
+    } catch {
+      useWorkStore.getState().upsertLocal(m);
+      throw new Error('rename failed');
+    }
+  }
+
   /** ✍️ 手写第一章（自己写/粘贴正文，写完可 AI 润色）：建空章节并直接进入编辑态 */
   async function createHandwriteChapter(): Promise<void> {
     if (myStreaming || otherStreaming) return;
@@ -505,7 +519,7 @@ export function TextPane({
       )}
 
       {createPortal(
-        <ChapterDrawer open={drawerOpen} chapters={chapters} currentId={current?.id} onPick={onPick} onClose={() => setDrawerOpen(false)} />,
+        <ChapterDrawer open={drawerOpen} chapters={chapters} currentId={current?.id} onPick={onPick} onClose={() => setDrawerOpen(false)} onRename={renameChapter} />,
         document.body,
       )}
     </div>

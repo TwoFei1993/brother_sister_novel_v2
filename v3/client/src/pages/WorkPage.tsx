@@ -22,6 +22,7 @@ import WorkTitleInline from '../components/WorkTitleInline';
 import { useGenerate } from '../hooks/useGenerate';
 import { useLogout } from '../hooks/useLogout';
 import { useWorkTheme } from '../lib/theme';
+import { patchMessage } from '../api/works';
 import { useWorkStore } from '../stores/work';
 import type { Message } from '@shared/message';
 import type { ViewPreference } from '@shared/work';
@@ -270,6 +271,14 @@ export default function WorkPage() {
           chapters={chapters.map((m) => ({ index: m.chapter.index, title: m.chapter.title }))}
           onLocate={scrollToChapter}
           onSpeak={(queueIdx) => useTtsStore.getState().requestStart(queueIdx)}
+          onRename={async (index, title) => {
+            // 章节改名（用户需求）：按章号找消息 → PATCH 整行（chapter.title）→ 本地同步
+            const m = messages.find((x) => x.chapter?.index === index);
+            if (!m || !m.chapter || !id) throw new Error('章节不存在');
+            const updated = { ...m, chapter: { index: m.chapter.index, title, publishedVersionId: m.chapter.publishedVersionId } };
+            useWorkStore.getState().upsertLocal(updated);
+            await patchMessage(id, updated);
+          }}
         />
       )}
       {settingsOpen && work && (
