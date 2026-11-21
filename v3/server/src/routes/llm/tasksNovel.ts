@@ -1,18 +1,29 @@
 /**
- * novel-chapter 任务类型基建（M2「全后台生成」Task 1.1）：
- * 提交 schema（prefs/编排参数）/ 同书互斥扫描 / 占位执行器（Task 3.3 实装编排）。
+ * novel-chapter 任务类型基建（M2 Task 1.1 提交协议 / Task 3.3 runner 实装）：
+ * 提交 schema（prefs/编排参数）/ 同书互斥扫描 / 后台执行器。
  *
  * 本文件同时是 llm-tasks 目录路径的公共底层：llmTasksDir() 是该目录布局的唯一权威，
- * tasks.ts（taskFile）、tasksExecute.ts（taskFileOf）、测试文件均基于它拼路径，
- * 互相引用不构成运行时循环（本文件不反向 import 任何 tasks 组的运行时值）。
+ * tasks.ts（taskFile）、tasksExecute.ts（taskFileOf）、测试文件均基于它拼路径。
  *
  * 与 tasks.ts 的依赖方向：tasks.ts → 本文件（值导入单向）；
  * 本文件仅 type-only 反向引用 TaskFile（编译期擦除，无运行时循环依赖）。
+ *
+ * runner（Task 3.3）：acquireNovelSlot（全局并发编排器 D7）→ orchestrateNovelChapters
+ * （章循环/模式编排全在 services/novel-gen）→ 终态写 {status, resultMessages,
+ * resultMessageIds}；进度经 1s 节流器落盘（合并磁盘最新态——硬约束：不合并会抹掉
+ * 执行期间并发落盘的 cancelRequested）；isCancelled 每次重读任务文件。
  */
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 
-import { readJson, listDir } from '../../storage/store';
+import { readJson, listDir, writeJsonAtomicRetry } from '../../storage/store';
+import { acquireNovelSlot, releaseNovelSlot } from '../../services/novelQueue';
+import {
+  orchestrateNovelChapters,
+  type OrchestrateInput,
+  type TaskProgress,
+} from '../../services/novel-gen/orchestrate';
 import { dataDir } from '../core/paths';
 import type { TaskFile } from './tasks';
 
@@ -77,14 +88,105 @@ export async function scanActiveTasks(dir: string, pred?: (t: TaskFile) => boole
   return out;
 }
 
-/**
- * novel-chapter 后台执行占位（Task 3.3 实装组装与编排——本任务只保证
- * 提交/查询/取消/互斥全链路真实可用：占位在可注入延迟后 throw，由
- * POST handler 的统一 catch 落盘 failed，客户端立即可见明确错误）。
- * 延迟仅供本任务测试锁定 pending 窗口（互斥/取消用例），生产默认 0 即时失败。
- */
-export async function executeNovelChapter(_task: TaskFile): Promise<void> {
-  const delay = Number(process.env.LLM_TASK_NOVEL_DELAY_MS ?? 0);
-  if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-  throw new Error('novel-chapter 执行尚未实装（M2 Task 3.3）');
+// ---------- 后台执行器（Task 3.3 runner 实装） ----------
+
+/** 进度节流间隔（1s）：执行期增量高频上报只留最近一次落盘 */
+const PROGRESS_THROTTLE_MS = 1000;
+/** 强制落盘相位：saving 每章仅一次（章完成即刻可见，不参与节流） */
+const FORCED_PHASES: ReadonlySet<TaskProgress['phase']> = new Set(['saving']);
+
+function taskFileOf(id: string): string {
+  return join(llmTasksDir(), `${id}.json`);
 }
+
+/**
+ * 任务文件写队列（per-task 串行，M2 Task 3.3）：终态写 / 进度节流写 / cancel 置位 /
+ * failed 兜底写全部「读磁盘合并 → 写」原子排队——并发 RMW 互相覆盖（丢 cancelRequested）
+ * 的根治。单进程设计下队列即全量写方；排队各自合并磁盘最新态，字段保全由合并保证。
+ */
+const taskWriteQueues = new Map<string, Promise<unknown>>();
+
+export function enqueueTaskWrite<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const prev = taskWriteQueues.get(id) ?? Promise.resolve();
+  const next = prev.then(fn, fn); // 前序失败不阻塞后继（各写方自带合并与容错）
+  taskWriteQueues.set(id, next.then(() => undefined, () => undefined));
+  return next;
+}
+
+/**
+ * isCancelled：每次调用重读任务文件（文件缺失/损坏 → false——让链自然结束于终态写，
+ * 不因文件瞬断误判取消）。
+ */
+function makeCancelChecker(id: string): () => boolean {
+  const file = taskFileOf(id);
+  return () => {
+    try {
+      return (JSON.parse(readFileSync(file, 'utf8')) as { cancelRequested?: boolean }).cancelRequested === true;
+    } catch {
+      return false;
+    }
+  };
+}
+
+/**
+ * novel-chapter 后台执行（Task 3.3 实装）：
+ * acquireNovelSlot → orchestrateNovelChapters（进度 1s 节流落盘 + 取消标志重读）→ 终态写
+ * （done: resultMessages/resultMessageIds；failed: error 含失败原因，作品已删除区分——D6）。
+ * finally releaseNovelSlot。终态/进度写一律合并磁盘最新态（...(disk ?? task) 打底），
+ * 绝不回滚执行期间并发落盘的其他字段（典型：cancel 置位的 cancelRequested）。
+ */
+export async function executeNovelChapter(task: TaskFile): Promise<void> {
+  if (!task.workId) throw new Error('novel-chapter 任务缺少 workId');
+  await acquireNovelSlot(); // 全局并发编排器（D7）：默认并发 2（NOVEL_GEN_PARALLEL 可调），FIFO 排队
+  const t0 = Date.now();
+  const file = taskFileOf(task.id);
+  try {
+    // 进度节流器（1s）：强制相位（saving）即刻落盘，其余按间隔合并磁盘态写。
+    // 全部经 enqueueTaskWrite 串行——节流写与 cancel 置位/终态写互不覆盖。
+    let lastWrite = 0;
+    const onProgress = (p: TaskProgress): void => {
+      const now = Date.now();
+      if (!FORCED_PHASES.has(p.phase) && now - lastWrite < PROGRESS_THROTTLE_MS) return;
+      lastWrite = now;
+      void enqueueTaskWrite(task.id, async () => {
+        const disk = await readJson<TaskFile>(file).catch(() => null);
+        await writeJsonAtomicRetry(file, {
+          ...(disk ?? task),
+          status: 'running',
+          progress: { ...p, updatedAt: Date.now() },
+        } satisfies TaskFile);
+      }).catch(() => undefined); // 进度落盘失败不阻塞生成链（下次上报自然重试）
+    };
+    const result = await orchestrateNovelChapters({
+      workId: task.workId,
+      prefs: task.prefs ?? { source: 'openai', model: '' },
+      mode: task.mode ?? 'chapter',
+      directive: task.directive ?? '',
+      chapters: task.chapters ?? 1,
+      outline: task.outline ?? false,
+      ...(task.targetId ? { targetId: task.targetId } : {}),
+      ...(task.partial ? { partial: task.partial } : {}),
+      isCancelled: makeCancelChecker(task.id),
+      onProgress,
+    });
+    await enqueueTaskWrite(task.id, async () => {
+      const disk = await readJson<TaskFile>(file).catch(() => null);
+      await writeJsonAtomicRetry(file, {
+        ...(disk ?? task),
+        status: result.failed ? 'failed' : 'done',
+        ...(result.failed ? { error: result.failed } : {}),
+        elapsedMs: Date.now() - t0,
+        resultMessages: result.done, // 终态：本次任务入库章数（取消/部分完成如实计数——D6）
+        resultMessageIds: result.messageIds, // 终态：入库消息 id 列表（客户端同步本地视图唯一依据）
+        progress: undefined, // 终态清执行期增量
+        messages: undefined,
+        params: undefined,
+      } satisfies TaskFile);
+    });
+  } finally {
+    releaseNovelSlot();
+  }
+}
+
+/** 编排入参类型公开面（测试/上层复用） */
+export type { OrchestrateInput };

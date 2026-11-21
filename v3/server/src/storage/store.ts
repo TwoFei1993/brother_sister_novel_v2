@@ -52,3 +52,21 @@ export async function writeJsonAtomic<T>(file: string, data: T): Promise<void> {
 export async function deleteFile(file: string): Promise<void> {
   await unlink(file).catch(() => undefined);
 }
+
+/**
+ * writeJsonAtomic 的 Windows 加固：EPERM/EBUSY（读者占用 + rename 撞车）重试 3 次。
+ * 自 routes/llm/tasksExecute.ts 下沉为存储原语（M2 Task 3.3：novel-chapter runner 的
+ * 进度节流写与旧 llm 任务终态写共用同一实现）。
+ */
+export async function writeJsonAtomicRetry(file: string, data: unknown): Promise<void> {
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      await writeJsonAtomic(file, data);
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (!/EPERM|EBUSY/.test(msg) || i === 2) throw err;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+}

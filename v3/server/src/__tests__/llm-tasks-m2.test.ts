@@ -17,6 +17,8 @@ import { llmTasksDir } from '../routes/llm/tasksNovel';
 import { readJson, writeJsonAtomic } from '../storage/store';
 import { authRequired, signToken } from '../middleware/auth';
 import { HttpError } from '../middleware/validate';
+import { defaultNovelSettings, type Work } from '@shared/work';
+import { worksDir } from '../routes/works/works';
 
 process.env.ACCESS_PASSWORD = 'test123';
 
@@ -79,6 +81,61 @@ function mockUpstream(text: string): void {
   );
 }
 
+/**
+ * 挂起式上游 mock（runner 实装后，novel-chapter 互斥/取消用例用它锁定 running 窗口——
+ * 释放前上游不返回，任务停在执行期）。fixture 书（tw=2000 → 单段单调用）配对使用。
+ */
+function mockHoldUpstream(text = '挂起上游恢复后的章节正文。'): { release: () => void } {
+  let hold = true;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation(async () => {
+      while (hold) await new Promise((r) => setTimeout(r, 20));
+      const frames = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ];
+      const stream = new ReadableStream({
+        start(controller) {
+          for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+          controller.close();
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    }),
+  );
+  return {
+    release: () => {
+      hold = false;
+    },
+  };
+}
+
+/** fixture 书（novel-chapter 真实执行链需要 work.json + messages.jsonl；Task 3.3 起 runner 实装） */
+async function seedWork(workId: string): Promise<void> {
+  const work = {
+    id: workId,
+    revision: 1,
+    title: 'm2 协议测试书',
+    mode: 'novel',
+    genre: '兄妹',
+    characterIds: [],
+    worldbookIds: [],
+    factionIds: [],
+    itemIds: [],
+    presetId: '',
+    regexScriptIds: [],
+    settings: { ...defaultNovelSettings, targetChapterWords: 2000 },
+    voiceMap: {},
+    stats: { messageCount: 0, chapterCount: 0, charCount: 0 },
+    createdAt: 1,
+    updatedAt: 1,
+  } as unknown as Work;
+  await writeJsonAtomic(join(worksDir(), workId, 'work.json'), work);
+  await writeFile(join(worksDir(), workId, 'messages.jsonl'), '', 'utf8');
+}
+
 /** 任务落盘目录（与生产同源：tasksNovel.llmTasksDir 实时读 env DATA_DIR） */
 function tasksDir(): string {
   return llmTasksDir();
@@ -108,20 +165,19 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'v3-llm-tasks-m2-'));
   process.env.DATA_DIR = root;
   process.env.OPENAI_API_KEY = 'mock-key';
-  // 占位执行延迟：给互斥/取消用例留 pending 窗口（1.2s 消 CI 慢机 flaky；Task 3.3 实装后随占位移除）
-  process.env.LLM_TASK_NOVEL_DELAY_MS = '1200';
   await writeFile(join(root, 'secrets.json'), JSON.stringify({ openai: { apiKey: 'mock-key' } }), 'utf8');
 });
 
 afterEach(async () => {
   vi.unstubAllGlobals();
-  delete process.env.LLM_TASK_NOVEL_DELAY_MS;
   delete process.env.LLM_TASK_RETRY_DELAYS_MS;
   await rm(root, { recursive: true, force: true });
 });
 
 describe('novel-chapter 提交（schema union）', () => {
   it('提交 202，落盘文件含 kind/workId/prefs（mode/chapters default 生效）', async () => {
+    await seedWork('w-seed');
+    const hold = mockHoldUpstream(); // 锁定执行期窗口，落盘字段读取不受 runner 完成竞态影响
     const app = testApp();
     const sub = await authed(app).post('/api/llm/tasks').send(novelBody('w-seed', { chapters: 3 }));
     expect(sub.status).toBe(202);
@@ -134,7 +190,12 @@ describe('novel-chapter 提交（schema union）', () => {
     expect(file?.prefs).toEqual({ source: 'openai', model: 'm3' });
     expect(file?.mode).toBe('chapter');
     expect(file?.chapters).toBe(3);
-    expect(file?.status).toBe('pending');
+    expect(['pending', 'running']).toContain(file?.status); // 提交落盘 pending，runner 首个进度写切 running
+
+    hold.release();
+    const final = await waitFinished(authed(app), sub.body.taskId);
+    expect(final.status).toBe('done'); // runner 实装：3 章真实执行完成
+    expect(final.resultMessages).toBe(3);
   });
 
   it('缺 prefs → 400（prefs 必填不 default）', async () => {
@@ -148,6 +209,8 @@ describe('novel-chapter 提交（schema union）', () => {
 
 describe('同书互斥（权威层扫描）', () => {
   it('同书并发第二提交 → 409 GEN_BUSY', async () => {
+    await seedWork('w-busy');
+    const hold = mockHoldUpstream(); // 第一个任务停在执行期（文件保持 pending/running）
     const app = testApp();
     const a = authed(app);
     const first = await a.post('/api/llm/tasks').send(novelBody('w-busy'));
@@ -156,9 +219,13 @@ describe('同书互斥（权威层扫描）', () => {
     expect(second.status).toBe(409);
     expect(second.body.code).toBe('GEN_BUSY');
     expect(second.body.message).toBe('该书已有生成任务进行中');
+    hold.release();
+    await waitFinished(a, first.body.taskId); // 清理：放行至终态
   });
 
   it('cancel 置位后同书再提交仍 409（取消中任务占坑，防双任务竞态）', async () => {
+    await seedWork('w-cancel-busy');
+    const hold = mockHoldUpstream();
     const app = testApp();
     const a = authed(app);
     const first = await a.post('/api/llm/tasks').send(novelBody('w-cancel-busy'));
@@ -173,6 +240,9 @@ describe('同书互斥（权威层扫描）', () => {
     const second = await a.post('/api/llm/tasks').send(novelBody('w-cancel-busy'));
     expect(second.status).toBe(409);
     expect(second.body.code).toBe('GEN_BUSY');
+    hold.release();
+    const final = await waitFinished(a, first.body.taskId);
+    expect(final.status).toBe('done'); // 取消在段间生效：已产出即收束（D6）
   });
 
   it('不同书两个 novel-chapter 提交均成功（不互斥）', async () => {
@@ -225,6 +295,8 @@ describe('POST /:id/cancel', () => {
 
 describe('GET /active', () => {
   it('进行中任务入列（含 kind/workId/progressLen），终态后消失', async () => {
+    await seedWork('w-active');
+    const hold = mockHoldUpstream(); // 锁定执行期：active 列表读取不受完成竞态影响
     const app = testApp();
     const a = authed(app);
     const sub = await a.post('/api/llm/tasks').send(novelBody('w-active'));
@@ -236,11 +308,12 @@ describe('GET /active', () => {
     expect(mine).toBeTruthy();
     expect(mine?.kind).toBe('novel-chapter');
     expect(mine?.workId).toBe('w-active');
-    expect(mine?.progressLen).toBe(0);
+    expect(mine?.progressLen).toBe(0); // 首章仍在执行（上游挂起），text 尚无累计
     expect(mine?.done).toBe(0);
 
+    hold.release();
     const final = await waitFinished(a, sub.body.taskId);
-    expect(final.status).toBe('failed'); // 占位执行 throw → failed
+    expect(final.status).toBe('done'); // runner 实装：真实执行完成
     const after = await a.get('/api/llm/tasks/active');
     const ids = (after.body.tasks as Array<{ id: string }>).map((t) => t.id);
     expect(ids).not.toContain(sub.body.taskId);
@@ -379,17 +452,21 @@ describe('GET /:id 协议扩展', () => {
 });
 
 describe('并发写防线（终态/failed 落盘合并磁盘最新态）', () => {
-  it('novel 占位 failed 落盘不抹掉执行期间置位的 cancelRequested', async () => {
+  it('novel 执行期 cancel 后的终态写不抹掉 cancelRequested（progress 节流写同约束）', async () => {
+    await seedWork('w-merge-novel');
+    const hold = mockHoldUpstream();
     const app = testApp();
     const a = authed(app);
     const sub = await a.post('/api/llm/tasks').send(novelBody('w-merge-novel'));
     expect(sub.status).toBe(202);
     const cancel = await a.post(`/api/llm/tasks/${sub.body.taskId}/cancel`);
     expect(cancel.body.ok).toBe(true);
+    hold.release(); // 取消标志已落盘后再放行，runner 终态写必须保留它
     const final = await waitFinished(a, sub.body.taskId);
-    expect(final.status).toBe('failed');
+    expect(final.status).toBe('done'); // 取消非失败：已产出即收束（D6）
     const file = await readJson<Record<string, unknown>>(join(tasksDir(), `${sub.body.taskId}.json`));
-    expect(file?.cancelRequested).toBe(true); // failed 落盘合并 disk，取消标志保留
+    expect(file?.cancelRequested).toBe(true); // 终态落盘合并 disk，取消标志保留
+    expect(file?.progress).toBeUndefined(); // 终态清执行期增量
   });
 
   it('llm execute 终态写不抹掉执行期间置位的 cancelRequested', async () => {

@@ -13,7 +13,8 @@
  * - 提交：novel-chapter 先做同书互斥扫描（pending/running 含取消中 → 409 GEN_BUSY）；
  *   同步落盘 status:'pending'（提交参数一并落盘供后台执行读取）→ 后台执行更新终态
  * - 后台执行：kind 分流——llm 走 execute（stream:true 聚合全文，三级稳定性防线）；
- *   novel-chapter 走 executeNovelChapter（Task 3.3 实装，暂占位 throw → failed）
+ *   novel-chapter 走 executeNovelChapter（Task 3.3 实装：并发编排器 + orchestrateNovelChapters
+ *   全链编排 + 进度 1s 节流落盘）
  * - 查询：pending/running → running（带 ?since=N 时返回 progress 增量切片）；
  *   done → 返回文本（永久保留 draft 幂等 GET，附 resultMessages/resultMessageIds）；
  *   failed → 返回错误；文件缺失/损坏 → lost（前端提示重试）
@@ -26,10 +27,21 @@ import { Router } from 'express';
 import { z } from 'zod';
 
 import { zodBody } from '../../middleware/validate';
-import { readJson, writeJsonAtomic } from '../../storage/store';
+import { readJson, writeJsonAtomic, writeJsonAtomicRetry } from '../../storage/store';
 import { wrap } from '../works/works';
-import { execute, writeJsonAtomicRetry } from './tasksExecute';
-import { executeNovelChapter, llmTasksDir, novelChapterSchema, scanActiveTasks, sourceSchema } from './tasksNovel';
+import { execute } from './tasksExecute';
+import {
+  enqueueTaskWrite,
+  executeNovelChapter,
+  llmTasksDir,
+  novelChapterSchema,
+  scanActiveTasks,
+  sourceSchema,
+} from './tasksNovel';
+import type { TaskProgress } from '../../services/novel-gen/orchestrate';
+
+// 执行期增量进度类型由编排层定义（server 端 novel-gen 产出的负载形状）
+export type { TaskProgress };
 
 function taskFile(id: string): string {
   return join(llmTasksDir(), `${id}.json`);
@@ -47,16 +59,6 @@ const llmTaskSchema = z.object({
 });
 
 const createSchema = z.union([llmTaskSchema, novelChapterSchema]);
-
-/** 执行期增量进度（novel-chapter；换章重置 text；节流 1s 落盘——节流器 Task 3.3 接） */
-interface TaskProgress {
-  chapterIndex: number; // 当前章（1 起）
-  chapterTotal: number; // 任务总章数
-  phase: 'assembling' | 'generating' | 'continuing' | 'polishing' | 'saving';
-  text: string; // 当前章累计正文（换章重置）
-  done: number; // 已完成章数
-  updatedAt: number;
-}
 
 /**
  * 任务文件（纯文件状态机的持久化形状；全部向后兼容——旧字段不动，新字段全 optional）。
@@ -179,16 +181,19 @@ llmTasksRouter.post(
       body.kind === 'novel-chapter' ? executeNovelChapter(task) : execute(task, body.source, body.model);
     void run.catch(async (err) => {
       // 合并磁盘最新态再落 failed（与 execute 终态写同一硬约束）：不回滚执行期间
-      // 并发落盘的其他字段（如 cancelRequested）；progress 同步清（终态无执行期增量）
-      const disk = await readTaskFile(id);
-      await writeJsonAtomicRetry(taskFile(id), {
-        ...(disk ?? task),
-        status: 'failed',
-        error: err instanceof Error ? err.message : String(err),
-        messages: undefined,
-        params: undefined,
-        progress: undefined,
-      } satisfies TaskFile).catch(() => undefined);
+      // 并发落盘的其他字段（如 cancelRequested）；progress 同步清（终态无执行期增量）。
+      // 写经 enqueueTaskWrite 串行（per-task RMW 互不覆盖）
+      await enqueueTaskWrite(id, async () => {
+        const disk = await readTaskFile(id);
+        await writeJsonAtomicRetry(taskFile(id), {
+          ...(disk ?? task),
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+          messages: undefined,
+          params: undefined,
+          progress: undefined,
+        } satisfies TaskFile);
+      }).catch(() => undefined);
     });
     res.status(202).json({ taskId: id });
   }),
@@ -234,8 +239,9 @@ llmTasksRouter.post('/:id/cancel', wrap(async (req, res) => {
     res.json({ ok: false });
     return;
   }
-  // 只置标志不改状态：取消在段间/章间生效（当前段跑完即停），执行器读盘感知
-  await writeJsonAtomicRetry(taskFile(id), { ...task, cancelRequested: true });
+  // 只置标志不改状态：取消在段间/章间生效（当前段跑完即停），执行器读盘感知。
+  // 写经 enqueueTaskWrite 串行：不覆盖执行器并发落盘的 progress，也不被其覆盖
+  await enqueueTaskWrite(id, () => writeJsonAtomicRetry(taskFile(id), { ...task, cancelRequested: true }));
   res.json({ ok: true });
 }));
 
