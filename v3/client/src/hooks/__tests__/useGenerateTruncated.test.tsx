@@ -1,7 +1,9 @@
 /**
  * useGenerate 上下文截断提示测试（mock run 内核与管线层，与 useGenerate.test 的
  * fetch-stub 手法隔离——模块 mock 是文件级的，不能混入集成测试文件）
- * 覆盖：生成完成入库后 lastTruncated 记录组装期的 truncated；clearTruncated 复位
+ * 覆盖：生成完成入库后 lastTruncated 记录组装期的 truncated；clearTruncated 复位。
+ * M2 Chunk 4：generateChapter 已切 server 任务（组装截断在 server 侧，任务终态暂无此字段），
+ * lastTruncated 由仍走 client 组装链的入口记录——本测试以 continueFromPartial 驱动同一管线。
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -93,7 +95,7 @@ describe('useGenerate 上下文截断提示（usage.truncated 消费）', () => 
 
     let msg: unknown = null;
     await act(async () => {
-      msg = await latest!.generateChapter(workFixture, [], '指令');
+      msg = await latest!.continueFromPartial(workFixture, [], '断流半成品基底');
     });
     expect(msg).toEqual(expect.objectContaining({ id: 'm1' })); // finalize 成功入库
     expect(latest!.lastTruncated).toBe(true); // 组装期截断被记录

@@ -1,16 +1,19 @@
 /**
- * useGenerate 崩溃自动重试接线测试（harness 同 useGenerateBatch：fetch stub + Probe）
- * 覆盖：重复循环崩溃首次输出 → 自动携反重复后缀重试（后缀只进提示词）/
- *       重试有效则入库且 directive 元数据干净 / 两次均崩溃返回 null 零入库 / 有效输出单次调用。
- * 崩溃判定与阈值本体见 engine/prompt/novel/collapse-detect（另有单测）。
+ * useGenerate 崩溃重试测试（M2 Chunk 4 任务化迁移：mock 层从 SSE 流改为任务响应序列）。
+ *
+ * 原客户端「崩溃 → 反重复后缀重试 / 截断自动续写 / truncatedSwipeId 最后防线」编排已整体
+ * 上移 server orchestrate（判据与阈值本体见 engine/prompt/novel/collapse-detect 单测 +
+ * server 端 novel-gen 测试）。客户端锁定任务路径透传契约：
+ * - server 持久化消息原样返回（content/directive/extra.truncatedSwipeId 不被本地改写）
+ * - 增量回流打字机序列（progressText → buffer）
+ * - failed → null + 槽 fail；stop → cancel + partialKept（半成品供「继续」）
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
-import type { Work } from '@shared/work';
+import { aiVersion, type Message } from '@shared/message';
+import { defaultNovelSettings, type Work } from '@shared/work';
 
-import { defaultNovelSettings } from '@shared/work';
 import { getGenSlot, useGenerationStore } from '../../stores/generation';
 import { useSettingsStore } from '../../stores/settings';
 import { useWorkStore } from '../../stores/work';
@@ -19,69 +22,8 @@ import { useGenerate } from '../useGenerate';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function sseResponse(text: string, finish?: string): Response {
-  const encoder = new TextEncoder();
-  // server 显式 finish 字段透传（缺省 stop）；末尾必带 finish 帧——缺帧会触发字数兜底续写判据
-  const frame: Record<string, unknown> = { text, finish: finish ?? 'stop' };
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      controller.close();
-    },
-  });
-  return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-}
-
-const COLLAPSED = '正文。' + '刀——刀'.repeat(200); // 4-gram「刀——刀」×200 ≥100 → 崩溃
-const VALID = '第1章正文，足够长的一段叙述，含对话与场景，自然收束。';
-/** 句号完整收尾的半章（标点启发式不触发；只有 finish_reason='length' 能判出被腰斩） */
-const POLITE_HALF =
-  '清晨的阳光洒进窗台，主角推开房门走了出去，看到街上人来人往一切如常，他松了口气转身回了屋。';
-
-type GenReply = string | { text: string; finish?: string };
-let generateTexts: GenReply[] = [];
-let generateBodies: { messages: { content: string }[] }[] = [];
-let messageBodies: { id?: string; directive?: string; content: string }[] = [];
-
-function stubGenerateRoute(): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (path: string, init?: RequestInit) => {
-      if (path === '/api/llm/generate') {
-        generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
-        const item = generateTexts.shift();
-        const text = typeof item === 'string' ? item : (item?.text ?? VALID);
-        const finish = typeof item === 'string' ? undefined : item?.finish;
-        return sseResponse(text, finish);
-      }
-      if (path === '/api/tokenize') return new Response(JSON.stringify({ count: 10, approximate: false }), { status: 200 });
-      if (path === '/api/works/w1/messages') {
-        messageBodies.push(JSON.parse(String(init?.body)) as { id?: string; directive?: string; content: string });
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
-      // 其余（资产拉取等）由 loadAssembleAssets 逐项 catch 兜底
-      throw new Error(`unmocked fetch: ${path}`);
-    }),
-  );
-}
-
-const roots: Root[] = [];
-let latest: ReturnType<typeof useGenerate> | null = null;
-
-function Probe(): null {
-  latest = useGenerate();
-  return null;
-}
-
-async function renderHook(): Promise<void> {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  roots.push(root);
-  await act(async () => {
-    root.render(<Probe />);
-  });
+function jsonRes(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status });
 }
 
 function workFixture(): Work {
@@ -102,16 +44,93 @@ function workFixture(): Work {
   };
 }
 
+const DIRECTIVE = '兄妹进入城堡';
+
+/** server 持久化消息（含 truncatedSwipeId 版本级标记——server「最后防线」产物，客户端透传） */
+function persistedChapter(id: string, content: string, opts: { truncated?: boolean } = {}): Message {
+  return {
+    id,
+    role: 'assistant',
+    name: '小说家',
+    content,
+    createdAt: 1,
+    swipes: [aiVersion(content, 'v1', 1)],
+    swipeId: 0,
+    extra: opts.truncated ? { truncatedSwipeId: 0 } : {},
+    chapter: { index: 1, title: '第1章' },
+    directive: DIRECTIVE, // server 入库 directive 元数据保持干净原指令（重试后缀只进提示词）
+  };
+}
+
+// ---------- fetch stub（任务响应序列） ----------
+type FetchCall = { path: string; init: RequestInit };
+let calls: FetchCall[] = [];
+let pollScript: Array<Record<string, unknown>> = [];
+let pollIdx = 0;
+let storedMessages: Message[] = [];
+
+function stubTaskRoute(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (path: string, init?: RequestInit) => {
+      calls.push({ path, init: init ?? {} });
+      if (path === '/api/llm/tasks' && (init?.method ?? 'GET') === 'POST') {
+        return jsonRes({ taskId: 't1' }, 202);
+      }
+      if (path === '/api/llm/tasks/t1/cancel') return jsonRes({ ok: true });
+      if (path.startsWith('/api/llm/tasks/t1?since=') || path === '/api/llm/tasks/t1') {
+        const item = pollScript[Math.min(pollIdx, pollScript.length - 1)];
+        pollIdx += 1;
+        return jsonRes(item);
+      }
+      if (path.startsWith('/api/works/w1/messages?')) return jsonRes({ messages: storedMessages });
+      throw new Error(`unmocked fetch: ${path}`);
+    }),
+  );
+}
+
+async function drainPolls(ticks: number): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+  }
+}
+
+// ---------- hook harness ----------
+const roots: Root[] = [];
+let latest: ReturnType<typeof useGenerate> | null = null;
+
+function Probe(): null {
+  latest = useGenerate();
+  return null;
+}
+
+async function renderHook(): Promise<void> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => {
+    root.render(<Probe />);
+  });
+}
+
 beforeEach(() => {
-  generateTexts = [];
-  generateBodies = [];
-  messageBodies = [];
+  vi.useFakeTimers();
+  localStorage.clear();
+  calls = [];
+  pollScript = [];
+  pollIdx = 0;
+  storedMessages = [];
   useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
+  stubTaskRoute();
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   await act(async () => {
@@ -123,101 +142,99 @@ afterEach(async () => {
   useWorkStore.setState({ messages: [] });
 });
 
-const DIRECTIVE = '兄妹进入城堡';
-
-describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）', () => {
-  it('首次崩溃 → 自动重试携反重复后缀 → 重试有效：入库且 directive 元数据干净', async () => {
-    generateTexts = [COLLAPSED, VALID];
-    stubGenerateRoute();
+describe('useGenerate.generateChapter 任务路径透传（崩溃重试/截断续写已上移 server）', () => {
+  it('server 持久化消息原样返回：content/directive/truncatedSwipeId 不被本地改写，客户端零本地组装调用', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 4, progressText: '第一章', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'done', resultMessages: 1, resultMessageIds: ['m1'] },
+    ];
+    storedMessages = [persistedChapter('m1', '第一章正文，足够长。', { truncated: true })];
     await renderHook();
-    let msg: Message | null = null;
-    await act(async () => {
-      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+    let msg: Message | null | undefined;
+    act(() => {
+      void latest!.generateChapter(workFixture(), [], DIRECTIVE).then((r) => {
+        msg = r;
+      });
     });
-
-    expect(generateBodies).toHaveLength(2);
-    // 后缀只进提示词：第二次请求的末位 user 消息（输出守卫前）带反重复指令
-    const secondBody = JSON.stringify(generateBodies[1]);
-    expect(secondBody).toContain('机械重复');
-    expect(secondBody).toContain(DIRECTIVE);
-
-    // 入库的 directive 元数据保持干净（不含机器后缀）；同 id 两次 upsert=重试覆盖首次无效行
+    await drainPolls(2);
+    // 增量回流：progressText → buffer 打字机序列（视图复用）；终态收束后清空
     expect(msg).not.toBeNull();
-    expect(msg!.directive).toBe(DIRECTIVE);
-    expect(msg!.directive).not.toContain('机械重复');
-    expect(msg!.content).toBe(VALID);
-    expect(messageBodies).toHaveLength(2);
-    expect(messageBodies[0]!.id).toBe(messageBodies[1]!.id); // 同 messageId 幂等覆盖（重试带首次消息 id）
-    expect(messageBodies[1]!.directive).toBe(DIRECTIVE);
-    expect(messageBodies[1]!.content).toBe(VALID);
-    expect(getGenSlot('w1')?.error).toBeNull();
+    expect(msg!.content).toBe('第一章正文，足够长。');
+    expect(msg!.directive).toBe(DIRECTIVE); // 元数据干净（重试后缀只在 server 提示词层）
+    expect(msg!.extra.truncatedSwipeId).toBe(0); // server 截断标记透传，UI 据此显「未写完」
+    // 任务化后客户端不再发 SSE 流/本地组装：唯一写请求是任务提交
+    expect(calls.filter((c) => c.path === '/api/llm/generate')).toHaveLength(0);
+    expect(useWorkStore.getState().messages.map((m) => m.id)).toEqual(['m1']);
   });
 
-  it('两次均崩溃 → 链式补救救不回 → 不上架且三次落库同 id（无孤儿行）', async () => {
-    generateTexts = [COLLAPSED, COLLAPSED, VALID];
-    stubGenerateRoute();
+  it('增量回流打字机序列正确（progressText 逐拍 appendChunk，since 推进不重不漏）', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 5, progressText: '正文。', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'running', progressLen: 9, progressText: '加上结尾', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'done', resultMessages: 1, resultMessageIds: ['m1'] },
+    ];
+    storedMessages = [persistedChapter('m1', '正文。加上结尾')];
     await renderHook();
-    let msg: Message | null = null;
-    await act(async () => {
-      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+    let msg: Message | null | undefined;
+    act(() => {
+      void latest!.generateChapter(workFixture(), [], DIRECTIVE).then((r) => {
+        msg = r;
+      });
     });
-
-    // 链式补救：初稿崩溃 → 反重复后缀重试 → 仍崩 → 上游 finish=stop（正常结束）时不再
-    // 徒劳续写（续写只救「截断」不救「崩溃」，崩溃段续写后 isCollapsedText 仍命中）→
-    // 直接判死不上架（batch 以 null 终止），比旧链式少一次无效调用
-    expect(generateBodies).toHaveLength(2);
-    expect(msg).toBeNull();
-    // 两次 run 各幂等入库一次且同一消息 id（末次覆盖，不产生重复章节行）
-    expect(messageBodies).toHaveLength(2);
-    expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
-    expect(getGenSlot('w1')?.error).toBeNull();
+    await drainPolls(1);
+    expect(getGenSlot('w1')?.buffer).toBe('正文。');
+    await drainPolls(1);
+    expect(getGenSlot('w1')?.buffer).toBe('正文。加上结尾');
+    const sinces = calls
+      .filter((c) => c.path.startsWith('/api/llm/tasks/t1?since='))
+      .map((c) => Number(c.path.split('since=')[1]));
+    expect(sinces).toEqual([0, 5]); // since 严格按已回流长度推进——切片不重不漏
+    await drainPolls(1);
+    expect(msg).not.toBeNull();
+    expect(msg!.content).toBe('正文。加上结尾');
   });
 
-  it('首次即有效输出 → 单次调用，directive 干净', async () => {
-    generateTexts = [VALID];
-    stubGenerateRoute();
+  it('任务 failed（server 编排判死）→ 返回 null + 槽 fail 含失败原因，已入库章保留', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 4, progressText: '写到', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'failed', error: '第 1 章生成失败：重复循环', resultMessages: 0, resultMessageIds: [] },
+    ];
     await renderHook();
-    let msg: Message | null = null;
-    await act(async () => {
-      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+    let msg: Message | null | undefined;
+    act(() => {
+      void latest!.generateChapter(workFixture(), [], DIRECTIVE).then((r) => {
+        msg = r;
+      });
     });
-
-    expect(generateBodies).toHaveLength(1);
-    expect(generateBodies[0] ? JSON.stringify(generateBodies[0]) : '').not.toContain('机械重复');
-    expect(msg).not.toBeNull();
-    expect(msg!.directive).toBe(DIRECTIVE);
-    expect(messageBodies).toHaveLength(1);
+    await drainPolls(2);
+    expect(msg).toBeNull(); // 不上架
+    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'LLM_FAILED' });
+    expect(getGenSlot('w1')?.error?.message).toContain('重复循环');
   });
 
-  it('finish_reason=length 但句号收尾（启发式漏检形态）→ 决定性信号触发续写 → 拼接补完入库', async () => {
-    generateTexts = [{ text: POLITE_HALF, finish: 'length' }, { text: VALID, finish: 'stop' }];
-    stubGenerateRoute();
+  it('stop → POST cancel + 槽 fail(null, partialKept=true)：半成品保留供「继续」', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 4, progressText: '写到一半', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'done', resultMessages: 0, resultMessageIds: [] }, // 取消：当前段跑完即停，未入库（D6）
+    ];
     await renderHook();
-    let msg: Message | null = null;
-    await act(async () => {
-      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+    let msg: Message | null | undefined;
+    act(() => {
+      void latest!.generateChapter(workFixture(), [], DIRECTIVE).then((r) => {
+        msg = r;
+      });
     });
-
-    // 首段句号结尾 → isTruncatedText=false；finish='length' 为决定性截断信号 → 自动续写一轮
-    expect(generateBodies).toHaveLength(2);
-    expect(msg).not.toBeNull();
-    expect(msg!.content).toBe(POLITE_HALF + VALID); // 半章为基底拼接补完（同 id 覆盖入库）
-    expect(messageBodies).toHaveLength(2);
-    expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
-    expect(getGenSlot('w1')?.error).toBeNull();
-  });
-
-  it('finish_reason=stop 且标点完整 → 不触发续写（单次调用）', async () => {
-    generateTexts = [{ text: VALID, finish: 'stop' }];
-    stubGenerateRoute();
-    await renderHook();
-    let msg: Message | null = null;
+    await drainPolls(1);
     await act(async () => {
-      msg = await latest!.generateChapter(workFixture(), [], DIRECTIVE);
+      latest!.stop();
     });
-
-    expect(generateBodies).toHaveLength(1);
-    expect(msg).not.toBeNull();
-    expect(msg!.content).toBe(VALID);
+    expect(calls.some((c) => c.path === '/api/llm/tasks/t1/cancel')).toBe(true);
+    const slot = getGenSlot('w1')!;
+    expect(slot.error).toBeNull(); // 用户停止非错误
+    expect(slot.partialKept).toBe(true);
+    expect(slot.buffer).toBe('写到一半'); // 半成品保留在界面
+    await drainPolls(1);
+    expect(msg).toBeNull(); // 未入库：无消息返回
+    expect(useWorkStore.getState().messages).toHaveLength(0);
   });
 });

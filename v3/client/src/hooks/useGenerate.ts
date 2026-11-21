@@ -10,21 +10,21 @@
  * 流编排（重试/停止/事务 fail）统一走 generation-runtime 共享内核（与 chat 同构）。
  * 真实 UI 接线属 Task 20（WorkPage/CommandBar）。
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
-
-import { apiFetch } from '../api/client';
 
 import { buildGenerateBody, cachedOutputBudget, type GenerateBody } from '../api/llm';
 import { isCollapsedText } from '../engine/prompt/novel/collapse-detect';
 import { getGenSlot, selectStreamingWorkId, useGenSlot, useGenSlots, useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
 import { useWorkStore } from '../stores/work';
-import { consumeResult, peekResult, submitTask, taskPending, waitAndStore } from '../lib/llmTask';
+import { NOVEL_CHAPTERS_MAX, consumeResult, peekResult, submitTask, taskPending, waitAndStore } from '../lib/llmTask';
+import { notifyDone, showToast } from '../lib/toast';
 
 import {
   MAX_SWIPES,
+  OUTLINE_DIRECTIVE,
   buildContinueDirective,
   toGenerationError,
   calcOutputBudget,
@@ -33,13 +33,15 @@ import {
   isReplayedContinuation,
   looksTruncated,
   nextChapterIndex,
+  outlineRunPlan,
+  remainingChapters,
   swipeLimitError,
   withPartialInHistory,
   type BatchProgress,
 } from './generation-flow';
 import { COLLAPSE_RETRY_SUFFIX, MAX_TRUNCATE_ROUNDS, META_RETRY_SUFFIX } from '@shared/hooks/novel-constants';
-import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { persistMessage } from './generation-pipeline';
+import { useNovelTask } from './useNovelTask';
 import { runGenerationStream } from './generation-runtime';
 import { META_ONLY_PLACEHOLDER, parseChapterTitle } from '../engine/prompt/postprocess';
 import { SEGMENT_WORDS, type SegmentInfo } from '../engine/prompt/novel/requirements';
@@ -211,19 +213,13 @@ export interface UseGenerateResult {
  */
 export function useGenerate(workId?: string | null): UseGenerateResult {
   const abortRef = useRef<AbortController | null>(null);
-  // 连写循环取消标志：stop() 置位（顶栏 + CommandBar 双入口收敛此处），循环轮末检查退出
-  const batchCancelRef = useRef(false);
+  // novel-chapter 后台任务编排（M2 Chunk 4：generateChapter/runBatch/runByOutline 走任务；
+  // 挂载恢复轮询、stop 取消都收敛在此）。swipe/extend/continue 仍走 client SSE 链（Chunk 5 切）。
+  const novel = useNovelTask(workId);
   // 上下文截断提示（store 收束即清零，generationStore 不留痕，挂 hook 本地态最小改动）
   const [lastTruncated, setLastTruncated] = useState(false);
   const [batch, setBatch] = useState<BatchProgress | null>(null);
   const clearTruncated = useCallback(() => setLastTruncated(false), []);
-
-  // 卸载即取消连写（离开作品页不再续写后续章；已入库章节保留）
-  useEffect(() => {
-    return () => {
-      batchCancelRef.current = true;
-    };
-  }, []);
 
   const run = useCallback(
     (work: Work, messages: Message[], directive: string, opts: RunOptions): Promise<Message | null> =>
@@ -350,185 +346,19 @@ export function useGenerate(workId?: string | null): UseGenerateResult {
     return msg;
   };
 
-  /** 流中断自动恢复：run 返回 null（网络/上游错误中断，非用户停止）且已有部分内容时，
-   *  以缓冲区半成品为基底自动续写一轮——此前中断即整体丢弃出库，几千字白写（根因③）。
-   *  同样走续写轮语义：半章进历史 grounding + continuation 要求块（防重开）。 */
-  const rescueFromStreamBreak = async (
-    work: Work,
-    messages: Message[],
-    directive: string,
-    targetId: string,
-  ): Promise<Message | null> => {
-    const st = getGenSlot(work.id);
-    if (!st || st.error === null || !st.partialKept || st.buffer.trim().length < 200) return null; // 用户停止/无实质内容 → 不救
-    return run(work, withPartialInHistory(messages, st.buffer), buildContinueDirective(st.buffer), {
-      targetId,
-      initialBuffer: st.buffer,
-      promptDirective: directive,
-      maxTokensScale: 2,
-      continuation: true,
-    });
-  };
-
+  /**
+   * 章节生成（2026-11-21 M2 Chunk 4 切换 server novel-chapter 任务）：
+   * 分段/无效输出重试/截断自动续写/润色 pass/truncatedSwipeId 标记全部在 server 编排
+   * （与 client 旧链逐点对齐移植，见 services/novel-gen）；客户端提交任务 + 增量回流
+   * （progressText → appendChunk 打字机视图）+ 终态按 resultMessageIds 同步本地视图。
+   * swipe/extend/continue 仍走 client SSE 链（Chunk 5 切换），槽位级防重入互不阻塞。
+   */
   const generateChapter = useCallback(
-    async (work: Work, messages: Message[], directive: string) => {
-      // 重试复用同一 targetId：入库按 messageId 幂等 upsert，重试结果覆盖首次无效行
-      //（否则首次残章/崩溃行以孤儿形式留在库里，重载后出现垃圾章节）
-      const targetId = uuid();
-      const tw = work.settings.targetChapterWords ?? 3000;
-      // 长章主动分段（用户需求：单段 20 分钟太长、撞超时上限）——每段约 SEGMENT_WORDS 字，
-      // 段间以续写语义自动拼接（要求块按段改字数/停笔纪律）；每段独立请求：撞超时/断流只损当段，
-      // 已落库段落不丢（各段按 targetId 幂等覆盖累积）
-      const parts = Math.max(1, Math.ceil(tw / SEGMENT_WORDS));
-      const thinkingOn = useSettingsStore.getState().llmPrefs.thinking !== false;
-      const segmentBudget = calcOutputBudget(SEGMENT_WORDS + 600, thinkingOn, 1);
-      let msg: Message | null;
-      if (parts > 1) {
-        // 第 1 段：段级预算（写满即停，后续段自动续写）+ 分段要求块（非末段不收尾）
-        msg = await run(work, messages, directive, {
-          targetId,
-          initialBuffer: '',
-          segment: { part: 1, parts, words: SEGMENT_WORDS },
-          effMaxTokensOverride: segmentBudget,
-        });
-        if (msg === null) msg = await rescueFromStreamBreak(work, messages, directive, targetId);
-      } else {
-        msg = await run(work, messages, directive, { targetId, initialBuffer: '' });
-        if (msg === null) msg = await rescueFromStreamBreak(work, messages, directive, targetId);
-      }
-      const reason = invalidReasonOf(msg);
-      if (msg && reason) {
-        // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；落库按首次消息 id 幂等覆盖）。
-        // meta 的本质常是「思考吃满输出预算」——重试同时把预算提到 3 倍（封顶 64000），只换提示词注定再失败
-        msg = await run(work, messages, directive, {
-          targetId,
-          initialBuffer: '',
-          promptDirective: directive + RETRY_SUFFIX[reason],
-          persistMessageId: msg.id,
-          maxTokensScale: 3,
-          ...(parts > 1 ? { segment: { part: 1, parts, words: SEGMENT_WORDS } } : {}),
-        });
-      }
-      if (parts > 1) {
-        // 第 2..parts 段：续写语义（无缝续写要求块 + 半章进历史 grounding），
-        // finish=stop 尊重模型提前收束；重放/重开检测与元数据还原同 continueTruncated
-        for (let part = 2; part <= parts && msg; part += 1) {
-          const finish = getGenSlot(work.id)?.finishReason ?? null;
-          if (finish === 'stop') break; // 模型自然收束 → 分段链提前完成
-          const prev = msg;
-          const partial = msg.content;
-          const next = await run(work, withPartialInHistory(messages, partial), buildContinueDirective(partial), {
-            targetId,
-            initialBuffer: partial,
-            promptDirective: directive,
-            persistMessageId: prev.id, // 当前累积行 id（run1 由 finalize 生成 uuid）
-            continuation: true,
-            segment: { part, parts, words: SEGMENT_WORDS },
-            effMaxTokensOverride: segmentBudget,
-            maxTokensScale: 1,
-          });
-          if (next && isReplayedContinuation(partial, next.content)) {
-            const rolled = { ...next, content: partial, directive: prev.directive };
-            if (prev.chapter) rolled.chapter = { ...prev.chapter };
-            await persistMessage(work.id, rolled);
-            msg = rolled;
-            break;
-          }
-          const added = next && next.content.length > partial.length ? next.content.slice(partial.length) : '';
-          if (next && added.trim().length >= 8 && isChapterRestart(added)) {
-            const parsed = parseChapterTitle(added.trim(), undefined, prev.chapter?.index ?? 0);
-            const cleanTitle = parsed.title && !/^第\d+章$/.test(parsed.title) ? parsed.title : (prev.chapter?.title ?? '');
-            const rolled: Message = {
-              ...next,
-              content: parsed.content,
-              directive: prev.directive,
-              swipes: next.swipes.map((v, i) => (i === next.swipeId ? { ...v, content: parsed.content } : v)),
-              ...(prev.chapter ? { chapter: { ...prev.chapter, title: cleanTitle } } : {}),
-            };
-            await persistMessage(work.id, rolled);
-            msg = rolled;
-            break;
-          }
-          msg = next
-            ? { ...next, directive: prev.directive, ...(prev.chapter ? { chapter: { ...prev.chapter } } : {}) }
-            : next;
-        }
-      } else {
-        // 截断自动续写（补完结果同 id 幂等覆盖；腰斩常因思考挤占预算——续写轮抬预算 2 倍）。
-        // 传 tw/原章标题：续写轮按「补完剩余字数后收束」改写字数行（防章节越来越长，生产实测）
-        const baseId = msg?.id ?? targetId;
-        const keepTitle = msg?.chapter?.title;
-        msg = await continueTruncated(work, messages, directive, msg, tw, (partial) => ({
-          targetId,
-          initialBuffer: partial,
-          promptDirective: directive,
-          persistMessageId: baseId,
-          keepTitle,
-          continueRemaining: Math.max(400, tw - partial.length),
-          maxTokensScale: 2,
-        }));
-      }
-      // 润色模型 pass（P2-2）：设置 polishModel 后用第二模型对全文润色（保持情节/事实/字数），
-      // 同 id 幂等覆盖落库行；润色失败静默保留原稿（正文本身已可用）。
-      // 仅对有效产出润色——meta 占位/崩溃循环稿润色无意义，白烧一次调用（巡检修复）
-      const polishModel = useSettingsStore.getState().llmPrefs.polishModel;
-      const polishable = msg !== null && invalidReasonOf(msg) === null && Boolean(polishModel);
-      if (polishable) {
-        try {
-          const res = await apiFetch<{ text?: string }>('/api/llm/generate', {
-            method: 'POST',
-            body: JSON.stringify({
-              source: useSettingsStore.getState().llmPrefs.source,
-              model: polishModel,
-              stream: false,
-              params: { temperature: 0.6 },
-              messages: [
-                {
-                  role: 'system',
-                  content:
-                    '你是资深小说编辑。对下面的章节全文做语言润色：保持全部情节、对话与事实，字数变化不超过 10%；' +
-                    '提升语言质感、消除重复与平庸表达；不改变人称与叙事结构。只输出润色后的正文本身，禁止任何解释或元信息。',
-                },
-                { role: 'user', content: msg!.content },
-              ],
-            }),
-          });
-          const polished = res.text?.trim();
-          if (polished && msg) {
-            // 润色稿写回激活版本（新消息仅一支候选，等价旧 [polished] 重置语义）
-            const activeId = msg.swipeId;
-            msg = {
-              ...msg,
-              content: polished,
-              swipes: msg.swipes.map((v, i) => (i === activeId ? { ...v, content: polished } : v)),
-            };
-            await persistMessage(work.id, msg); // 同 id 幂等覆盖：落库行更新为润色稿
-          }
-        } catch {
-          // 润色失败保留原稿（静默——正文本身已可用）
-        }
-      }
-      // 最后防线（巡检修复：必须对有效产出标记，且在润色之后——润色生成新版本时标记跟随最终版本；
-      // meta 占位/崩溃循环稿不标：它们有自己的占位/重试语义，且 swipe 场景占位已 append 进 swipes，
-      // 误标会指向崩溃候选）。入库 extra.truncatedSwipeId（版本级标记，UI 必显「未写完」提示——
-      // 不依赖启发式，截断恰好落在句号边界时 isTruncatedText 漏检，此类残章此前无声入库）
-      if (msg && invalidReasonOf(msg) === null) {
-        const finish = getGenSlot(work.id)?.finishReason ?? null;
-        const tw = work.settings.targetChapterWords ?? 3000;
-        if (looksTruncated(finish, msg.content, tw)) {
-          msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipeId } };
-          try {
-            await persistMessage(work.id, msg);
-          } catch {
-            /* 标记落库失败不阻塞返回 */
-          }
-        }
-      }
-      // 重试一次后仍无效（或本次即失败）：返回 null——调用方不上架（batch 以 null 终止）；
-      // 库中该 id 行已被末次输出覆盖，不产生重复章节行
-      return invalidReasonOf(msg) ? null : msg;
+    async (work: Work, _messages: Message[], directive: string) => {
+      const outcome = await novel.submitAndWait({ work, mode: 'chapter', directive, chapters: 1 });
+      return outcome.messages.at(-1) ?? null;
     },
-    [run],
+    [novel],
   );
 
   const continueFromPartial = useCallback(
@@ -866,24 +696,90 @@ export function useGenerate(workId?: string | null): UseGenerateResult {
   );
 
   const stop = useCallback(() => {
-    batchCancelRef.current = true; // 连写循环下一轮检查后退出
-    abortRef.current?.abort();
-  }, []);
+    abortRef.current?.abort(); // SSE 链（swipe/extend/continue）停止
+    novel.stop(); // novel-chapter 任务：POST cancel + 槽 fail(null, partialKept)（D6：当前段跑完即停，已入库保留）
+  }, [novel]);
 
-  /** 一键连写：从下一章自动写到目标章节数（循环编排在 generation-batch.runChunkLoop） */
+  /**
+   * 一键连写（M2 Chunk 4 切任务）：提交 chapters=剩余章数（≤NOVEL_CHAPTERS_MAX，server 端
+   * 按 BATCH_CHUNK_SIZE 批次屏障分批——长批次质量防线在 server 保留）→ 轮询 done 计数驱动
+   * setBatch 进度 → 终态按 resultMessageIds 同步本地视图 + 汇总 toast（文案沿用旧循环语义）。
+   */
   const runBatch = useCallback(
-    (work: Work, firstDirective: string): Promise<void> =>
-      runChunkLoop(work, firstDirective, generateChapter, batchCancelRef, setBatch),
-    [generateChapter],
+    async (work: Work, firstDirective: string): Promise<void> => {
+      const total = work.settings.desiredChapterCount;
+      const current = useWorkStore.getState().messages;
+      const remaining = remainingChapters(current, total);
+      if (remaining <= 0) return; // 已达目标：零请求
+      if (getGenSlot(work.id)?.streaming) return; // 防重入（本书生成中不可发起连写）
+      const baseIndex = nextChapterIndex(current) - 1;
+      const chapters = Math.min(remaining, NOVEL_CHAPTERS_MAX);
+      setBatch({ done: baseIndex, total, mode: 'chunk' });
+      try {
+        const outcome = await novel.submitAndWait({
+          work,
+          mode: 'chapter',
+          directive: firstDirective,
+          chapters,
+          onProgress: (p) => setBatch({ done: baseIndex + p.done, total, mode: 'chunk' }),
+        });
+        const completed = outcome.messages
+          .map((m) => m.chapter?.index ?? 0)
+          .filter((n) => n > 0)
+          .sort((a, b) => a - b);
+        if (completed.length === 0) return; // 全部失败：error 已进槽提示，无汇总
+        const left = remainingChapters(useWorkStore.getState().messages, total);
+        if (outcome.stopped) {
+          showToast(`⏹ 连写已停止——本次完成 ${completed.length} 章（第${completed.join('、第')}章），点「继续」可接着写`, { duration: 6000 });
+        } else if (left > 0) {
+          showToast(`本批 ${completed.length} 章完成（第${completed.join('、第')}章）——还剩 ${left} 章，再点「一键连写」继续`, { duration: 6000 });
+        } else {
+          notifyDone(`🎉 全书连写完成！目标 ${total} 章全部到位`, { duration: 6000 });
+        }
+      } finally {
+        setBatch(null);
+      }
+    },
+    [novel],
   );
 
-  /** 📖按大纲生成（反馈⑤）：从下一章起按 chapterOutlines 逐章写到覆盖的最大章号
-   *  （循环编排在 generation-batch.runOutlineLoop；每章 directive 固定「按本章大纲写」，
-   *  本章要点由 scanAndAssemble 按章号自动注入）。limit：本次最多写几章（用户可选「先写 N 章」） */
+  /**
+   * 📖按大纲生成（反馈⑤，M2 Chunk 4 切任务）：提交 chapters=大纲剩余覆盖章数（outline=true
+   * 走 server 大纲链，本章要点由 server 组装按章号自动注入）→ 轮询进度驱动 setBatch →
+   * 终态同步 + 汇总 toast（文案沿用旧循环语义）。limit：本次最多写几章（用户可选「先写 N 章」）。
+   */
   const runByOutline = useCallback(
-    (work: Work, messages: Message[], limit?: number): Promise<void> =>
-      runOutlineLoop(work, messages, generateChapter, batchCancelRef, setBatch, limit),
-    [generateChapter],
+    async (work: Work, messages: Message[], limit?: number): Promise<void> => {
+      const plan = outlineRunPlan(messages, work.settings.chapterOutlines);
+      if (!plan) return; // 无大纲/已覆盖完：按钮不应出现，防御兜底
+      if (getGenSlot(work.id)?.streaming) return; // 防重入
+      const chapters = Math.min(limit && limit > 0 ? Math.min(plan.total, limit) : plan.total, NOVEL_CHAPTERS_MAX);
+      setBatch({ done: 0, total: chapters, mode: 'outline' });
+      try {
+        const outcome = await novel.submitAndWait({
+          work,
+          mode: 'chapter',
+          directive: OUTLINE_DIRECTIVE,
+          chapters,
+          outline: true,
+          onProgress: (p) => setBatch({ done: p.done, total: chapters, mode: 'outline' }),
+        });
+        const completed = outcome.messages
+          .map((m) => m.chapter?.index ?? 0)
+          .filter((n) => n > 0)
+          .sort((a, b) => a - b);
+        if (completed.length === 0) return;
+        const left = outlineRunPlan(useWorkStore.getState().messages, work.settings.chapterOutlines);
+        if (left && left.total > 0) {
+          showToast(`本批按大纲完成 ${completed.length} 章（第${completed.join('、第')}章）——大纲还剩 ${left.total} 章`, { duration: 6000 });
+        } else {
+          notifyDone(`🎉 按大纲生成全部完成（${completed.length} 章）！`, { duration: 6000 });
+        }
+      } finally {
+        setBatch(null);
+      }
+    },
+    [novel],
   );
 
   const clearError = useCallback(() => {

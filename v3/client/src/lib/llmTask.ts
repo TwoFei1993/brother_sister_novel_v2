@@ -10,7 +10,11 @@
  *   await waitAndStore(slot, onElapsed?)      轮询至完成，结果写 localStorage 并返回
  *   consumeResult(slot)                       消费结果（读+清），无则 null
  *   resumeIfPending(slot)                     mount/visibilitychange：有 pending → 重启轮询
+ *
+ * novel-chapter 任务（2026-11-21 M2 Chunk 4：书页章节生成走 server 后台任务）见文件后半——
+ * 提交/增量轮询/终态取回/取消，回流编排（appendChunk/终态同步）在 hooks/useNovelTask.ts。
  */
+import { apiFetch } from '../api/client';
 
 const CFG = {
   taskKey: (slot: string): string => `v3-bg-task-${slot}`,
@@ -127,5 +131,93 @@ export function resumeIfPending(slot: string, onElapsed?: (sec: number) => void)
   if (!taskPending(slot) || peekResult(slot) !== null) return;
   void waitAndStore(slot, onElapsed).catch(() => {
     clearPending(slot); // 轮询链错误终态——清标记允许重新提交
+  });
+}
+
+// ---------- novel-chapter 任务（M2 Chunk 4：书页章节生成走 server 后台任务） ----------
+
+/** 单次任务章数上限（与 server novelChapterSchema chapters.max 同步，双侧同改） */
+export const NOVEL_CHAPTERS_MAX = 50;
+
+/** 章节生成参数（非敏感字段；与 server prefsSchema 一一对应，漏传 repetitionPenalty 会漂移 server 生成行为） */
+export interface NovelTaskPrefs {
+  source: 'openai' | 'claude' | 'gemini';
+  model: string;
+  temperature?: number;
+  maxContext?: number;
+  maxTokens?: number;
+  thinking?: boolean;
+  polishModel?: string;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
+}
+
+/** novel-chapter 提交体（server routes/llm/tasks.ts novelChapterSchema 的客户端镜像） */
+export interface NovelChapterSubmitBody {
+  kind: 'novel-chapter';
+  workId: string;
+  prefs: NovelTaskPrefs;
+  mode: 'chapter' | 'swipe' | 'continue' | 'append' | 'expand';
+  directive: string;
+  chapters: number;
+  outline?: boolean;
+  targetId?: string;
+  partial?: string;
+}
+
+/** 执行期增量（GET ?since=N 的 running 响应；progressText=当前章全文 slice(since)） */
+export interface NovelTaskProgressPayload {
+  status: 'running';
+  progressLen: number;
+  progressText: string;
+  done: number;
+  chapterTotal: number;
+  phase: 'assembling' | 'generating' | 'continuing' | 'polishing' | 'saving';
+  chapterIndex: number;
+}
+
+/** 终态（done/failed/lost/expired；failed 也带 resultMessageIds=已完成章的入库 id） */
+export interface NovelTaskTerminalPayload {
+  status: 'done' | 'failed' | 'lost' | 'expired';
+  error?: string;
+  resultMessages?: number;
+  resultMessageIds?: string[];
+}
+
+export type NovelTaskPoll = NovelTaskProgressPayload | NovelTaskTerminalPayload;
+
+/**
+ * 提交 novel-chapter 任务（POST /api/llm/tasks → 202 {taskId}）。
+ * 同书互斥命中 → 409 GEN_BUSY：apiFetch 抛 ApiError{status:409, code:'conflict'}，
+ * 调用方（useNovelTask）据 status 转槽 fail「该书已有生成任务进行中」。
+ */
+export async function submitNovelChapter(body: NovelChapterSubmitBody): Promise<string> {
+  const r = await apiFetch<{ taskId: string }>('/api/llm/tasks', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!r.taskId) throw new Error('任务提交响应缺少 taskId'); // 防御：缺失时按提交失败处理，不进轮询
+  return r.taskId;
+}
+
+/** 单次增量轮询（GET /api/llm/tasks/:id?since=N）：running 带增量切片；终态带 resultMessageIds。
+ *  网络/服务抖动（非 2xx）抛错——轮询方静默重试下一拍。 */
+export async function pollNovelProgress(taskId: string, since: number): Promise<NovelTaskPoll> {
+  const j = await fetchJson(`/api/llm/tasks/${taskId}?since=${since}`);
+  return j as unknown as NovelTaskPoll;
+}
+
+/** 终态取回（无 since 的幂等 GET）：done/failed 的 resultMessageIds（结果永久保留可复查） */
+export async function fetchTaskResult(taskId: string): Promise<NovelTaskTerminalPayload> {
+  const j = await fetchJson(`/api/llm/tasks/${taskId}`);
+  return j as unknown as NovelTaskTerminalPayload;
+}
+
+/** 取消（POST /:id/cancel）：段间/章间生效——当前段跑完即停（D6），已入库章保留 */
+export async function cancelTask(taskId: string): Promise<void> {
+  await fetch(`/api/llm/tasks/${taskId}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
   });
 }

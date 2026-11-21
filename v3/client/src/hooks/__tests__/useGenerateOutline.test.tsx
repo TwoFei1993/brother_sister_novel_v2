@@ -1,12 +1,14 @@
 /**
- * useGenerate.runByOutline 按大纲生成集成测试（harness 同 useGenerateBatch：fetch stub + Probe）
- * 反馈⑤覆盖：从下一章逐章写到大纲覆盖的最大章号（区别于目标章节数）/ 每章自动注入本章大纲
- * 要点 / 续起点衔接 / 错误即停 / 大纲覆盖完零请求 / outlineRunPlan·batchProgressText 纯函数。
+ * useGenerate.runByOutline 按大纲生成集成测试（M2 Chunk 4 任务化迁移：mock 层改为任务响应
+ * 序列——提交 outline=true + chapters=大纲剩余覆盖章数 → 轮询 → 终态同步）。逐章大纲要点
+ * 注入断言随组装上移 server（server 端 orchestrate 测试覆盖）；客户端锁：提交契约
+ * （outline/chapters/directive）/ 终态同步 / failed / 覆盖完与无大纲零请求。
+ * outlineRunPlan·batchProgressText 纯函数测试保留。
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '@shared/message';
+import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
 import {
@@ -23,19 +25,8 @@ import { useGenerate } from '../useGenerate';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function sseResponse(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const c of chunks) controller.enqueue(encoder.encode(c));
-      controller.close();
-    },
-  });
-  return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-}
-
-function jsonRes(payload: unknown): Response {
-  return new Response(JSON.stringify(payload), { status: 200 });
+function jsonRes(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status });
 }
 
 const OUTLINES_1_3 = [
@@ -62,28 +53,64 @@ function workFixture(chapterOutlines: { index: number; title: string; plot: stri
   };
 }
 
-// ---------- fetch stub ----------
-let generateBodies: { messages: { content: string }[] }[] = [];
+// ---------- fetch stub（任务响应序列） ----------
+type FetchCall = { path: string; init: RequestInit };
+let calls: FetchCall[] = [];
+let pollScript: Array<Record<string, unknown>> = [];
+let pollIdx = 0;
+let storedMessages: Message[] = [];
 
-/** 常规 stub：每章流正常结束 */
-function stubOutlineRoute(): void {
+function stubTaskRoute(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (path: string, init?: RequestInit) => {
-      if (path === '/api/llm/generate') {
-        const body = JSON.parse(String(init?.body)) as { stream?: boolean };
-        if (body.stream === false) {
-          return new Response(JSON.stringify({ text: '' }), { status: 200 });
-        }
-        generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
-        // finish 帧对齐真实上游协议：完成必发 finish_reason（缺帧会触发字数兜底续写判据）
-        return sseResponse(['data: {"text":"章节正文内容，足够长的一段话。"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
+      calls.push({ path, init: init ?? {} });
+      if (path === '/api/llm/tasks' && (init?.method ?? 'GET') === 'POST') {
+        return jsonRes({ taskId: 't1' }, 202);
       }
-      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
-      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
+      if (path.startsWith('/api/llm/tasks/t1?since=') || path === '/api/llm/tasks/t1') {
+        const item = pollScript[Math.min(pollIdx, pollScript.length - 1)];
+        pollIdx += 1;
+        return jsonRes(item);
+      }
+      if (path.startsWith('/api/works/w1/messages?')) return jsonRes({ messages: storedMessages });
       throw new Error(`unmocked fetch: ${path}`);
     }),
   );
+}
+
+async function drainPolls(ticks: number): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+  }
+}
+
+function chapterMsg(id: string, index: number): Message {
+  const content = `第${index}章正文，足够长的一段话。`;
+  return {
+    id,
+    role: 'assistant',
+    name: '小说家',
+    content,
+    createdAt: 1,
+    swipes: [aiVersion(content, 'v1', 1)],
+    swipeId: 0,
+    extra: {},
+    chapter: { index, title: `第${index}章` },
+  };
+}
+
+function seedChapter(index: number): Message {
+  return buildChapterMessage({
+    content: `第${index}章正文`,
+    title: `第${index}章`,
+    chapterIndex: index,
+    directive: '旧指令',
+    promptTokens: 1,
+    generationMs: 1,
+  });
 }
 
 // ---------- hook harness ----------
@@ -105,31 +132,21 @@ async function renderHook(): Promise<void> {
   });
 }
 
-function seedChapter(index: number): Message {
-  return buildChapterMessage({
-    content: `第${index}章正文`,
-    title: `第${index}章`,
-    chapterIndex: index,
-    directive: '旧指令',
-    promptTokens: 1,
-    generationMs: 1,
-  });
-}
-
-/** 输出守卫（novel）固定追加在消息最末尾——指令/大纲注入改为在守卫之前的消息中断言 */
-const bodyOf = (i: number): string => {
-  const msgs = generateBodies[i]!.messages;
-  return msgs[msgs.length - 2]!.content;
-};
-
 beforeEach(() => {
-  generateBodies = [];
+  vi.useFakeTimers();
+  localStorage.clear();
+  calls = [];
+  pollScript = [];
+  pollIdx = 0;
+  storedMessages = [];
   useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
+  stubTaskRoute();
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   await act(async () => {
@@ -141,100 +158,105 @@ afterEach(async () => {
   useWorkStore.setState({ messages: [] });
 });
 
-describe('useGenerate.runByOutline（📖按大纲生成，反馈⑤）', () => {
-  it('大纲 1-3 章、无已有章节：逐章写满 3 章，每章请求注入本章大纲要点', async () => {
-    stubOutlineRoute();
+/** 驱动 runByOutline 至终态 */
+async function runOutline(work: Work, messages: Message[], limit?: number, ticks = 2): Promise<void> {
+  let promise: Promise<void> | null = null;
+  act(() => {
+    promise = latest!.runByOutline(work, messages, limit);
+  });
+  await drainPolls(ticks);
+  await act(async () => {
+    await promise;
+  });
+}
+
+describe('useGenerate.runByOutline（📖按大纲生成——server 任务路径，M2 Chunk 4）', () => {
+  it('大纲 1-3 章、无已有章节：提交 outline=true + chapters=3 任务，终态同步 3 章', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 0, progressText: '', done: 2, chapterTotal: 3, phase: 'generating', chapterIndex: 3 },
+      { status: 'done', resultMessages: 3, resultMessageIds: ['m1', 'm2', 'm3'] },
+    ];
+    storedMessages = [chapterMsg('m1', 1), chapterMsg('m2', 2), chapterMsg('m3', 3)];
     await renderHook();
-    await act(async () => {
-      await latest!.runByOutline(workFixture(), []);
+    await runOutline(workFixture(), []);
+    // 提交契约：outline=true 走 server 大纲链；directive 恒为「按本章大纲写」（本章要点 server 按章号注入）
+    const submit = calls.find((c) => c.path === '/api/llm/tasks')!;
+    const body = JSON.parse(String(submit.init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      kind: 'novel-chapter',
+      workId: 'w1',
+      mode: 'chapter',
+      directive: OUTLINE_DIRECTIVE,
+      chapters: 3,
+      outline: true,
     });
-    expect(generateBodies).toHaveLength(3);
     expect(useWorkStore.getState().messages.filter((m) => m.chapter)).toHaveLength(3);
-
-    expect(bodyOf(0)).toContain('剧情指引：按本章大纲写'); // 每章指令恒为「按本章大纲写」
-    expect(bodyOf(0)).toContain('本章大纲：标题《落地嫡长》');
-    expect(bodyOf(0)).toContain('胎穿嫡长女，隐藏空间。');
-    expect(bodyOf(1)).toContain('本章大纲：标题《私囤万千》');
-    expect(bodyOf(1)).not.toContain('落地嫡长'); // 各章只注入本章大纲
-    expect(bodyOf(2)).toContain('本章大纲：标题《幼学启蒙》');
-    expect(getGenSlot('w1')?.error).toBeNull();
+    expect(latest!.batch).toBeNull(); // 进度终态归位
+    expect(getGenSlot('w1')?.error ?? null).toBeNull();
   });
 
-  it('区别于目标章节数：desiredChapterCount=3 而大纲覆盖到 5 章 → 仍写满 5 章', async () => {
-    stubOutlineRoute();
-    const work = workFixture([
-      ...OUTLINES_1_3,
-      { index: 4, title: '锋芒初露', plot: '家宴立威。' },
-      { index: 5, title: '暗流涌动', plot: '族老发难。' },
-    ]);
+  it('区别于目标章节数：大纲覆盖到 5 章 → 提交 chapters=5（写满大纲覆盖，不凑目标章数）', async () => {
+    pollScript = [{ status: 'done', resultMessages: 5, resultMessageIds: [] }];
     await renderHook();
-    await act(async () => {
-      await latest!.runByOutline(work, []);
-    });
-    expect(generateBodies).toHaveLength(5);
-    expect(bodyOf(4)).toContain('本章大纲：标题《暗流涌动》');
+    await runOutline(
+      workFixture([
+        ...OUTLINES_1_3,
+        { index: 4, title: '锋芒初露', plot: '家宴立威。' },
+        { index: 5, title: '暗流涌动', plot: '族老发难。' },
+      ]),
+      [],
+    );
+    const body = JSON.parse(String((calls.find((c) => c.path === '/api/llm/tasks')!).init.body)) as { chapters: number };
+    expect(body.chapters).toBe(5);
   });
 
-  it('从「下一章」开始：已写 2 章 → 只写第 3 章（1 次请求，注入第 3 章大纲）', async () => {
-    stubOutlineRoute();
+  it('从「下一章」开始：已写 2 章 → 只提交剩余 1 章（chapters=1）', async () => {
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: ['m3'] }];
+    storedMessages = [chapterMsg('m3', 3)];
     useWorkStore.setState({ messages: [seedChapter(1), seedChapter(2)] });
     await renderHook();
-    await act(async () => {
-      await latest!.runByOutline(workFixture(), useWorkStore.getState().messages);
-    });
-    expect(generateBodies).toHaveLength(1);
-    expect(bodyOf(0)).toContain('本章大纲：标题《幼学启蒙》');
+    await runOutline(workFixture(), useWorkStore.getState().messages);
+    const body = JSON.parse(String((calls.find((c) => c.path === '/api/llm/tasks')!).init.body)) as { chapters: number };
+    expect(body.chapters).toBe(1);
     expect(useWorkStore.getState().messages.filter((m) => m.chapter)).toHaveLength(3);
   });
 
-  it('某章流中错误帧 → 循环终止（不发后续章），已成功章保留', async () => {
-    let generateCalls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (path: string, init?: RequestInit) => {
-        if (path === '/api/llm/generate') {
-        const body = JSON.parse(String(init?.body)) as { stream?: boolean };
-        if (body.stream === false) {
-          return new Response(JSON.stringify({ text: '' }), { status: 200 });
-        }
-          generateCalls += 1;
-          if (generateCalls === 2) {
-            return sseResponse(['data: {"error":{"code":"LLM_TIMEOUT","message":"上游超时"}}\n\n']);
-          }
-          generateBodies.push(JSON.parse(String(init?.body)) as { messages: { content: string }[] });
-          return sseResponse(['data: {"text":"第一章正文，足够长。"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
-        }
-        if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
-        if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
-        throw new Error(`unmocked fetch: ${path}`);
-      }),
-    );
+  it('limit 截断：大纲剩 3 章但 limit=1 → 提交 chapters=1（「先写 N 章」）', async () => {
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: [] }];
     await renderHook();
-    await act(async () => {
-      await latest!.runByOutline(workFixture(), []);
-    });
-    expect(generateCalls).toBe(2); // 第 1 章成功、第 2 章错误即停
-    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'LLM_TIMEOUT' });
+    await runOutline(workFixture(), [], 1);
+    const body = JSON.parse(String((calls.find((c) => c.path === '/api/llm/tasks')!).init.body)) as { chapters: number };
+    expect(body.chapters).toBe(1);
+  });
+
+  it('任务 failed → error 进槽，已成功章保留', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 4, progressText: '第一章', done: 1, chapterTotal: 3, phase: 'saving', chapterIndex: 2 },
+      { status: 'failed', error: '第 2 章生成失败：上游超时', resultMessages: 1, resultMessageIds: ['m1'] },
+    ];
+    storedMessages = [chapterMsg('m1', 1)];
+    await renderHook();
+    await runOutline(workFixture(), []);
+    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'LLM_FAILED' });
     expect(useWorkStore.getState().messages.filter((m) => m.chapter)).toHaveLength(1);
+    expect(latest!.batch).toBeNull();
   });
 
   it('大纲已覆盖完（下一章 4 > 最大章号 3）→ 零请求直接返回', async () => {
-    stubOutlineRoute();
     useWorkStore.setState({ messages: [seedChapter(1), seedChapter(2), seedChapter(3)] });
     await renderHook();
     await act(async () => {
       await latest!.runByOutline(workFixture(), useWorkStore.getState().messages);
     });
-    expect(generateBodies).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 
   it('无大纲 → 零请求（按钮侧由 canOutline 保证，此处防御兜底）', async () => {
-    stubOutlineRoute();
     await renderHook();
     await act(async () => {
       await latest!.runByOutline(workFixture([]), []);
     });
-    expect(generateBodies).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 
   it('指令常量：OUTLINE_DIRECTIVE = 按本章大纲写', () => {
