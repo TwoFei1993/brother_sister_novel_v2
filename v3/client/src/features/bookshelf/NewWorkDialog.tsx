@@ -3,6 +3,7 @@
  *
  * - 模式单选：互动小说（novel）/ 对话写作（chat），创建后锁定不可切换
  * - 题材：shared GenreType 枚举，驱动卡片渐变与后续主题
+ * - 写作风格（M1 Task 4）：novel/chat 下可选，随 defaultNovelSettings 整体下发 settings
  * - 绑定：角色卡/世界书/预设下拉（GET 浅列表，均可留空；预设默认绑定逻辑属后续任务）
  * - 提交：POST /api/works → 跳 /work/:id
  */
@@ -15,8 +16,8 @@ import { listCharacters, listWorldbooks, listPresets } from '../../api/library';
 import { ApiError } from '../../api/client';
 import { OPTION_CLS } from '../../components/ui-select';
 import FieldHint from '../../components/FieldHint';
-import type { WorkMode } from '@shared/work';
-import { GENRE_OPTIONS } from './genres';
+import { defaultNovelSettings, WRITING_STYLE_LABELS, type WorkMode, type WritingStyle } from '@shared/work';
+import { GENRE_OPTIONS, type Genre } from './genres';
 import {
   BindingSelector, EMPTY_BINDINGS, EMPTY_OPTIONS,
   type BindingKey, type BindingOptions, type Bindings,
@@ -40,7 +41,9 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<WorkMode>('novel');
-  const [genre, setGenre] = useState<string>(GENRE_OPTIONS[0].value);
+  const [genre, setGenre] = useState<Genre>(GENRE_OPTIONS[0].value);
+  // 写作风格（M1 Task 4）：随 settings 下发，与设置抽屉 StylePresetSection 的风格选择同枚举
+  const [writingStyle, setWritingStyle] = useState<WritingStyle>('default');
   // 短剧专属字段（共识 D2/D9：目标集数/画风/主角自由设定）
   const [targetEpisodes, setTargetEpisodes] = useState(DEFAULT_TARGET_EPISODES);
   const [style, setStyle] = useState<string>(STYLE_OPTIONS[0]);
@@ -87,20 +90,21 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
               title: trimmed,
               mode,
               genre,
+              // 完整 settings 整体下发（server strictObject 校验）：默认值 + 建书所选题材/写作风格
+              settings: { ...defaultNovelSettings, genre, writingStyle },
               characterIds: bindings.characterIds,
               worldbookIds: bindings.worldbookIds,
               presetId: bindings.presetId,
             },
       );
+      // 绑定的无归属素材补写归属（生成卡默认有归属；已归属其他书的不动）——后台执行不阻塞跳转；
+      // 短剧不消费绑定，跳过请求（2026-11-21 修复：原两处重复调用发双请求）
       if (mode !== 'duanju') {
-        // 绑定的无归属素材补写归属（生成卡默认有归属；已归属其他书的不动）——后台执行不阻塞跳转
         void attributeAssets(work.id, {
           characterIds: bindings.characterIds,
           worldbookIds: bindings.worldbookIds,
         });
       }
-      // 绑定的无归属素材补写归属（生成卡默认有归属；已归属其他书的不动）——后台执行不阻塞跳转
-      void attributeAssets(work.id, { characterIds: bindings.characterIds, worldbookIds: bindings.worldbookIds });
       navigate(`/work/${work.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '创建失败，请重试');
@@ -173,7 +177,7 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
         {/* 题材 */}
         <label className="mb-4 block">
           <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">题材</span>
-          <select value={genre} onChange={(e) => setGenre(e.target.value)} className={selectClass}>
+          <select value={genre} onChange={(e) => setGenre(e.target.value as Genre)} className={selectClass}>
             {GENRE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value} className={OPTION_CLS}>
                 {opt.label}
@@ -181,6 +185,25 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
             ))}
           </select>
         </label>
+
+        {/* 写作风格（M1 Task 4）：novel/chat 显示，短剧不消费 */}
+        {mode !== 'duanju' && (
+          <label className="mb-4 block">
+            <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">写作风格</span>
+            <select
+              data-testid="new-work-style"
+              value={writingStyle}
+              onChange={(e) => setWritingStyle(e.target.value as WritingStyle)}
+              className={selectClass}
+            >
+              {Object.entries(WRITING_STYLE_LABELS).map(([value, label]) => (
+                <option key={value} value={value} className={OPTION_CLS}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {mode === 'duanju' && (
           <>
