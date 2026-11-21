@@ -16,6 +16,7 @@
  * 提交/增量轮询/终态取回/取消，回流编排（appendChunk/终态同步）在 hooks/useNovelTask.ts。
  */
 import { apiFetch } from '../api/client';
+import type { LlmPrefs } from '../stores/settings';
 
 const CFG = {
   taskKey: (slot: string): string => `v3-bg-task-${slot}`,
@@ -157,6 +158,27 @@ export interface NovelChapterSubmitBody {
   outline?: boolean;
   targetId?: string;
   partial?: string;
+  /** 批量发起的期望并发数（1-4，书架 BatchGenerateDialog）：server 端 novel-gen 全局并发
+   *  编排器目前走 env NOVEL_GEN_PARALLEL（默认 2），尚不接受每请求并发——字段前向预留，
+   *  server zod strip 静默忽略，后续 schema 支持后即生效（Chunk 6 Task 6.1） */
+  parallel?: number;
+}
+
+/** settings.llmPrefs → 任务 prefs（非敏感字段全量，repetitionPenalty 治重复循环防线不可漏）。
+ *  书页（useNovelTask）与书架批量（BatchGenerateDialog）共用同一映射，避免字段清单漂移。 */
+export function taskPrefsOf(prefs: LlmPrefs): NovelTaskPrefs {
+  return {
+    source: prefs.source,
+    model: prefs.model,
+    ...(prefs.temperature !== undefined ? { temperature: prefs.temperature } : {}),
+    ...(prefs.maxContext !== undefined ? { maxContext: prefs.maxContext } : {}),
+    ...(prefs.maxTokens !== undefined ? { maxTokens: prefs.maxTokens } : {}),
+    thinking: prefs.thinking !== false,
+    ...(prefs.polishModel ? { polishModel: prefs.polishModel } : {}),
+    ...(prefs.frequencyPenalty !== undefined ? { frequencyPenalty: prefs.frequencyPenalty } : {}),
+    ...(prefs.presencePenalty !== undefined ? { presencePenalty: prefs.presencePenalty } : {}),
+    ...(prefs.repetitionPenalty !== undefined ? { repetitionPenalty: prefs.repetitionPenalty } : {}),
+  };
 }
 
 /** 执行期增量（GET ?since=N 的 running 响应；progressText=当前章全文 slice(since)） */

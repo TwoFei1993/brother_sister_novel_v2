@@ -1,9 +1,10 @@
 /**
- * 书架（设计 §7.1 /）：作品网格 + 搜索 + 排序 + 新建入口
+ * 书架（设计 §7.1 /）：作品网格 + 搜索 + 排序 + 新建入口 + 多选批量生成（Chunk 6）
  *
  * - 网格响应式 2-5 列；封面卡交互见 WorkCard
  * - 搜索按标题过滤；排序：最近更新 / 章节数 / 标题
  *   （浅列表无 createdAt 字段，"创建时间"排序以"标题"替代，见任务汇报偏离说明）
+ * - 多选（仅小说视图）：多选入口 → 卡片勾选 → 底部操作条批量发起（状态与 active 轮询在 useShelfBatch）
  * - 空态引导"新建作品"；加载失败可重试
  */
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
@@ -15,6 +16,9 @@ import type { WorkSummary } from '../../api/works';
 import { OPTION_CLS } from '../../components/ui-select';
 import WorkCard from './WorkCard';
 import NewWorkDialog from './NewWorkDialog';
+import BatchActionBar, { BatchModeToggle } from './BatchActionBar';
+import BatchGenerateDialog from './BatchGenerateDialog';
+import { useShelfBatch } from './useShelfBatch';
 
 /** 空态三步引导（第二轮体验改进）：资源 → 建作品 → 写作 */
 const EMPTY_STEPS: ReadonlyArray<string> = [
@@ -53,6 +57,21 @@ export default function Bookshelf() {
   }
 
   useEffect(reload, []);
+
+  /** 静默刷新（useShelfBatch 终态感知回调）：后台任务完成后同步新章数，不闪加载态 */
+  function refreshSilently(): void {
+    listWorks()
+      .then(setWorks)
+      .catch(() => undefined);
+  }
+
+  const batch = useShelfBatch(refreshSilently);
+
+  /** 视图切换：短剧视图无多选语义（服务端任务仅 novel-chapter），顺手退出多选态 */
+  function switchView(v: ShelfView): void {
+    setView(v);
+    if (v === 'duanju' && batch.batchMode) batch.exitBatchMode();
+  }
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -93,7 +112,7 @@ export default function Bookshelf() {
     'h-10 appearance-none rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 pr-8 text-sm text-[hsl(var(--fg))] outline-none focus:border-[hsl(var(--accent))]';
 
   return (
-    <section className="safe-x mx-auto w-full max-w-6xl pt-6 pb-16">
+    <section className={`safe-x mx-auto w-full max-w-6xl pt-6 ${batch.batchMode ? 'pb-28' : 'pb-16'}`}>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">我的书架</h1>
@@ -114,7 +133,7 @@ export default function Bookshelf() {
                     role="tab"
                     aria-selected={active}
                     data-testid={`shelf-view-${v}`}
-                    onClick={() => setView(v)}
+                    onClick={() => switchView(v)}
                     className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium transition-all ${
                       active
                         ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))] shadow-sm'
@@ -158,6 +177,13 @@ export default function Bookshelf() {
               </option>
             ))}
           </select>
+          {/* 多选批量入口（Chunk 6）：仅小说视图——短剧书不可多选（服务端 novel-chapter 任务仅 novel 语义） */}
+          {view === 'novel' && (
+            <BatchModeToggle
+              active={batch.batchMode}
+              onToggle={() => (batch.batchMode ? batch.exitBatchMode() : batch.enterBatchMode())}
+            />
+          )}
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -246,9 +272,26 @@ export default function Bookshelf() {
       {!loading && !loadError && visible.length > 0 && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {visible.map((work) => (
-            <WorkCard key={work.id} work={work} onUpdated={handleUpdated} onDeleted={handleDeleted} />
+            <WorkCard
+              key={work.id}
+              work={work}
+              onUpdated={handleUpdated}
+              onDeleted={handleDeleted}
+              selectable={batch.batchMode}
+              selected={batch.selectedIds.has(work.id)}
+              onToggleSelect={() => batch.toggleWork(work.id)}
+              activeTask={batch.activeByWork[work.id]}
+            />
           ))}
         </div>
+      )}
+
+      {batch.batchMode && batch.selectedIds.size > 0 && (
+        <BatchActionBar count={batch.selectedIds.size} onGenerate={batch.openDialog} onCancel={batch.exitBatchMode} />
+      )}
+
+      {batch.dialogOpen && (
+        <BatchGenerateDialog works={works.filter((w) => batch.selectedIds.has(w.id))} onClose={batch.closeDialog} />
       )}
 
       {creating && <NewWorkDialog onClose={() => setCreating(false)} />}

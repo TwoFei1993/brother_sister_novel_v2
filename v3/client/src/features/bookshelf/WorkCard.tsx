@@ -15,6 +15,7 @@ import { getWork, updateWorkTitle, deleteWork } from '../../api/works';
 import type { WorkSummary } from '../../api/works';
 import { ApiError } from '../../api/client';
 import type { Work } from '@shared/work';
+import { phaseLabel, type TaskPhase } from '../../lib/activeTasks';
 import { bookSkin, genreLabel, MODE_LABELS } from './genres';
 
 interface WorkCardProps {
@@ -23,6 +24,12 @@ interface WorkCardProps {
   onUpdated: (work: WorkSummary) => void;
   /** 删除成功后回调（父层移除卡片） */
   onDeleted: (id: string) => void;
+  /** 批量多选（Chunk 6）：true 时封面点击改为勾选/取消勾选，右上角出现 checkbox */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  /** 该书进行中的 novel-chapter 任务（active 轮询派生）；有则封面渲染进度徽标 */
+  activeTask?: { done: number; chapterTotal: number; phase?: TaskPhase };
 }
 
 /** 全量 Work → 书架 summary（保持字段同源，避免手工拼装漂移） */
@@ -56,7 +63,7 @@ function describeActionError(err: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) {
+export default function WorkCard({ work, onUpdated, onDeleted, selectable = false, selected = false, onToggleSelect, activeTask }: WorkCardProps) {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -70,6 +77,12 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
 
   function openWork(): void {
     navigate(`/work/${work.id}`);
+  }
+
+  /** 多选模式下封面点击 = 勾选/取消勾选（常见批量交互；续写/改名按钮不受影响） */
+  function activateCard(): void {
+    if (selectable) onToggleSelect?.();
+    else openWork();
   }
 
   function startRename(e: MouseEvent<HTMLButtonElement>): void {
@@ -137,13 +150,43 @@ export default function WorkCard({ work, onUpdated, onDeleted }: WorkCardProps) 
 
   return (
     <div className="group relative">
-      {/* 封面：点击进入写作台 */}
+      {/* 多选 checkbox（Chunk 6）：封面按钮的兄弟节点，点击不触发封面跳转 */}
+      {selectable && (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={`选中 ${work.title}`}
+          data-testid="work-select-box"
+          onClick={onToggleSelect}
+          className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 text-sm font-bold backdrop-blur transition-colors ${
+            selected
+              ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]'
+              : 'border-white/60 bg-black/40 text-transparent hover:bg-black/60'
+          }`}
+        >
+          ✓
+        </button>
+      )}
+      {/* 进行中徽标（Chunk 6）：第x/y章·相位中文；无任务不渲染 */}
+      {activeTask && (
+        <span
+          data-testid="work-active-badge"
+          title="后台生成任务进行中"
+          className="absolute left-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium text-amber-300 backdrop-blur"
+        >
+          第{activeTask.done}/{activeTask.chapterTotal}章·{phaseLabel(activeTask.phase)}
+        </span>
+      )}
+      {/* 封面：点击进入写作台（多选模式下改为勾选） */}
       <button
         type="button"
-        onClick={openWork}
-        aria-label={`打开作品 ${work.title}`}
+        onClick={activateCard}
+        aria-label={selectable ? `选择 ${work.title}` : `打开作品 ${work.title}`}
         style={{ backgroundImage: `linear-gradient(160deg, ${skin.from}, ${skin.to})` }}
-        className={`relative flex aspect-[2/3] w-full flex-col items-center justify-between overflow-hidden rounded-xl border border-white/10 p-3 text-left shadow-lg transition-transform duration-200 group-hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]`}
+        className={`relative flex aspect-[2/3] w-full flex-col items-center justify-between overflow-hidden rounded-xl border border-white/10 p-3 text-left shadow-lg transition-transform duration-200 group-hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))] ${
+          selected ? 'ring-2 ring-[hsl(var(--accent))]' : ''
+        }`}
       >
         <span className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-r from-black/30 to-transparent" />
         {/* 首字水印：每本书的「藏书章」，配合派生色相让同题材卡片可辨（走查条目⑩） */}

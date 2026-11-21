@@ -21,8 +21,8 @@ import {
   cancelTask,
   pollNovelProgress,
   submitNovelChapter,
+  taskPrefsOf,
   type NovelChapterSubmitBody,
-  type NovelTaskPrefs,
   type NovelTaskProgressPayload,
 } from '../lib/llmTask';
 import { getGenSlot, useGenerationStore } from '../stores/generation';
@@ -73,22 +73,6 @@ interface ActiveLoop {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-/** settings.llmPrefs → 任务 prefs（非敏感字段全量，repetitionPenalty 治重复循环防线不可漏） */
-function taskPrefsOf(prefs: ReturnType<typeof useSettingsStore.getState>['llmPrefs']): NovelTaskPrefs {
-  return {
-    source: prefs.source,
-    model: prefs.model,
-    ...(prefs.temperature !== undefined ? { temperature: prefs.temperature } : {}),
-    ...(prefs.maxContext !== undefined ? { maxContext: prefs.maxContext } : {}),
-    ...(prefs.maxTokens !== undefined ? { maxTokens: prefs.maxTokens } : {}),
-    thinking: prefs.thinking !== false,
-    ...(prefs.polishModel ? { polishModel: prefs.polishModel } : {}),
-    ...(prefs.frequencyPenalty !== undefined ? { frequencyPenalty: prefs.frequencyPenalty } : {}),
-    ...(prefs.presencePenalty !== undefined ? { presencePenalty: prefs.presencePenalty } : {}),
-    ...(prefs.repetitionPenalty !== undefined ? { repetitionPenalty: prefs.repetitionPenalty } : {}),
-  };
 }
 
 /**
