@@ -10,7 +10,14 @@
  * 轮询继续到终态，已完成章仍同步本地；buffer 保留供「继续」）。
  *
  * 页面切换恢复：slot 键 novel-gen-${workId} 存 taskId 于 localStorage，mount/workId 变化时
- * 重启轮询（任务在 server 继续；同会话切页 since 接 buffer 长度续流，整页刷新重建槽从 0 重放）。
+ * 重启轮询（任务在 server 继续）。恢复统一 since=0 重收当前章全文（buffer 重置为当前章
+ * 从头流式）：不推断 server 端 progress.text 与本地 buffer 的对齐（续写轮 finalize 会重写
+ * text、翻章边界难判定），上一章已入库不丢——切页回来当前章从头回放一遍是可接受取舍。
+ *
+ * 跨章增量（缝②修复）：server progress.text 换章清零（TaskProgress 语义）→ progressLen
+ * 回落（含 0 边界）即翻章。buffer 只承载当前章流式显示——翻章拍重置槽 buffer 为新章开头
+ * 并 since 归零，下一拍 ?since=0 重收当前章全文（翻章拍 progressText 按旧 since 切片越界
+ * 为空/残片，语义不可靠不回流）。
  */
 import { useCallback, useEffect, useRef } from 'react';
 import type { Message } from '@shared/message';
@@ -90,10 +97,11 @@ async function syncResultMessages(workId: string, ids: string[]): Promise<Messag
 export function useNovelTask(workId?: string | null) {
   const activeRef = useRef<ActiveLoop | null>(null);
 
-  /** 轮询循环：1.5s 一拍直到终态（轮询抖动静默重试；cancelled 随时退出） */
-  const runLoop = useCallback(async (loop: ActiveLoop, since0: number): Promise<NovelTaskOutcome> => {
+  /** 轮询循环：1.5s 一拍直到终态（轮询抖动静默重试；cancelled 随时退出）。since 一律从 0
+   *  起步（提交与恢复都重收当前章全文，见头部注释）；翻章检测归零重启 */
+  const runLoop = useCallback(async (loop: ActiveLoop): Promise<NovelTaskOutcome> => {
     const { workId: wid, taskId } = loop;
-    let since = since0;
+    let since = 0;
     try {
       for (;;) {
         if (loop.cancelled) return { messages: [], stopped: false, failed: false };
@@ -106,6 +114,17 @@ export function useNovelTask(workId?: string | null) {
           continue; // 单次轮询抖动静默重试（网络瞬断/服务重启间隙）
         }
         if (payload.status === 'running') {
+          // 翻章检测：progressLen 回落（含 0）= server 换章 text 清零。槽 buffer 重置为
+          // 新章开头（targetMessageId 保留——入库幂等键不变），since 归零下一拍重收全文
+          if (payload.progressLen < since) {
+            since = 0;
+            if (loop.ownsSlot && !loop.stopRequested) {
+              const prevTarget = getGenSlot(wid)?.targetMessageId ?? '';
+              useGenerationStore.getState().start(wid, prevTarget, '');
+            }
+            loop.onProgress?.({ done: payload.done, chapterTotal: payload.chapterTotal, phase: payload.phase });
+            continue; // 本拍 progressText 是按旧 since 的越界切片，不回流
+          }
           if (payload.progressText && !loop.stopRequested && loop.ownsSlot) {
             useGenerationStore.getState().appendChunk(wid, payload.progressText);
           }
@@ -181,7 +200,7 @@ export function useNovelTask(workId?: string | null) {
           ...(input.onProgress ? { onProgress: input.onProgress } : {}),
         };
         activeRef.current = loop;
-        return await runLoop(loop, 0);
+        return await runLoop(loop);
       } catch (err) {
         if ((err as { status?: number }).status === 409) {
           gen.fail(work.id, { code: 'GEN_BUSY', message: '该书已有生成任务进行中' }, false);
@@ -227,19 +246,19 @@ export function useNovelTask(workId?: string | null) {
     }
     if (!taskId || activeRef.current) return;
     const slot = getGenSlot(workId);
-    // 槽在流式中（同会话切页）：不重建，since 接 buffer 长度续流；
-    // 槽已丢（整页刷新）：重建槽位从 since=0 重放当前章全文；
+    // 恢复统一 since=0 重收当前章全文（缝②）：buffer 重置为当前章从头流式。不推断 server
+    // 端 progress.text 与本地 buffer 的对齐（续写轮 finalize 会重写 text、切页时机跨章
+    // 边界难判定），上一章已入库不丢——切页回来当前章从头回放一遍是可接受取舍；
     // 槽在但已停止/失败（停止后切页）：不碰槽（半成品「继续」buffer 保留），
     //   轮询只做终态同步（取消后 server 已入库章仍回填本地视图——D6）
     const ownsSlot = !slot || slot.streaming;
-    if (slot?.streaming) {
+    if (ownsSlot) {
+      useGenerationStore.getState().start(workId, slot?.targetMessageId ?? '', '');
       useGenerationStore.getState().setTaskId(workId, taskId);
-    } else if (!slot) {
-      useGenerationStore.getState().start(workId, '', '');
     }
     const loop: ActiveLoop = { taskId, workId, stopRequested: false, cancelled: false, ownsSlot };
     activeRef.current = loop;
-    void runLoop(loop, slot?.streaming ? slot.buffer.length : 0).catch(() => undefined);
+    void runLoop(loop).catch(() => undefined);
     return () => {
       const cur = activeRef.current;
       if (cur) {

@@ -278,3 +278,67 @@ describe('useNovelTask（提交 + 增量轮询 + 回流 + 终态同步）', () =
     expect(localStorage.getItem('novel-gen-w1')).toBeNull();
   });
 });
+
+describe('跨章增量与恢复重收（缝②：buffer 只承载当前章）', () => {
+  it('翻章检测：progressLen 回落（server 换章 text 清零）→ buffer 重置为新章、since 归零重收全文', async () => {
+    pollScript = [
+      { status: 'running', progressLen: 3, progressText: '第一章', done: 0, chapterTotal: 2, phase: 'generating', chapterIndex: 1 },
+      // 翻章拍：text 清零 progressLen=0 < since=3；progressText 按旧 since 切片越界为空
+      { status: 'running', progressLen: 0, progressText: '', done: 1, chapterTotal: 2, phase: 'assembling', chapterIndex: 2 },
+      { status: 'running', progressLen: 5, progressText: '第二章开头', done: 1, chapterTotal: 2, phase: 'generating', chapterIndex: 2 },
+      { status: 'done', resultMessages: 2, resultMessageIds: ['m1', 'm2'] },
+    ];
+    storedMessages = [chapterMsg('m1', 1, '第一章'), chapterMsg('m2', 2, '第二章开头')];
+    await renderHook();
+    act(() => {
+      void latest!.submitAndWait({ work: workFixture(), mode: 'chapter', directive: '', chapters: 2 });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 拍1：since=0 → buffer=「第一章」，since=3
+    });
+    expect(getGenSlot('w1')?.buffer).toBe('第一章');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 拍2：翻章 → buffer 重置为空、since 归零
+    });
+    expect(getGenSlot('w1')?.buffer).toBe('');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 拍3：?since=0 重收第 2 章全文
+    });
+    expect(getGenSlot('w1')?.buffer).toBe('第二章开头'); // 第 1 章文本不残留
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 终态拍
+    });
+    const sinces = calls
+      .filter((c) => c.path.startsWith('/api/llm/tasks/t1?since='))
+      .map((c) => Number(c.path.split('since=')[1]));
+    expect(sinces).toEqual([0, 3, 0, 5]); // 翻章归零后从 0 重收（不再单调不减）
+  });
+
+  it('mount 恢复：since=0 重收当前章全文并重置 buffer（不接旧 buffer 长度续流），taskId/targetMessageId 保留', async () => {
+    // 上一会话切页前：槽已有 buffer（旧语义下会以 buffer.length 作 since——错位源头）+ 恢复锚点
+    localStorage.setItem('novel-gen-w1', 't1');
+    useGenerationStore.getState().start('w1', 't-msg-1', '旧会话已收的部分文本');
+    pollScript = [
+      { status: 'running', progressLen: 5, progressText: '第二章全文', done: 1, chapterTotal: 2, phase: 'generating', chapterIndex: 2 },
+      { status: 'done', resultMessages: 2, resultMessageIds: ['m1', 'm2'] },
+    ];
+    storedMessages = [chapterMsg('m1', 1, '第一章'), chapterMsg('m2', 2, '第二章全文')];
+    await renderHook();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 恢复第一拍：?since=0（而非旧 buffer 长度 9）
+    });
+    const slot = getGenSlot('w1')!;
+    expect(slot.buffer).toBe('第二章全文'); // 旧 buffer 残留被重置，只含当前章全文
+    expect(slot.streaming).toBe(true); // 仍在流式（任务未终态）
+    expect(slot.targetMessageId).toBe('t-msg-1'); // 入库幂等键保留
+    expect(slot.taskId).toBe('t1'); // 恢复锚点回填槽
+    const sinces = calls
+      .filter((c) => c.path.startsWith('/api/llm/tasks/t1?since='))
+      .map((c) => Number(c.path.split('since=')[1]));
+    expect(sinces[0]).toBe(0); // 恢复重收，不接旧 buffer 长度
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 终态拍
+    });
+    expect(useWorkStore.getState().messages.map((m) => m.id)).toEqual(['m1', 'm2']); // 已入库章同步
+  });
+});
