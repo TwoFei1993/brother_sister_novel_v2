@@ -2,14 +2,15 @@
  * LLM 后台任务通用客户端（切出 App 后生成继续——手机锁屏/切后台安全）
  *
  * 机制：生成在 server 端后台执行（POST /api/llm/tasks → server 调上游落盘），
- * 浏览器只做轮询——页面冻结/切后台不影响 server 端任务；切回（visibilitychange
- * visible）自动重启轮询；结果写 localStorage（跨页面生命周期存活），消费后清除。
+ * 浏览器只做轮询——页面冻结/切后台不影响 server 端任务；调用方在 mount/切回时按
+ * taskPending/peekResult 自查断点重启轮询；结果写 localStorage（跨页面生命周期存活），消费后清除。
  *
  * 使用模式（调用方）：
  *   submitTask(slot, body)                    提交（slot 隔离）
  *   await waitAndStore(slot, onElapsed?)      轮询至完成，结果写 localStorage 并返回
  *   consumeResult(slot)                       消费结果（读+清），无则 null
- *   resumeIfPending(slot)                     mount/visibilitychange：有 pending → 重启轮询
+ *   taskPending(slot)/peekResult(slot)        mount/切回时自查断点（调用方自行重启轮询，
+ *                                             如 BookOutlineChat/OutlineIterChat 的恢复逻辑）
  *
  * novel-chapter 任务（2026-11-21 M2 Chunk 4：书页章节生成走 server 后台任务）见文件后半——
  * 提交/增量轮询/终态取回/取消，回流编排（appendChunk/终态同步）在 hooks/useNovelTask.ts。
@@ -90,7 +91,7 @@ export function clearPending(slot: string): void {
 /**
  * 轮询至完成并把结果写 localStorage（跨页面生命周期存活）。
  * 页面冻结/切后台时本 promise 链会断——断点安全：结果在 server draft 永久保留，
- * visibilitychange visible / mount 时调 resumeIfPending 重启轮询续完。
+ * mount/切回可见时调用方按 taskPending/peekResult 自查断点并重启轮询续完。
  */
 export async function waitAndStore(slot: string, onElapsed?: (sec: number) => void): Promise<string> {
   const taskId = localStorage.getItem(CFG.taskKey(slot));
@@ -124,14 +125,6 @@ export async function waitAndStore(slot: string, onElapsed?: (sec: number) => vo
       throw new Error('超时（20 分钟未完成）');
     }
   }
-}
-
-/** mount / 切回可见：slot 有 pending 且无 result → 重启轮询续完（页面冻结断点安全） */
-export function resumeIfPending(slot: string, onElapsed?: (sec: number) => void): void {
-  if (!taskPending(slot) || peekResult(slot) !== null) return;
-  void waitAndStore(slot, onElapsed).catch(() => {
-    clearPending(slot); // 轮询链错误终态——清标记允许重新提交
-  });
 }
 
 // ---------- novel-chapter 任务（M2 Chunk 4：书页章节生成走 server 后台任务） ----------

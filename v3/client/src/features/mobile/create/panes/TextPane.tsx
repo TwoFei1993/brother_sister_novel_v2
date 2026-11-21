@@ -115,59 +115,25 @@ export function TextPane({
     }
   }
 
-  /** App 后台生成进行中（server 任务执行，切后台/锁屏安全——2026-11-19 断流修复） */
-  const [bgBusy, setBgBusy] = useState(false);
-  const bgBusyForThisWork = bgBusy;
-
-  /** 挂载/切回恢复：有未完成的后台生成链时从断点继续剩余段（结果照常 onDone 入列表） */
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const pendingKey = localStorage.getItem(`novel-gen-bg-pending-${work.id}`);
-      if (!pendingKey) return;
-      setBgBusy(true);
-      try {
-        const msg = await gen.resumeNovelBg(work);
-        if (alive && msg) onDone(msg);
-      } finally {
-        if (alive) setBgBusy(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [work.id]);
+  // 生成/续写/加长统一走 server novel-chapter 任务（M2 Chunk 5）：切后台/锁屏安全，
+  // 挂载/切回的恢复轮询由 useNovelTask(workId) 的恢复锚点（novel-gen-${workId}）承担；
+  // gen.streaming 覆盖整个任务期，输入框/按钮随之锁定，本地不再有 bg 链断点状态
 
   async function generate(): Promise<void> {
-    if (myStreaming || otherStreaming || bgBusy) return;
+    if (myStreaming || otherStreaming) return;
     const d = directive.trim();
     setDirective('');
     // 空指令=自动续写（同 ⚡连写语义：仅写作要求；绑定了章节大纲时本章要点仍自动注入）
-    // App 后台生成（2026-11-19）：server 后台任务执行 + 轮询取回，切后台/锁屏不再「流式连接中断」白跑；
-    // 分段链自动拼接，每段完成即落库（中断只损当段）
-    setBgBusy(true);
-    try {
-      const msg = await gen.generateChapterBg(work, useWorkStore.getState().messages, d);
-      if (msg) onDone(msg);
-    } finally {
-      setBgBusy(false);
-    }
+    const msg = await gen.generateChapter(work, useWorkStore.getState().messages, d);
+    if (msg) onDone(msg);
   }
 
-  /** 本章加长/续写（App 后台版）：对当前章 append（续写新剧情）/ expand（扩写加厚） */
+  /** 本章加长/续写（mode=append|expand 任务）：对当前章 append（续写新剧情）/ expand（扩写加厚）；
+   *  失败原因经槽 error 提示条展示（任务层统一失败面） */
   async function extend(mode: 'append' | 'expand'): Promise<void> {
-    if (!current || myStreaming || otherStreaming || bgBusy) return;
-    setBgBusy(true);
-    try {
-      const msg = await gen.extendChapterBg(work, current, mode);
-      if (msg) onDone(msg);
-      else alert(`${mode === 'append' ? '续写' : '加长'}未产出有效内容（模型可能过载），请重试`);
-    } catch {
-      alert(`${mode === 'append' ? '续写' : '加长'}失败，请重试`);
-    } finally {
-      setBgBusy(false);
-    }
+    if (!current || myStreaming || otherStreaming) return;
+    const msg = await gen.extendChapter(work, useWorkStore.getState().messages, current, mode);
+    if (msg) onDone(msg);
   }
 
   /** 章节改名（用户需求）：PATCH 消息整行（chapter.title），失败回滚并抛错给行内编辑提示 */
@@ -428,7 +394,7 @@ export function TextPane({
         <button
           type="button"
           onClick={() => void gen.runBatch(work, directive.trim() || '自由发挥第一章').then(() => setDirective(''))}
-          disabled={myStreaming || otherStreaming || bgBusy || Boolean(gen.batch)}
+          disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
           data-testid="mobile-batch-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
@@ -438,7 +404,7 @@ export function TextPane({
         <button
           type="button"
           onClick={() => void gen.runByOutline(work, useWorkStore.getState().messages)}
-          disabled={myStreaming || otherStreaming || bgBusy || Boolean(gen.batch)}
+          disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
           data-testid="mobile-outline-run-btn"
           className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
         >
@@ -454,14 +420,14 @@ export function TextPane({
           onChange={(e) => setDirective(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && void generate()}
           placeholder={chapters.length === 0 ? '第一章剧情指令（留空=自由发挥）' : `第${chapters.length + 1}章指令（留空=自动续写）`}
-          disabled={myStreaming || otherStreaming || bgBusy}
+          disabled={myStreaming || otherStreaming}
           data-testid="mobile-directive-input"
           className="h-11 min-w-0 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))] disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => void generate()}
-          disabled={myStreaming || otherStreaming || bgBusy}
+          disabled={myStreaming || otherStreaming}
           data-testid="mobile-generate-btn"
           className="h-11 shrink-0 rounded-xl bg-[hsl(var(--accent))] px-4 text-sm font-medium text-[hsl(var(--accent-fg))] disabled:opacity-40"
         >
@@ -469,8 +435,8 @@ export function TextPane({
         </button>
       </div>
 
-      {/* 本章加长/续写（App 后台版，2026-11-19）：有当前章且非编辑/生成态时显示 */}
-      {current && !editing && !myStreaming && !bgBusy && (
+      {/* 本章加长/续写（mode=append|expand 任务）：有当前章且非编辑/生成态时显示 */}
+      {current && !editing && !myStreaming && (
         <div className="mx-4 mt-2 flex gap-2" data-testid="mobile-extend-row">
           <button
             type="button"
@@ -491,11 +457,6 @@ export function TextPane({
             📖 本章加长
           </button>
         </div>
-      )}
-      {(bgBusy || myStreaming) && current && !myStreaming && (
-        <p className="mx-4 mt-2 text-center text-[11px] text-[hsl(var(--fg-muted))]" data-testid="mobile-bg-hint">
-          后台任务执行中（server 端继续）——可切出 App，回来自动继续
-        </p>
       )}
 
       {/* 📑 章节目录入口 + 抽屉：portal 挂 body——分区容器带 m-rise 动画（fill both 持有 transform），

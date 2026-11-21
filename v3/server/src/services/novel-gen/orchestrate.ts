@@ -3,7 +3,7 @@
  * （chapter/swipe/continue/append/expand）。单章链机械见 chapterChain.ts，收尾见 finalize.ts。
  *
  * 语义移植源：client useGenerate.ts（generateChapter/swipeRegenerate/continueFromPartial/
- * extendChapter）与 generation-batch.ts（runChunkLoop/runOutlineLoop 的指令编排）。
+ * extendChapter 与旧批量循环的指令编排——批量循环已随客户端任务化删除）。
  * 章循环：第 1 章用 input.directive，第 2..N 章 = outline ? OUTLINE_DIRECTIVE : ''；
  * isCancelled 在章间与段间检查（真 → 返回已 done，D6）；单章失败停链返回 failed
  * （该章不入库，已入库保留）；批次屏障（BATCH_CHUNK_SIZE）重读磁盘最新态 + 强制进度落盘 +
@@ -121,7 +121,7 @@ export async function orchestrateNovelChapters(input: OrchestrateInput): Promise
   }
 }
 
-// ---------- chapter 模式：多章链（书架批量；client runChunkLoop/runOutlineLoop 编排语义） ----------
+// ---------- chapter 模式：多章链（书架批量；client 一键连写/按大纲的编排语义移植） ----------
 
 async function runChapterChain(st: ChainState, input: OrchestrateInput, messageIds: string[]): Promise<OrchestrateResult> {
   const total = Math.max(1, Math.min(Math.floor(input.chapters) || 1, 50));

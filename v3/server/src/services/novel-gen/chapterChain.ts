@@ -48,7 +48,7 @@ export async function runOnce(
   const assets = await loadAssembleAssets(work, nextChapterIndex(ctxMessages));
   const pending: PendingVars = { work: new Map(), global: new Map() };
   const env = buildMacroEnv(work, assets.cards[0]?.data.name ?? undefined, pending, st.globals);
-  // tail 构造逐点对照 client assembleGenRequest（continueRemaining 与 client 现状一致不进 tail）
+  // tail 构造逐点对照 client 旧组装通路（已随客户端任务化删除；continueRemaining 与其现状一致不进 tail）
   const tail: AssembleTail = {
     kind: 'directive',
     text: opts.promptDirective ?? directive,
