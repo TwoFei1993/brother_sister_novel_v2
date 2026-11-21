@@ -78,14 +78,15 @@ const CONTINUE_TAIL_CHARS = 200;
  * 演进二（字数失控修复，生产实证：目标 3000 字实际生成 15683/18137 字）：
  * 中文 token 密度 ≈0.65-0.7 token/字（1 token≈1.5 字），旧公式按 1.5 token/字换算——
  * 方向反了，给正文留了目标 3-4 倍的容量；「写满 max_tokens」型模型（M3.1-Flash）直接放飞。
- * 新公式：正文容量 = (目标+500 buffer)×1.2 字，按 0.75 token/字换算；thinking 开启时上游
- * 取 max_tokens 一半做思考（converters/claude.ts budget_tokens=max_tokens/2），正文只分
- * 一半预算，故总数 ×2 补偿——两种模式正文容量一致（3000 字目标 ≈3900 字上限，1.3 倍宽容）。
- * floor 相应下调（旧 16384/8192 是旧公式的量级）；重试/续写轮再乘 scale，封顶 64000。
+ * 新公式：max_tokens = (目标+500 buffer)×0.75 token（正文硬上限）；思考独立计：MiniMax
+ * anthropic 端点实测 budget_tokens 是思考的独立预算、正文仍受完整 max_tokens 约束（15163 字
+ * 生产案例反推：4500+5400 tokens≈1.5 万字），故 thinking 开启不再做总数 ×2 补偿（那会把
+ * 正文上限翻倍）。floor 统一 2048（thinking 的 budget_tokens=max/2，2625 时=1312 仍满足协议
+ * ≥1024，无需抬总预算）；重试/续写轮再乘 scale，封顶 64000。
  */
 export function calcOutputBudget(targetWords: number, thinking: boolean, scale = 1): number {
-  const bodyTokens = Math.ceil((targetWords + 500) * 0.75 * (thinking ? 2 : 1));
-  const floor = thinking ? 4096 : 2048;
+  const bodyTokens = Math.ceil((targetWords + 500) * 0.75);
+  const floor = 2048;
   return Math.min(Math.max(bodyTokens, floor) * scale, 64000);
 }
 

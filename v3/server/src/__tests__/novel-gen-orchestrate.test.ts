@@ -259,8 +259,8 @@ describe('单章链（generateChapter 移植语义）', () => {
     const joined = retry.messages.map((m) => m.content).join('\n');
     expect(joined).toContain('系统重试指令');
     expect(joined).toContain(META_RETRY_SUFFIX.trim().slice(0, 20));
-    // 新公式：floor(thinking 4096) 顶格 × scale 2（fixture 书 tw=2000 小于 floor 容量；scale 3→2 见 chapterChain meta 注释）
-    expect(retry.max_tokens).toBe(Math.min(Math.max(Math.ceil((2000 + 500) * 0.75 * 2), 4096) * 2, 64000));
+    // 新公式：tw=2000 → ceil(2500×0.75)=1875 < floor 2048 → floor 顶格 × scale 2（3→2 见 chapterChain meta 注释）
+    expect(retry.max_tokens).toBe(2048 * 2);
   });
 
   it('重放检测回滚：续写轮从头复述前文 → 回滚为已写内容并停止', async () => {
