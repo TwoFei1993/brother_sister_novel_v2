@@ -1,11 +1,11 @@
 /**
  * useGenerate 集成测试（jsdom + createRoot harness）
  *
- * M2 Chunk 4 任务化迁移：generateChapter 走 server novel-chapter 任务——mock 层从 SSE 流
- * 改为任务响应序列（POST 202 → GET ?since 增量 → done+resultMessageIds）。分段/无效输出
- * 重试/截断续写/崩溃补救语义已上移 server 编排（server 端 novel-gen 测试覆盖），客户端锁：
- * 提交参数契约 / 增量回流 / 终态同步 / 409 与 failed 槽 fail。
- * swipeRegenerate 仍走 client SSE 链（Chunk 5 切换）——原 SSE mock 测试保留。
+ * M2 Chunk 4/5 任务化迁移：generateChapter 与 swipeRegenerate 全部走 server novel-chapter
+ * 任务——mock 层从 SSE 流改为任务响应序列（POST 202 → GET ?since 增量 → done+resultMessageIds）。
+ * 分段/无效输出重试/截断续写/崩溃补救/historyBeforeTarget 上下文/appendSwipe 候选追加等
+ * 语义已上移 server 编排（server 端 novel-gen 测试覆盖），客户端锁：提交参数契约 /
+ * 增量回流 / 终态同步 / 409 与 failed 槽 fail / MAX_SWIPES 客户端预检。
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -21,18 +21,6 @@ import { buildChapterMessage } from '../generation-flow';
 import { useGenerate } from '../useGenerate';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-/** 构造 SSE 流式响应（与 api 层测试同模式） */
-function sseResponse(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const c of chunks) controller.enqueue(encoder.encode(c));
-      controller.close();
-    },
-  });
-  return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-}
 
 function jsonRes(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status });
@@ -96,7 +84,7 @@ function stubFetch(route: (path: string, init: RequestInit) => Response | undefi
   );
 }
 
-/** 任务路径 stub：提交 + 增量轮询 + messages 拉取（generateChapter 任务化后的 mock 形态） */
+/** 任务路径 stub：提交 + 增量轮询 + messages 拉取（全任务化后的统一 mock 形态） */
 function stubTaskRoute(): void {
   stubFetch((path, init) => {
     if (path === '/api/llm/tasks' && (init.method ?? 'GET') === 'POST') {
@@ -166,6 +154,7 @@ afterEach(async () => {
 describe('useGenerate.generateChapter（M2 Chunk 4：server novel-chapter 任务路径）', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    localStorage.clear();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -245,17 +234,19 @@ describe('useGenerate.generateChapter（M2 Chunk 4：server novel-chapter 任务
   });
 });
 
-describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断）', () => {
-  it('swipes 满 20 → 拒绝并提示 SWIPE_LIMIT，不发起任何请求', async () => {
-    stubFetch(() => undefined); // 任何请求都算失败——断言根本不该发
+describe('useGenerate.swipeRegenerate（M2 Chunk 5：重 roll 切 server 任务 mode=swipe）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('swipes 满 50 → 客户端预检拒绝并提示 SWIPE_LIMIT，不发起任何请求（server 上限双层）', async () => {
+    stubTaskRoute(); // 任何请求都算 unmocked 失败——断言根本不该发
     await renderHook();
-    const target = buildChapterMessage({
-      content: 'v1',
-      title: '一',
-      chapterIndex: 1,
-      promptTokens: 1,
-      generationMs: 1,
-    });
+    const target = buildChapterMessage({ content: 'v1', title: '一', chapterIndex: 1, promptTokens: 1, generationMs: 1 });
     target.swipes = Array.from({ length: 50 }, (_, i) => aiVersion(`第${i + 1}支`, `v${i + 1}`, i));
     let result: Message | null = null;
     await act(async () => {
@@ -265,10 +256,10 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
     expect(getGenSlot('w1')?.error).toMatchObject({ code: 'SWIPE_LIMIT' });
     expect(getGenSlot('w1')?.error?.message).toContain('50');
     expect(getGenSlot('w1')?.partialKept).toBe(false);
-    expect(calls).toHaveLength(0); // 未发任何流/入库请求
+    expect(calls).toHaveLength(0); // 未发任何请求
   });
 
-  it('重 roll 上下文取 target 之前：旧候选正文不进生成请求，新候选追加进 swipes', async () => {
+  it('提交契约 mode=swipe + targetId + directive 取 target.directive；终态取回 server appendSwipe 后的目标消息并同步本地', async () => {
     const prev = userMsg('u1', '前面的剧情');
     const target = buildChapterMessage({
       content: '旧候选正文XYZ',
@@ -278,134 +269,174 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
       promptTokens: 1,
       generationMs: 1,
     });
-    let captured: { messages: { content: string }[] } | null = null;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (path: string, init?: RequestInit) => {
-        calls.push({ path, init: init ?? {} });
-        if (path === '/api/llm/generate') {
-          captured = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
-          return sseResponse(['data: {"text":"新候选"}\n\n', 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
-        }
-        if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
-        if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
-        throw new Error(`unmocked fetch: ${path}`);
-      }),
-    );
+    pollScript = [
+      { status: 'running', progressLen: 3, progressText: '新候选', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 2 },
+      { status: 'done', resultMessages: 1, resultMessageIds: [target.id] },
+    ];
+    // server appendSwipe 产物：新候选追加进 target.swipes（上下文取 target 之前等组装语义在 server orchestrate）
+    storedMessages = [{ ...target, content: '新候选。', swipes: [...target.swipes, aiVersion('新候选。', 'v2', 1)], swipeId: 1 }];
+    stubTaskRoute();
     await renderHook();
-    let result: Message | null = null;
-    await act(async () => {
-      result = await latest!.swipeRegenerate(baseWork(), [prev, target], target);
+    let result: Message | null | undefined;
+    act(() => {
+      void latest!.swipeRegenerate(baseWork(), [prev, target], target).then((r) => {
+        result = r;
+      });
     });
+    await drainPolls(2);
+    const submit = calls.find((c) => c.path === '/api/llm/tasks')!;
+    const body = JSON.parse(String(submit.init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ kind: 'novel-chapter', workId: 'w1', mode: 'swipe', targetId: target.id, directive: '写第二章' });
     expect(result).not.toBeNull();
-    expect(captured).not.toBeNull();
-    const allText = JSON.stringify(captured!.messages);
-    expect(allText).not.toContain('旧候选正文XYZ'); // 被重 roll 的旧候选不进上下文（review #10）
-    expect(allText).toContain('前面的剧情'); // 之前的历史保留
-    expect(result!.swipes.map((v) => v.content)).toEqual(['旧候选正文XYZ', '新候选。']); // 候选追加同 id upsert
+    expect(result!.id).toBe(target.id);
+    expect(result!.swipes.map((v) => v.content)).toEqual(['旧候选正文XYZ', '新候选。']); // server 候选追加原样同步
+    expect(result!.swipeId).toBe(1);
+    expect(useWorkStore.getState().messages.map((m) => m.id)).toEqual([target.id]); // 本地视图已同步
+    expect(calls.some((c) => c.path === '/api/llm/generate')).toBe(false); // 客户端不再走 SSE 流
+  });
+
+  it('任务 failed → 返回 null + 槽 fail（原候选不动）', async () => {
+    const target = buildChapterMessage({ content: 'v1', title: '一', chapterIndex: 1, directive: '写第一章', promptTokens: 1, generationMs: 1 });
+    pollScript = [{ status: 'failed', error: '上游无有效输出', resultMessages: 0, resultMessageIds: [] }];
+    stubTaskRoute();
+    await renderHook();
+    let result: Message | null | undefined;
+    act(() => {
+      void latest!.swipeRegenerate(baseWork(), [target], target).then((r) => {
+        result = r;
+      });
+    });
+    await drainPolls(2);
+    expect(result).toBeNull();
+    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'LLM_FAILED' });
+    expect(useWorkStore.getState().messages).toHaveLength(0);
   });
 });
 
-describe('useGenerate.swipeRegenerate（连续两次重roll 回归——用户实测「第二次消失」）', () => {
-  it('连续两次重roll：候选累加不丢失（v1→[v1,A]→[v1,A,B]，swipeId 指向最新）', async () => {
-    let n = 0;
-    stubFetch((path, init) => {
-      calls.push({ path, init: init ?? {} });
-      if (path === '/api/llm/generate') {
-        n += 1;
-        return sseResponse([`data: {"text":"重roll候选${n}"}\n\n`, 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
-      }
-      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
-      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
-      throw new Error(`unmocked fetch: ${path}`);
+describe('useGenerate.swipeRegenerate（连续两次重roll 回归——任务路径候选累加不丢失）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** 驱动一次 swipe 任务至终态 */
+  async function swipeOnce(work: Work, all: Message[], target: Message): Promise<Message | null> {
+    let r: Message | null = null;
+    act(() => {
+      void latest!.swipeRegenerate(work, all, target).then((x) => {
+        r = x;
+      });
     });
+    await drainPolls(2);
+    return r ?? null;
+  }
+
+  it('连续两次重roll：server 累加候选原样同步（v1→[v1,A]→[v1,A,B]，swipeId 指向最新）', async () => {
+    stubTaskRoute();
     await renderHook();
     const prev = userMsg('u1', '前面的剧情');
-    let target = buildChapterMessage({
-      content: 'v1', title: '一', chapterIndex: 1, directive: '写第一章', promptTokens: 1, generationMs: 1,
-    });
-    let all = [prev, target];
-    let r: Message | null = null;
-    await act(async () => {
-      r = await latest!.swipeRegenerate(baseWork(), all, target);
-    });
+    const target = buildChapterMessage({ content: 'v1', title: '一', chapterIndex: 1, directive: '写第一章', promptTokens: 1, generationMs: 1 });
+    // 第一次：server 在 [v1] 上追加候选 A
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: [target.id] }];
+    storedMessages = [{ ...target, content: '重roll候选1。', swipes: [...target.swipes, aiVersion('重roll候选1。', 'v2', 1)], swipeId: 1 }];
+    let r = await swipeOnce(baseWork(), [prev, target], target);
     expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1。']);
-    all = [prev, r!];
-    await act(async () => {
-      r = await latest!.swipeRegenerate(baseWork(), all, r!);
-    });
-    // 第二次重roll：候选累加不覆盖（自动命名 v2/v3），swipeId 指向最新候选
+    const first = r!;
+    // 第二次重roll：server 在 [v1, A] 上追加 B（自动命名 v3），终态同步回 3 支候选
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: [first.id] }];
+    storedMessages = [{ ...first, content: '重roll候选2。', swipes: [...first.swipes, aiVersion('重roll候选2。', 'v3', 2)], swipeId: 2 }];
+    r = await swipeOnce(baseWork(), [prev, first], first);
     expect(r!.swipes.map((v) => v.content)).toEqual(['v1', '重roll候选1。', '重roll候选2。']);
     expect(r!.swipeId).toBe(2);
     expect(r!.content).toBe('重roll候选2。');
+    expect(calls.filter((c) => c.path === '/api/llm/tasks' && (c.init.method ?? 'GET') === 'POST')).toHaveLength(2); // 每次各一个任务
   });
 });
 
-describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容——swipe 链回归）', () => {
-  /** swipe 链共用 stub：generateChapter 已切任务，thinking 管线由仍走 client SSE 的 swipe 路径覆盖 */
-  function stubSwipeRoute(textFrames: string[]): void {
-    stubFetch((path) => {
-      if (path === '/api/llm/generate') return sseResponse([...textFrames, 'data: {"finish":"stop"}\n\n', 'data: [DONE]\n\n']);
-      if (path === '/api/tokenize') return jsonRes({ count: 10, approximate: false });
-      if (path === '/api/works/w1/messages') return jsonRes({ ok: true, revision: 2 });
-      throw new Error(`unmocked fetch: ${path}`);
-    });
-  }
+describe('useGenerate.swipeRegenerate（💭思考链任务路径透传——server 产物原样同步）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-  /** swipe 目标（重 roll 走 appendSwipe 通道，thinking 管线与 chapter 路径同源） */
+  /** swipe 目标（重 roll 走 server appendSwipe 通道，thinking 提取在 server 端同源） */
   function swipeTarget(): Message {
-    return buildChapterMessage({
-      content: 'v1',
-      title: '一',
-      chapterIndex: 1,
-      directive: '写第一章',
-      promptTokens: 1,
-      generationMs: 1,
-    });
+    return buildChapterMessage({ content: 'v1', title: '一', chapterIndex: 1, directive: '写第一章', promptTokens: 1, generationMs: 1 });
   }
 
-  it('thinking 帧 → runtime 累积 thinkingBuffer → finalize 优先写入 extra.rawThinking，正文干净', async () => {
-    stubSwipeRoute([
-      'data: {"thinking":"先想兄妹动机：是复仇还是逃离。"}\n\n',
-      'data: {"thinking":"选逃离，留悬念。"}\n\n',
-      'data: {"text":"雨夜里妹妹攥紧了哥哥的袖口。"}\n\n',
-    ]);
-    await renderHook();
+  it('server 入库的 extra.rawThinking 原样返回（💭折叠真实数据源），槽 thinkingBuffer 收束复位不串味', async () => {
     const target = swipeTarget();
-    let result: Message | null = null;
-    await act(async () => {
-      result = await latest!.swipeRegenerate(baseWork(), [target], target);
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: [target.id] }];
+    storedMessages = [
+      {
+        ...target,
+        content: '雨夜里妹妹攥紧了哥哥的袖口。',
+        swipes: [...target.swipes, aiVersion('雨夜里妹妹攥紧了哥哥的袖口。', 'v2', 1)],
+        swipeId: 1,
+        extra: { rawThinking: '先想兄妹动机：是复仇还是逃离。选逃离，留悬念。' },
+      },
+    ];
+    stubTaskRoute();
+    await renderHook();
+    let result: Message | null | undefined;
+    act(() => {
+      void latest!.swipeRegenerate(baseWork(), [target], target).then((r) => {
+        result = r;
+      });
     });
+    await drainPolls(2);
     expect(result).not.toBeNull();
-    // 流式累积的思考优先入库（MiniMax M3 不写 <think> 标签，这是💭折叠的唯一真实数据源）
+    // 流式思考入库产物（MiniMax M3 不写 <think> 标签，这是💭折叠的唯一真实数据源）
     expect(result!.extra.rawThinking).toBe('先想兄妹动机：是复仇还是逃离。选逃离，留悬念。');
-    expect(result!.content).not.toContain('先想兄妹动机'); // 思考不混入正文
     expect(result!.content).toContain('妹妹攥紧了哥哥的袖口。');
-    // store 收束：finish+reset 后 thinkingBuffer 一并复位（不串味到下一章）
-    expect(getGenSlot('w1')?.thinkingBuffer ?? '').toBe('');
+    expect(getGenSlot('w1')?.thinkingBuffer ?? '').toBe(''); // 槽收束后复位，不串味到下一章
   });
 
-  it('正文内嵌 <think> 标签仍走分流兜底；流式+标签同时存在时拼接不丢内容', async () => {
-    stubSwipeRoute(['data: {"thinking":"流式思考"}\n\n', 'data: {"text":"<think>标签思考</think>正文开始。"}\n\n']);
-    await renderHook();
+  it('server 已剥离 <think> 标签的正文原样同步（client 不做二次分流/拼接）', async () => {
     const target = swipeTarget();
-    let result: Message | null = null;
-    await act(async () => {
-      result = await latest!.swipeRegenerate(baseWork(), [target], target);
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: [target.id] }];
+    storedMessages = [
+      {
+        ...target,
+        content: '正文开始。',
+        swipes: [...target.swipes, aiVersion('正文开始。', 'v2', 1)],
+        swipeId: 1,
+        extra: { rawThinking: '流式思考标签思考' },
+      },
+    ];
+    stubTaskRoute();
+    await renderHook();
+    let result: Message | null | undefined;
+    act(() => {
+      void latest!.swipeRegenerate(baseWork(), [target], target).then((r) => {
+        result = r;
+      });
     });
-    // openai 通道下 <think> 内联标签由 runtime 分流器实时并入思考流（mergeThinking 只剩单源）
+    await drainPolls(2);
+    expect(result!.content).toBe('正文开始。'); // 标签已由 server 剥离干净
     expect(result!.extra.rawThinking).toBe('流式思考标签思考');
-    expect(result!.content).toBe('正文开始。'); // 标签剥离干净
   });
 
-  it('无 thinking 帧且正文无标签 → extra.rawThinking 不落空串（字段缺省）', async () => {
-    stubSwipeRoute(['data: {"text":"纯净正文。"}\n\n']);
-    await renderHook();
+  it('无思考产物 → extra.rawThinking 字段缺省透传（不落空串）', async () => {
     const target = swipeTarget();
-    let result: Message | null = null;
-    await act(async () => {
-      result = await latest!.swipeRegenerate(baseWork(), [target], target);
+    pollScript = [{ status: 'done', resultMessages: 1, resultMessageIds: [target.id] }];
+    storedMessages = [{ ...target, content: '纯净正文。', swipes: [...target.swipes, aiVersion('纯净正文。', 'v2', 1)], swipeId: 1 }];
+    stubTaskRoute();
+    await renderHook();
+    let result: Message | null | undefined;
+    act(() => {
+      void latest!.swipeRegenerate(baseWork(), [target], target).then((r) => {
+        result = r;
+      });
     });
+    await drainPolls(2);
+    expect(result!.content).toBe('纯净正文。');
     expect(result!.extra.rawThinking).toBeUndefined();
   });
 });

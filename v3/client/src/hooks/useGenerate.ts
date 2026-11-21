@@ -4,11 +4,12 @@
  * generateChapter：组装（directive 通道：拉绑定资产 → 世界书扫描 → 总装 → tokenize 校验）
  *   → POST /api/llm/generate SSE → 逐 chunk 进 generationStore
  *   → 完成后处理（正则/标题/状态块）→ 构造 Message 幂等入库
- * continueFromPartial：断流半成品 +「继续」= 以续写指令重组上下文再发起（非续传）
- * swipeRegenerate：同 directive 重生成，候选 push 进既有消息的 swipes
- *   （上下文取 target 之前，旧候选不进上下文；候选达 MAX_SWIPES 上限拒绝）
- * 流编排（重试/停止/事务 fail）统一走 generation-runtime 共享内核（与 chat 同构）。
- * 真实 UI 接线属 Task 20（WorkPage/CommandBar）。
+ * continueFromPartial：断流半成品 +「继续」= mode=continue 任务（半成品作 server 续写基底）
+ * swipeRegenerate：同 directive 重生成（mode=swipe 任务），server 做 historyBeforeTarget
+ *   上下文 + appendSwipe 候选追加（MAX_SWIPES 双层：客户端预检省往返，server 权威拒绝）
+ * M2 Chunk 5 任务化：全部生成操作统一提交 server novel-chapter 任务（四模式），
+ * 编排（分段/重试/截断续写/润色）在 server services/novel-gen；旧 client SSE 生成链
+ * 仅作过渡保留（Chunk 5.2 删除）。
  */
 import { useCallback, useRef, useState } from 'react';
 import type { Message } from '@shared/message';
@@ -351,7 +352,6 @@ export function useGenerate(workId?: string | null): UseGenerateResult {
    * 分段/无效输出重试/截断自动续写/润色 pass/truncatedSwipeId 标记全部在 server 编排
    * （与 client 旧链逐点对齐移植，见 services/novel-gen）；客户端提交任务 + 增量回流
    * （progressText → appendChunk 打字机视图）+ 终态按 resultMessageIds 同步本地视图。
-   * swipe/extend/continue 仍走 client SSE 链（Chunk 5 切换），槽位级防重入互不阻塞。
    */
   const generateChapter = useCallback(
     async (work: Work, _messages: Message[], directive: string) => {
@@ -361,78 +361,40 @@ export function useGenerate(workId?: string | null): UseGenerateResult {
     [novel],
   );
 
+  /**
+   * 断流后「继续」（M2 Chunk 5 切任务，mode=continue）：半成品作 server 续写基底
+   * （buildContinueDirective + 半章进历史 grounding 的续写轮语义在 server 编排）；
+   * 终态按 resultMessageIds 取回入库消息（同 id 幂等覆盖语义 server 侧完成）。
+   */
   const continueFromPartial = useCallback(
-    (work: Work, messages: Message[], partial: string) => {
-      const targetId = getGenSlot(work.id)?.targetMessageId ?? uuid();
-      // 续写轮语义（反馈③）：半章进历史 grounding + continuation 要求块（不要求章标题、禁止重开）
-      return run(work, withPartialInHistory(messages, partial), buildContinueDirective(partial), {
-        targetId,
-        initialBuffer: partial,
-        continuation: true,
-      });
+    async (work: Work, _messages: Message[], partial: string) => {
+      const outcome = await novel.submitAndWait({ work, mode: 'continue', directive: '', partial });
+      return outcome.messages.at(-1) ?? null;
     },
-    [run],
+    [novel],
   );
 
+  /**
+   * 换一支（M2 Chunk 5 切任务，mode=swipe）：server 端 historyBeforeTarget 上下文
+   * （被重roll章节的旧候选不进上下文）+ 无效输出重试 + 截断自动续写 + appendSwipe
+   * 候选追加；终态取回更新后的 target 消息（新候选位于末位 swipe）。MAX_SWIPES 双层：
+   * 客户端预检省一次往返，server 权威拒绝（同书任务互斥外仍兜底并发竞态）。
+   */
   const swipeRegenerate = useCallback(
-    async (work: Work, messages: Message[], target: Message) => {
+    async (work: Work, _messages: Message[], target: Message) => {
       if (target.swipes.length >= MAX_SWIPES) {
         useGenerationStore.getState().fail(work.id, swipeLimitError(), false);
-        return Promise.resolve(null);
+        return null;
       }
-      // 对齐 chat 语义：上下文取 target 之前（被重roll章节的旧候选不进上下文）
-      const directive = target.directive ?? '';
-      const ctx = historyBeforeTarget(messages, target.id);
-      let msg = await run(work, ctx, directive, {
-        targetId: target.id,
-        initialBuffer: '',
-        swipeTarget: target,
-      });
-      const reason = invalidReasonOf(msg);
-      if (msg && reason) {
-        msg = await run(work, ctx, directive, {
-          targetId: target.id,
-          initialBuffer: '',
-          swipeTarget: target,
-          promptDirective: directive + RETRY_SUFFIX[reason], // 后缀只进提示词，不入库 metadata
-        });
-      }
-      // 重roll 同样走截断自动续写（与 generateChapter 同判据同轮数；候选经 swipeTarget 更新落库）
-      const keepTitle = target.chapter?.title;
-      msg = await continueTruncated(
+      const outcome = await novel.submitAndWait({
         work,
-        ctx,
-        directive,
-        msg,
-        work.settings.targetChapterWords ?? 3000,
-        (partial) => ({
-          targetId: target.id,
-          initialBuffer: partial,
-          swipeTarget: target,
-          promptDirective: directive,
-          keepTitle,
-          continueRemaining: Math.max(400, (work.settings.targetChapterWords ?? 3000) - partial.length),
-          maxTokensScale: 2,
-        }),
-      );
-      // 最后防线同 generateChapter：仅对有效产出标记（占位崩溃稿已 append 进 swipes，误标会
-      // 指向崩溃候选导致提示条误显），新候选位于末位 swipe
-      if (msg && invalidReasonOf(msg) === null) {
-        const finish = getGenSlot(work.id)?.finishReason ?? null;
-        const tw = work.settings.targetChapterWords ?? 3000;
-        if (looksTruncated(finish, msg.content, tw)) {
-          msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipes.length - 1 } };
-          try {
-            await persistMessage(work.id, msg);
-          } catch {
-            /* 标记落库失败不阻塞返回 */
-          }
-        }
-      }
-      // 重试一次后仍无效（或本次即失败）：返回 null，保留原候选不动（占位内容不进 swipes）
-      return invalidReasonOf(msg) ? null : msg;
+        mode: 'swipe',
+        directive: target.directive ?? '',
+        targetId: target.id,
+      });
+      return outcome.messages.at(-1) ?? null;
     },
-    [run],
+    [novel],
   );
 
   /**
@@ -569,65 +531,18 @@ export function useGenerate(workId?: string | null): UseGenerateResult {
   );
 
   /**
-   * 本章加长/续写（用户需求：卷章之外允许对当前章要求加长或续写）：
-   * - append（续写本章）：上下文含本章（末条）→ continuation 语义从本章结尾续写新剧情；
-   *   initialBuffer=章全文 → buffer 流式呈现「旧文+新文」，结果为完整扩展文本
-   * - expand（加长本章）：扩写语义，基于当前版本输出更长完整章（情节不变原地加厚），initialBuffer=''
-   * 两者都经 swipeTarget 通道：新内容成为 target 的新候选版本（◀▶ 可回退原文），同 id 幂等覆盖；
-   * 产出后同走截断自动续写（append 续写轮语义 / expand 常规语义）
+   * 本章加长/续写（M2 Chunk 5 切任务，mode=append|expand，用户需求：卷章之外允许对当前章
+   * 要求加长或续写）：append=从本章结尾续写新剧情（追加式变长）/ expand=扩写本章（原地加厚），
+   * 上下文含本章、扩写轮关思考、maxTokensScale 2 等语义在 server 逐点对齐移植（runExtendMode）；
+   * 新候选版本追加（◀▶ 可回退原文）经 server appendSwipe，同 id 幂等覆盖；per-work 防重入
+   * 由任务提交层（useNovelTask）承担。
    */
   const extendChapter = useCallback(
-    async (work: Work, messages: Message[], target: Message, mode: 'append' | 'expand') => {
-      if (useGenerationStore.getState().slots[work.id]?.streaming) return null; // 防重入
-      const idx = messages.findIndex((m) => m.id === target.id);
-      // 上下文含本章（含 target 本体，模型看得到要续写/扩写的正文）；其后章节不进上下文
-      const ctx = idx === -1 ? messages : messages.slice(0, idx + 1);
-      const tw = work.settings.targetChapterWords ?? 3000;
-      // 加长目标字数（用户实测：对已超目标的章「扩写到 tw」语义矛盾 → 模型原地重写感知为没变化）：
-      // 目标 = max(作品目标字数, 现有字数 + 1500)——「加长」必须比现在更长
-      const expandTarget = Math.max(tw, target.content.length + 1500);
-      const directive =
-        mode === 'append'
-          ? buildContinueDirective(target.content)
-          : `把本章加长扩写（保持情节不变，写到约 ${expandTarget} 字）`;
-      let msg = await run(work, ctx, directive, {
-        targetId: target.id,
-        initialBuffer: mode === 'append' ? target.content : '',
-        swipeTarget: target,
-        // 扩写轮关思考（生产实测：推理模型思考吞掉输出预算 → meta 空产出静默失败）
-        ...(mode === 'append' ? { continuation: true } : { expandChapter: true, thinkingOff: true }),
-        maxTokensScale: 2, // 扩写/续写都是长输出：预算 2 倍（封顶 64000）
-      });
-      const reason = invalidReasonOf(msg);
-      if (msg && reason) {
-        msg = await run(work, ctx, directive, {
-          targetId: target.id,
-          initialBuffer: mode === 'append' ? target.content : '',
-          swipeTarget: target,
-          ...(mode === 'append' ? { continuation: true } : { expandChapter: true, thinkingOff: true }),
-          promptDirective: directive + RETRY_SUFFIX[reason],
-          maxTokensScale: 3,
-        });
-      }
-      // 截断自动续写：append 走续写轮语义（无缝续写），expand 走常规语义（finish=length 时补写）
-      msg = await continueTruncated(
-        work,
-        ctx,
-        directive,
-        msg,
-        work.settings.targetChapterWords ?? 3000,
-        (partial) => ({
-          targetId: target.id,
-          initialBuffer: partial,
-          swipeTarget: target,
-          ...(mode === 'append' ? { continuation: true } : {}),
-          maxTokensScale: 2,
-        }),
-      );
-      return invalidReasonOf(msg) ? null : msg;
+    async (work: Work, _messages: Message[], target: Message, mode: 'append' | 'expand') => {
+      const outcome = await novel.submitAndWait({ work, mode, directive: '', targetId: target.id });
+      return outcome.messages.at(-1) ?? null;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [run, continueTruncated],
+    [novel],
   );
 
   /**

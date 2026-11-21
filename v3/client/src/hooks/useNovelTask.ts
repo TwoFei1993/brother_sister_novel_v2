@@ -44,9 +44,9 @@ export interface NovelTaskRunInput {
   directive: string;
   chapters?: number;
   outline?: boolean;
-  /** swipe/append/expand 目标消息 id（Chunk 5 起消费；chapter 模式不传） */
+  /** swipe/append/expand 目标消息 id（chapter 模式不传；Chunk 5 起重roll/加长任务消费） */
   targetId?: string;
-  /** continue 半成品基底（Chunk 5 起消费） */
+  /** continue 半成品基底（Chunk 5 起断流续写任务消费） */
   partial?: string;
   /** 批量进度回调（轮询 done 计数驱动 setBatch） */
   onProgress?: (p: { done: number; chapterTotal: number; phase: NovelTaskProgressPayload['phase'] }) => void;
