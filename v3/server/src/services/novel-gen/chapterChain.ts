@@ -35,6 +35,14 @@ import { buildMacroEnv, scanAndAssemble, type PendingVars } from './assemble';
 import { finalizeChapter, markTruncatedSwipe, polishChapter } from './finalize';
 import { invalidReasonOf, progressOf, type ChapterOutcome, type ChainState, type RunOpts } from './chainState';
 
+/**
+ * 字数收束参数（写满型模型防线，M3.1-Flash 实测无视 max_tokens 上限）：
+ * - WORD_GOAL_RATIO：字数达标线（已写 ≥ 目标×0.9 即不再续写——「腰斩」但字数够 = 灌水）
+ * - TRIM_CAP_RATIO：硬裁剪线（超目标×1.3 → 截到最后句号入库，不标「未写完」）
+ */
+const WORD_GOAL_RATIO = 0.9;
+const TRIM_CAP_RATIO = 1.3;
+
 /** 一次「组装 → LLM → finalize 入库」的完整单轮（client run 的 server 等价物） */
 export async function runOnce(
   st: ChainState,
@@ -139,12 +147,17 @@ async function settleContinuation(
     st.chapterText = rolled.content;
     return { msg: rolled, stop: true };
   }
-  // 正常续写：chapter/directive 还原为 prev（章节身份不变；title 不被续写指令污染）。
-  // client 平价：还原仅内存态不落库（落库行保持续写轮 finalize 的中间态元数据）
-  return {
-    msg: next ? { ...next, directive: prev.directive, ...(prev.chapter ? { chapter: { ...prev.chapter } } : {}) } : next,
-    stop: false,
+  // 正常续写：chapter/directive 还原为 prev（章节身份不变；title 不被续写指令污染——
+  // 挂账 f 升级执行：server 是唯一入库方，内存态还原不再有 client 落库兜底，
+  // 中间态 title《接着写完这一章…》会经 resultMessageIds 同步直达读者，必须落库还原）
+  if (!next) return { msg: next, stop: false };
+  const restored: Message = {
+    ...next,
+    directive: prev.directive,
+    ...(prev.chapter ? { chapter: { ...prev.chapter } } : {}),
   };
+  await upsertMessageInternal(st.workId, restored);
+  return { msg: restored, stop: false };
 }
 
 /**
@@ -164,6 +177,8 @@ export async function continueTruncated(
   for (let rounds = 0; rounds < MAX_TRUNCATE_ROUNDS && msg; rounds += 1) {
     if (st.isCancelled()) break; // 段间取消（client 由 abort 实现，server 读任务文件标志）
     if (!looksTruncated(st.finish, msg.content, targetWords)) break;
+    // 字数达标即停（同分段链：写满型模型「腰斩」但字数已够 = 灌水，续写只会更长）
+    if (msg.content.length >= targetWords * WORD_GOAL_RATIO) break;
     const prev = msg;
     const partial = msg.content;
     // 续写轮按「补完剩余字数后收束」（target − 已有）：防每轮再写满额字数导致章节膨胀
@@ -219,6 +234,9 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
     for (let part = 2; part <= parts && msg; part += 1) {
       if (st.isCancelled()) return { msg: null, cancelled: true };
       if (st.finish === 'stop') break; // 模型自然收束 → 分段链提前完成
+      // 字数达标即停（max_tokens 对 M3.1-Flash 无硬约束、生产实证写满型模型首段即超目标
+      // 7801 字——「腰斩」但字数已够 = 灌水，续写只会更长，先裁剪不再续）
+      if (msg.content.length >= tw * WORD_GOAL_RATIO) break;
       const prev = msg;
       // 续写段预算跟随 remaining（「补多少字给多少容量」），且不走 calcOutputBudget 的
       // floor（2048 对「补 400 字」是 5 倍容量——6890 字生产案例的第三来源），floor 取协议最低 1024
@@ -254,8 +272,27 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
   }
   // 润色 pass（P2-2）：仅对有效产出润色；失败静默保留原稿
   msg = await polishChapter(st, msg);
-  // 最后防线：仅对有效产出标记，且在润色之后（润色生成新版本时标记跟随最终版本）
-  msg = await markTruncatedSwipe(st, msg, msg?.swipeId ?? 0);
+  // 超写硬裁剪（写满型模型的最终防线）：超目标 30% → 截到最后句号（不标「未写完」——
+  // 内容自洽，只是比目标长）；裁剪后跳过截断标记（looksTruncated 会被 finish=length 误标）
+  let hardTrimmed = false;
+  if (msg && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * TRIM_CAP_RATIO)) {
+    const over = msg; // 收窄提取（TS narrowing 不入闭包）
+    const cap = Math.ceil(tw * TRIM_CAP_RATIO);
+    const cut = over.content.lastIndexOf('。', cap);
+    const trimmedContent = cut > tw * 0.5 ? over.content.slice(0, cut + 1) : over.content.slice(0, cap);
+    const trimmed: Message = {
+      ...over,
+      content: trimmedContent,
+      swipes: over.swipes.map((v, i) => (i === over.swipeId ? { ...v, content: trimmedContent } : v)),
+    };
+    await upsertMessageInternal(st.workId, trimmed);
+    st.chapterText = trimmedContent;
+    msg = trimmed;
+    hardTrimmed = true;
+  }
+  // 最后防线：仅对有效产出标记，且在润色之后（润色生成新版本时标记跟随最终版本）；
+  // 硬裁剪稿不标（finish=length 是超写腰斩而非「未写完」）
+  if (!hardTrimmed) msg = await markTruncatedSwipe(st, msg, msg?.swipeId ?? 0);
   if (!msg || invalidReasonOf(msg) !== null) {
     return {
       msg: null,
