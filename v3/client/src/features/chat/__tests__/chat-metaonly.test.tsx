@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultNovelSettings, type Work } from '@shared/work';
 import { aiVersion, type Message } from '@shared/message';
 
-import { useGenerationStore } from '../../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../../stores/generation';
 import { useSettingsStore } from '../../../stores/settings';
 import {
   buildChatMacroEnv,
@@ -54,7 +54,7 @@ function stubMessagesPost(): void {
 const SPEAKER = { id: 'c1', name: '哥哥' };
 
 async function finalizeWith(buffer: string): Promise<{ turn: Awaited<ReturnType<typeof finalizeChatGeneration>>; posts: number }> {
-  useGenerationStore.setState({ buffer });
+  useGenerationStore.setState({ slots: { w1: { streaming: true, buffer, thinkingBuffer: '', targetMessageId: null, error: null, partialKept: false, finishReason: null } } });
   const input: ChatFinalizeInput = {
     work: chatWork(),
     userText: '晚上吃什么',
@@ -87,7 +87,7 @@ function fakeRun(script: Array<ChatTurn | null>): {
   return {
     run,
     promise: (history, userText, speaker, opts) =>
-      runChatWithMetaRetry(run as never, history, userText, speaker, opts),
+      runChatWithMetaRetry(run as never, 'w1', history, userText, speaker, opts),
   };
 }
 
@@ -111,7 +111,7 @@ const OPTS: ChatRunOptions = { targetId: 't1', initialBuffer: '' };
 describe('finalizeChatGeneration（D7：残章不以角色名义入库）', () => {
   beforeEach(() => {
     calls = [];
-    useGenerationStore.getState().reset();
+    useGenerationStore.setState({ slots: {} });
     useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'm3' });
     stubMessagesPost();
   });
@@ -141,7 +141,7 @@ describe('finalizeChatGeneration（D7：残章不以角色名义入库）', () =
 
 describe('runChatWithMetaRetry（D7：残章自动重试一次）', () => {
   beforeEach(() => {
-    useGenerationStore.getState().reset();
+    useGenerationStore.setState({ slots: {} });
   });
 
   it('首轮残章 → 自动带守卫后缀重发一次（userText 参数保持干净文本），重试成功返回正常 turn', async () => {
@@ -153,7 +153,7 @@ describe('runChatWithMetaRetry（D7：残章自动重试一次）', () => {
     expect(secondCall.promptUserText).toContain('晚上吃什么'); // 后缀拼接在原文本之后
     expect(turn).not.toBeNull();
     expect(turn!.assistant.content).toContain('一起吃');
-    expect(useGenerationStore.getState().error).toBeNull(); // 成功路径无错误
+    expect(getGenSlot('w1')?.error ?? null).toBeNull(); // 成功路径无错误（无槽=无错误）
   });
 
   it('重试后仍残章 → 返回 null + 错误进 store（「本轮只生成了思考内容，请重试」）', async () => {
@@ -161,7 +161,7 @@ describe('runChatWithMetaRetry（D7：残章自动重试一次）', () => {
     const turn = await promise([], '晚上吃什么', SPEAKER, OPTS);
     expect(run).toHaveBeenCalledTimes(2); // 重试恰好一次
     expect(turn).toBeNull(); // 残章不入库、不返回占位
-    const err = useGenerationStore.getState().error;
+    const err = getGenSlot('w1')?.error ?? null;
     expect(err?.message).toContain('本轮只生成了思考内容，请重试');
   });
 
@@ -170,7 +170,7 @@ describe('runChatWithMetaRetry（D7：残章自动重试一次）', () => {
     const turn = await promise([], '晚上吃什么', SPEAKER, OPTS);
     expect(run).toHaveBeenCalledTimes(1); // 绝不重试
     expect(turn).toBeNull();
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error ?? null).toBeNull();
   });
 
   it('首轮即正常正文 → 单次调用不重试', async () => {
@@ -183,7 +183,7 @@ describe('runChatWithMetaRetry（D7：残章自动重试一次）', () => {
 
 describe('思考流落库（反馈⑨：rawThinking 进 extra 供折叠展示）', () => {
   beforeEach(() => {
-    useGenerationStore.getState().reset();
+    useGenerationStore.setState({ slots: {} });
     calls = [];
     stubMessagesPost();
   });

@@ -187,7 +187,7 @@ export default function ChatWorkspace({ work }: { work: Work }) {
     if (autoTimerRef.current !== null) window.clearTimeout(autoTimerRef.current);
     autoTimerRef.current = window.setTimeout(() => {
       autoTimerRef.current = null;
-      if (!autoShouldSend(autoRef.current) || useGenerationStore.getState().streaming) return;
+      if (!autoShouldSend(autoRef.current) || useGenerationStore.getState().slots[work.id]?.streaming) return;
       setAuto((cur) => autoConsume(cur));
       void doSend('', { implicit: true, fromAuto: true });
     }, AUTO_CHAT_DELAY_MS);
@@ -196,12 +196,12 @@ export default function ChatWorkspace({ work }: { work: Work }) {
   function handleAutoToggle(): void {
     const next = autoToggle(autoRef.current, membersRef.current.length);
     setAuto(next);
-    if (next.enabled && !useGenerationStore.getState().streaming) scheduleAutoNext(next);
+    if (next.enabled && !useGenerationStore.getState().slots[work.id]?.streaming) scheduleAutoNext(next);
   }
 
   function handleContinue(): void {
     if (membersRef.current.length === 0) return;
-    const partial = useGenerationStore.getState().buffer;
+    const partial = useGenerationStore.getState().slots[work.id]?.buffer ?? '';
     const fallbackText = [...useWorkStore.getState().messages].reverse().find((m) => m.role === 'user')?.content ?? '';
     const lastUserText = lastSentTextRef.current || fallbackText;
     const list = membersRef.current;

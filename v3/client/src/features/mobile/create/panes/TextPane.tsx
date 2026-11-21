@@ -51,9 +51,9 @@ export function TextPane({
   const [sharedImport, setSharedImport] = useState(false);
   /** ✨ AI 润色进行中（生成新版本） */
   const [polishing, setPolishing] = useState(false);
-  /** 生成状态是全局单槽：区分「本书在写」（显示流式块）与「别书在写」（本书锁生成并提示） */
-  const myStreaming = gen.streaming && gen.streamingWorkId === work.id;
-  const otherStreaming = gen.streaming && gen.streamingWorkId !== null && gen.streamingWorkId !== work.id;
+  /** 生成状态（多槽化）：gen.streaming=本书槽位在写；otherStreaming=别书在写（本书锁生成并提示） */
+  const myStreaming = gen.streaming;
+  const otherStreaming = gen.otherStreaming;
   /** 🎲 重roll当前章（同指令追加新版本，旧版本保留；上下文=该章之前的历史） */
   const [rerollTarget, setRerollTarget] = useState<ChapterMsg | null>(null);
   /** 💭 思考模式快捷开关（生成速度/质量权衡——高频操作直达，与「我的」页同一状态源） */

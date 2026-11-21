@@ -108,6 +108,7 @@ function makeGen(overrides: Partial<Gen> = {}): Gen {
   return {
     streaming: false,
     streamingWorkId: null,
+    otherStreaming: false,
     buffer: '',
     thinkingBuffer: '',
     partialKept: false,

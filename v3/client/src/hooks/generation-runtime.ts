@@ -43,12 +43,12 @@ export interface RunStreamOptions<T> {
   pace?: boolean;
 }
 
-/** 单次生成流编排（返回 null = 未产出结果，错误已写入 generationStore） */
+/** 单次生成流编排（返回 null = 未产出结果，错误已写入 generationStore；防重入为 per-work 槽位级） */
 export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise<T | null> {
-  if (useGenerationStore.getState().streaming) return null; // 防重入
+  if (useGenerationStore.getState().slots[opts.workId]?.streaming) return null; // 防重入（同书单槽）
   const prefs = useSettingsStore.getState().llmPrefs;
   if (!prefs.model) {
-    useGenerationStore.getState().fail({ code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
+    useGenerationStore.getState().fail(opts.workId, { code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
     return null;
   }
 
@@ -65,12 +65,12 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
   // 打字机匀速：SSE chunk 先进 pacer 缓冲，再按固定节奏逐字进 store（中转攒批返回也平滑）。
   // chat 模式保持直通（intervalMs=0），不改变其既有时序。
   const pacer = new TypewriterPacer(
-    (text) => useGenerationStore.getState().appendChunk(text),
+    (text) => useGenerationStore.getState().appendChunk(opts.workId, text),
     opts.pace ? 24 : 0,
   );
   // 思考流匀速（推理模型思考期可达数十秒）：实时可视化避免「卡死」体感；novel 走打字机、chat 直通
   const thinkingPacer = new TypewriterPacer(
-    (text) => useGenerationStore.getState().appendThinking(text),
+    (text) => useGenerationStore.getState().appendThinking(opts.workId, text),
     opts.pace ? 24 : 0,
   );
   // <think> 内联标签分流器：openai 兼容端点把思考混在 content 流里（如 MiniMax-M3），
@@ -102,7 +102,7 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
             // 思考流累积（D4）：经思考打字机匀速进 thinkingBuffer，finalize 时优先入 extra.rawThinking
             onThinking: (thinking) => thinkingPacer.push(thinking),
             // 上游结束原因透传进 store（'length'/'max_tokens' = 输出被截断；截断自动续写的决定性信号）
-            onFinish: (reason) => useGenerationStore.getState().setFinishReason(reason),
+            onFinish: (reason) => useGenerationStore.getState().setFinishReason(opts.workId, reason),
             onDone: () => undefined,
             onError: (e) => {
               streamError = toGenerationError(e); // 流中错误帧：中止读取，统一走 catch
@@ -153,9 +153,9 @@ export async function runGenerationStream<T>(opts: RunStreamOptions<T>): Promise
     const ge = err instanceof GenerationFlowError ? err.ge : toGenerationError(err);
     const partialKept = chunksReceived > 0 || opts.initialBuffer.length > 0;
     if (ge.code === 'aborted' && streamError === null) {
-      useGenerationStore.getState().fail(null, partialKept); // 用户停止：非错误
+      useGenerationStore.getState().fail(opts.workId, null, partialKept); // 用户停止：非错误
     } else {
-      useGenerationStore.getState().fail(ge, partialKept);
+      useGenerationStore.getState().fail(opts.workId, ge, partialKept);
     }
     return null;
   } finally {

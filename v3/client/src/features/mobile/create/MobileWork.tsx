@@ -37,7 +37,7 @@ export default function MobileWork() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { work, messages, loading, loadError, loadWork, upsertLocal, setWork } = useWorkStore();
-  const gen = useGenerate();
+  const gen = useGenerate(id);
   const [pane, setPane] = useState<PaneId>('text');
   /** 用户是否主动切过分区（新书自动动线只让位给用户显式操作） */
   const paneTouchedRef = useRef(false);
@@ -145,7 +145,7 @@ export default function MobileWork() {
         >
           ⇪ 上架
         </button>
-        {gen.streaming && gen.streamingWorkId === id && (
+        {gen.streaming && (
           <button
             type="button"
             onClick={gen.stop}

@@ -18,7 +18,7 @@ import { apiFetch } from '../api/client';
 
 import { buildGenerateBody, cachedOutputBudget, type GenerateBody } from '../api/llm';
 import { isCollapsedText } from '../engine/prompt/novel/collapse-detect';
-import { useGenerationStore } from '../stores/generation';
+import { getGenSlot, selectStreamingWorkId, useGenSlot, useGenSlots, useGenerationStore } from '../stores/generation';
 import { useSettingsStore, type LlmPrefs } from '../stores/settings';
 import { useWorkStore } from '../stores/work';
 import { consumeResult, peekResult, submitTask, taskPending, waitAndStore } from '../lib/llmTask';
@@ -156,9 +156,13 @@ function readNovelBgPending(workId: string): NovelBgPending | null {
 /** 连写/大纲批次进度类型与常量已收敛至 generation-flow（BatchProgress/BATCH_CHUNK_SIZE） */
 
 export interface UseGenerateResult {
+  /** 本书槽位是否生成中（多槽化：其他书生成中不再阻塞本书操作；workId 未绑定时=任一槽） */
   streaming: boolean;
-  /** 正在生成的作品 id（null=无生成；全局单槽，跨书访问时 UI 据此区分本书/别书） */
+  /** 任一 streaming 槽的作品 id（null=无任何生成；兼容旧全局语义：书架/移动端标出「哪本在写」） */
   streamingWorkId: string | null;
+  /** 存在非本书的 streaming 槽（「其他书生成中」派生语义——plan Chunk 4 多槽替代） */
+  otherStreaming: boolean;
+  /** 本书槽位的流式缓冲 */
   buffer: string;
   /** 思考流原文（推理模型💭；移动端 DeepSeek 式折叠块消费） */
   thinkingBuffer: string;
@@ -201,7 +205,11 @@ export interface UseGenerateResult {
   clearTruncated: () => void;
 }
 
-export function useGenerate(): UseGenerateResult {
+/**
+ * @param workId 绑定本书槽位（WorkPage/MobileWork 传路由 id）：返回的 streaming/buffer/error 等
+ *   均读本书槽；未绑定（测试/特殊场景）时 streaming 回退「任一槽」语义，其余字段读不到槽为空。
+ */
+export function useGenerate(workId?: string | null): UseGenerateResult {
   const abortRef = useRef<AbortController | null>(null);
   // 连写循环取消标志：stop() 置位（顶栏 + CommandBar 双入口收敛此处），循环轮末检查退出
   const batchCancelRef = useRef(false);
@@ -294,7 +302,7 @@ export function useGenerate(): UseGenerateResult {
     let msg = first;
     const targetWords = work.settings.targetChapterWords ?? 3000;
     for (let rounds = 0; rounds < MAX_TRUNCATE_ROUNDS && msg; rounds += 1) {
-      const finish = useGenerationStore.getState().finishReason;
+      const finish = getGenSlot(work.id)?.finishReason ?? null;
       if (!looksTruncated(finish, msg.content, targetWords)) break;
       const prev = msg;
       const partial = msg.content;
@@ -351,8 +359,8 @@ export function useGenerate(): UseGenerateResult {
     directive: string,
     targetId: string,
   ): Promise<Message | null> => {
-    const st = useGenerationStore.getState();
-    if (st.error === null || !st.partialKept || st.buffer.trim().length < 200) return null; // 用户停止/无实质内容 → 不救
+    const st = getGenSlot(work.id);
+    if (!st || st.error === null || !st.partialKept || st.buffer.trim().length < 200) return null; // 用户停止/无实质内容 → 不救
     return run(work, withPartialInHistory(messages, st.buffer), buildContinueDirective(st.buffer), {
       targetId,
       initialBuffer: st.buffer,
@@ -405,7 +413,7 @@ export function useGenerate(): UseGenerateResult {
         // 第 2..parts 段：续写语义（无缝续写要求块 + 半章进历史 grounding），
         // finish=stop 尊重模型提前收束；重放/重开检测与元数据还原同 continueTruncated
         for (let part = 2; part <= parts && msg; part += 1) {
-          const finish = useGenerationStore.getState().finishReason;
+          const finish = getGenSlot(work.id)?.finishReason ?? null;
           if (finish === 'stop') break; // 模型自然收束 → 分段链提前完成
           const prev = msg;
           const partial = msg.content;
@@ -505,7 +513,7 @@ export function useGenerate(): UseGenerateResult {
       // 误标会指向崩溃候选）。入库 extra.truncatedSwipeId（版本级标记，UI 必显「未写完」提示——
       // 不依赖启发式，截断恰好落在句号边界时 isTruncatedText 漏检，此类残章此前无声入库）
       if (msg && invalidReasonOf(msg) === null) {
-        const finish = useGenerationStore.getState().finishReason;
+        const finish = getGenSlot(work.id)?.finishReason ?? null;
         const tw = work.settings.targetChapterWords ?? 3000;
         if (looksTruncated(finish, msg.content, tw)) {
           msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipeId } };
@@ -525,7 +533,7 @@ export function useGenerate(): UseGenerateResult {
 
   const continueFromPartial = useCallback(
     (work: Work, messages: Message[], partial: string) => {
-      const targetId = useGenerationStore.getState().targetMessageId ?? uuid();
+      const targetId = getGenSlot(work.id)?.targetMessageId ?? uuid();
       // 续写轮语义（反馈③）：半章进历史 grounding + continuation 要求块（不要求章标题、禁止重开）
       return run(work, withPartialInHistory(messages, partial), buildContinueDirective(partial), {
         targetId,
@@ -539,7 +547,7 @@ export function useGenerate(): UseGenerateResult {
   const swipeRegenerate = useCallback(
     async (work: Work, messages: Message[], target: Message) => {
       if (target.swipes.length >= MAX_SWIPES) {
-        useGenerationStore.getState().fail(swipeLimitError(), false);
+        useGenerationStore.getState().fail(work.id, swipeLimitError(), false);
         return Promise.resolve(null);
       }
       // 对齐 chat 语义：上下文取 target 之前（被重roll章节的旧候选不进上下文）
@@ -580,7 +588,7 @@ export function useGenerate(): UseGenerateResult {
       // 最后防线同 generateChapter：仅对有效产出标记（占位崩溃稿已 append 进 swipes，误标会
       // 指向崩溃候选导致提示条误显），新候选位于末位 swipe
       if (msg && invalidReasonOf(msg) === null) {
-        const finish = useGenerationStore.getState().finishReason;
+        const finish = getGenSlot(work.id)?.finishReason ?? null;
         const tw = work.settings.targetChapterWords ?? 3000;
         if (looksTruncated(finish, msg.content, tw)) {
           msg = { ...msg, extra: { ...msg.extra, truncatedSwipeId: msg.swipes.length - 1 } };
@@ -647,7 +655,7 @@ export function useGenerate(): UseGenerateResult {
           // 不调 reset()：reset 会清空 buffer 让「正在看的内容」瞬间消失（用户实测感知为截断），
           // start(initialBuffer=累积) 本身即完成 buffer 重置
           useGenerationStore.getState().start(work.id, state.targetId, accumulated);
-          useGenerationStore.getState().appendChunk(raw);
+          useGenerationStore.getState().appendChunk(work.id, raw);
           const roundDirective = isContinue ? buildContinueDirective(accumulated) : state.directive;
           msg = await finalizeGeneration({
             work,
@@ -681,10 +689,10 @@ export function useGenerate(): UseGenerateResult {
         }
       } catch (err) {
         const ge = toGenerationError(err);
-        useGenerationStore.getState().fail(ge, accumulated.length > 0);
+        useGenerationStore.getState().fail(work.id, ge, accumulated.length > 0);
       } finally {
-        useGenerationStore.getState().finish();
-        useGenerationStore.getState().reset();
+        useGenerationStore.getState().finish(work.id);
+        useGenerationStore.getState().reset(work.id);
         localStorage.removeItem(novelBgPendingKey(work.id));
       }
       return invalidReasonOf(msg) ? null : msg;
@@ -699,10 +707,10 @@ export function useGenerate(): UseGenerateResult {
    */
   const generateChapterBg = useCallback(
     async (work: Work, messages: Message[], directive: string): Promise<Message | null> => {
-      if (useGenerationStore.getState().streaming) return null;
+      if (useGenerationStore.getState().slots[work.id]?.streaming) return null;
       const prefs = useSettingsStore.getState().llmPrefs;
       if (!prefs.model) {
-        useGenerationStore.getState().fail({ code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
+        useGenerationStore.getState().fail(work.id, { code: 'LLM_NOMODEL', message: '请先在设置页选择模型' }, false);
         return null;
       }
       const tw = work.settings.targetChapterWords ?? 3000;
@@ -740,7 +748,7 @@ export function useGenerate(): UseGenerateResult {
    */
   const extendChapter = useCallback(
     async (work: Work, messages: Message[], target: Message, mode: 'append' | 'expand') => {
-      if (useGenerationStore.getState().streaming) return null; // 防重入
+      if (useGenerationStore.getState().slots[work.id]?.streaming) return null; // 防重入
       const idx = messages.findIndex((m) => m.id === target.id);
       // 上下文含本章（含 target 本体，模型看得到要续写/扩写的正文）；其后章节不进上下文
       const ctx = idx === -1 ? messages : messages.slice(0, idx + 1);
@@ -799,7 +807,7 @@ export function useGenerate(): UseGenerateResult {
    */
   const extendChapterBg = useCallback(
     async (work: Work, target: Message, mode: 'append' | 'expand'): Promise<Message | null> => {
-      if (useGenerationStore.getState().streaming) return null;
+      if (useGenerationStore.getState().slots[work.id]?.streaming) return null;
       const prefs = useSettingsStore.getState().llmPrefs;
       const slot = `novel-gen-${work.id}`;
       const tw = work.settings.targetChapterWords ?? 3000;
@@ -836,7 +844,7 @@ export function useGenerate(): UseGenerateResult {
         label: isAppend ? '本章续写' : '本章加长',
       });
       const raw = await waitAndStore(slot);
-      useGenerationStore.getState().appendChunk(raw);
+      useGenerationStore.getState().appendChunk(work.id, raw);
       const msg = await finalizeGeneration({
         work,
         messages: ctx,
@@ -850,8 +858,8 @@ export function useGenerate(): UseGenerateResult {
         startedAt: Date.now(),
         pending,
       });
-      useGenerationStore.getState().finish();
-      useGenerationStore.getState().reset();
+      useGenerationStore.getState().finish(work.id);
+      useGenerationStore.getState().reset(work.id);
       return invalidReasonOf(msg) ? null : msg;
     },
     [],
@@ -878,17 +886,28 @@ export function useGenerate(): UseGenerateResult {
     [generateChapter],
   );
 
-  const clearError = useCallback(() => useGenerationStore.getState().clearError(), []);
+  const clearError = useCallback(() => {
+    if (workId) useGenerationStore.getState().clearError(workId);
+  }, [workId]);
+
+  // 多槽化（M2 Chunk 4）：返回面按本书槽位派生（workId 绑定时）；streamingWorkId 保留
+  // 「任一本在写」全局语义（书架/移动端标出「哪本在写」），本书状态看 streaming。
+  const slot = useGenSlot(workId);
+  const slots = useGenSlots();
+  const streamingWorkId = useGenerationStore(selectStreamingWorkId);
+  const otherStreaming = useGenerationStore((s) =>
+    workId ? Object.keys(s.slots).some((k) => k !== workId && s.slots[k].streaming) : false,
+  );
 
   return {
-    streaming: useGenerationStore((s) => s.streaming),
-    /** 正在生成的作品 id（全局单槽：跨书访问时 UI 据此区分「本书在写」与「别书在写」） */
-    streamingWorkId: useGenerationStore((s) => s.workId),
-    buffer: useGenerationStore((s) => s.buffer),
-    thinkingBuffer: useGenerationStore((s) => s.thinkingBuffer),
-    error: useGenerationStore((s) => s.error),
-    partialKept: useGenerationStore((s) => s.partialKept),
-    targetMessageId: useGenerationStore((s) => s.targetMessageId),
+    streaming: workId ? (slot?.streaming ?? false) : Object.values(slots).some((x) => x.streaming),
+    streamingWorkId,
+    otherStreaming,
+    buffer: slot?.buffer ?? '',
+    thinkingBuffer: slot?.thinkingBuffer ?? '',
+    error: slot?.error ?? null,
+    partialKept: slot?.partialKept ?? false,
+    targetMessageId: slot?.targetMessageId ?? null,
     generateChapter,
     continueFromPartial,
     swipeRegenerate,

@@ -80,7 +80,7 @@ export default function WorkPage() {
   const navigate = useNavigate();
   const { work, messages, loading, loadError, hasMore, loadingOlder, loadWork, loadOlder, setWork } =
     useWorkStore();
-  const gen = useGenerate();
+  const gen = useGenerate(id);
   const logout = useLogout();
   // 题材→主题：作品挂载时按 genre 换肤，离开还原默认暗色基调（Task 32）
   useWorkTheme(work?.genre ?? 'hunhe');

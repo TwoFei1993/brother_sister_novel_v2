@@ -90,6 +90,7 @@ function genStub(): UseGenerateResult {
   return {
     streaming: false,
   streamingWorkId: null,
+    otherStreaming: false,
     buffer: '',
     thinkingBuffer: '',
     error: null,

@@ -152,9 +152,11 @@ export type ChatRunFn = (
 /** 元信息残章自动重试编排（深度测试 D7，对齐 novel useGenerate 语义；run 注入便于单测）：
  *  首轮产物 meta-only（占位未入库）→ 守卫后缀只进提示词（promptUserText）重发一次；
  *  重试后仍残章 → 不入库、error 进 store（错误条提示「本轮只生成了思考内容，请重试」）、返回 null。
- *  run 返回 null（流中错误/用户停止）不算残章，原样透传绝不重试。 */
+ *  run 返回 null（流中错误/用户停止）不算残章，原样透传绝不重试。
+ *  workId：错误写入对应书的槽位（多槽化——chat 与 novel 共用同一套槽语义）。 */
 export async function runChatWithMetaRetry(
   run: ChatRunFn,
+  workId: string,
   history: Message[],
   userText: string,
   speaker: ChatMember,
@@ -167,7 +169,7 @@ export async function runChatWithMetaRetry(
     promptUserText: userText + CHAT_META_RETRY_HINT,
   });
   if (isMetaOnlyTurn(turn)) {
-    useGenerationStore.getState().fail({ code: 'meta_only', message: '本轮只生成了思考内容，请重试' }, false);
+    useGenerationStore.getState().fail(workId, { code: 'meta_only', message: '本轮只生成了思考内容，请重试' }, false);
     return null;
   }
   return turn;
@@ -194,10 +196,12 @@ export interface ChatFinalizeInput {
  *  元信息残章（深度测试 D7）：净化后只剩思考/元信息 → 不入库、返回 metaOnly 占位 turn，
  *  交上层（useChatGenerate）带守卫后缀自动重试一次——不再以角色名义入库占位提示。 */
 export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<ChatTurn> {
-  const raw = useGenerationStore.getState().buffer;
+  // 多槽化（M2 Chunk 4）：buffer/thinking 从本书槽位读（chat 的 workId 也是 work.id）
+  const slot = useGenerationStore.getState().slots[input.work.id];
+  const raw = slot?.buffer ?? '';
   // 思考流捕获（用户反馈⑨ + D4 全链路）：流式 thinkingBuffer 优先，内嵌 <think> 标签兜底
   const { thinking: taggedThinking } = extractThinking(raw);
-  const thinking = mergeThinking(useGenerationStore.getState().thinkingBuffer, taggedThinking);
+  const thinking = mergeThinking(slot?.thinkingBuffer ?? '', taggedThinking);
   // 完整净化链（与 novel/显示层同源）：无标签思维流+尾部元信息+内置卫生层（预设片段 <Aniplex>、
   // 思维块、名字前缀等质检T4/对话实测泄露形态全覆盖）
   const hygiened = presentable(raw, input.speaker.name, input.otherNames);
@@ -219,8 +223,8 @@ export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<
   // 整轮输出只有思考/元信息：不入库（对齐 novel 语义），store 收束后交上层自动重试
   const metaOnly = !content.trim() || content.startsWith(META_ONLY_PLACEHOLDER);
   if (metaOnly) {
-    useGenerationStore.getState().finish();
-    useGenerationStore.getState().reset();
+    useGenerationStore.getState().finish(input.work.id);
+    useGenerationStore.getState().reset(input.work.id);
     return {
       user: null,
       assistant: buildAssistantTurn({ content, speakerName: input.speaker.name, extra }),
@@ -240,8 +244,8 @@ export async function finalizeChatGeneration(input: ChatFinalizeInput): Promise<
     throw new GenerationFlowError({ code: ge.code, message: `回复已生成，但入库失败：${ge.message}` });
   }
   await persistVariables(input.work, input.pending);
-  useGenerationStore.getState().finish();
-  useGenerationStore.getState().reset();
+  useGenerationStore.getState().finish(input.work.id);
+  useGenerationStore.getState().reset(input.work.id);
   return { user, assistant };
 }
 

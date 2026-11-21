@@ -468,11 +468,13 @@ export interface FinalizeInput {
 /** 完成收尾（§5.1⑥ / §9.2）：后处理 → 构造消息 → 幂等入库 → 变量回写 → store 收束 */
 export async function finalizeGeneration(input: FinalizeInput): Promise<Message> {
   const { work, directive, swipeTarget, assets, env, prefs, startedAt, pending } = input;
-  const raw = useGenerationStore.getState().buffer;
+  // 多槽化（M2 Chunk 4）：buffer/thinking 从本书槽位读（chat/novel 共用同一槽语义）
+  const slot = useGenerationStore.getState().slots[work.id];
+  const raw = slot?.buffer ?? '';
   const chapterIndex = nextChapterIndex(input.messages);
   // 思考流捕获（用户反馈⑨ + D4 全链路）：流式 thinkingBuffer 优先，内嵌 <think> 标签兜底
   const { thinking: taggedThinking } = extractThinking(raw);
-  const thinking = mergeThinking(useGenerationStore.getState().thinkingBuffer, taggedThinking);
+  const thinking = mergeThinking(slot?.thinkingBuffer ?? '', taggedThinking);
   const pp = postprocessMessage(raw, {
     directive: directive || undefined,
     chapterIndex: chapterIndex - 1,
@@ -528,8 +530,8 @@ export async function finalizeGeneration(input: FinalizeInput): Promise<Message>
     }
 
   }
-  useGenerationStore.getState().finish();
-  useGenerationStore.getState().reset();
+  useGenerationStore.getState().finish(work.id);
+  useGenerationStore.getState().reset(work.id);
   return message;
 }
 

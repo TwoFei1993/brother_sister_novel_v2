@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
-import { useGenerationStore } from '../../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../../stores/generation';
 import { useSettingsStore } from '../../../stores/settings';
 import { useWorkStore } from '../../../stores/work';
 
@@ -89,7 +89,7 @@ async function renderWorkspace(work: Work): Promise<HTMLElement> {
 }
 
 beforeEach(() => {
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.getState().reset();
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
 });
@@ -102,7 +102,7 @@ afterEach(async () => {
   });
   roots.length = 0;
   document.body.innerHTML = '';
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.getState().reset();
 });
 
@@ -137,7 +137,7 @@ describe('ChatWorkspace 断流「继续」（review #2）', () => {
     // 发送本轮消息（流中断 → 错误条 + 「继续」按钮出现）
     await type(c, '[data-testid="chat-input"]', '今晚吃什么');
     await click(c, '[data-testid="chat-send"]');
-    const failed = useGenerationStore.getState();
+    const failed = getGenSlot('w1')!;
     expect(failed.error).toMatchObject({ code: 'streamIncomplete' });
     expect(failed.partialKept).toBe(true);
     expect(c.querySelector('[data-testid="chat-continue-btn"]')).not.toBeNull();
@@ -152,7 +152,7 @@ describe('ChatWorkspace 断流「继续」（review #2）', () => {
 
     // 继续成功：user+assistant 成对入库，错误条消失
     expect(postPaths).toHaveLength(2);
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
     expect(useWorkStore.getState().messages.map((m) => m.role)).toEqual(['user', 'assistant']);
   });
 
@@ -182,7 +182,7 @@ describe('ChatWorkspace 断流「继续」（review #2）', () => {
 
     const c = await renderWorkspace(baseWork());
     // 直接模拟「断流发生」（store 已置 partialKept），未经过本轮 sendMessage → ref 为空
-    useGenerationStore.setState({ error: { code: 'streamIncomplete', message: '中断' }, partialKept: true });
+    useGenerationStore.setState({ slots: { w1: { streaming: false, buffer: '', thinkingBuffer: '', targetMessageId: null, error: { code: 'streamIncomplete', message: '中断' }, partialKept: true, finishReason: null } } });
     await act(async () => {});
     await click(c, '[data-testid="chat-continue-btn"]');
     expect(generateRound).toBe(1);

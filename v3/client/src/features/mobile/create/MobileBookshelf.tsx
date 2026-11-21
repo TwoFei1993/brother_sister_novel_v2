@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Check, ListChecks, WandSparkles } from 'lucide-react';
 
 import { createWork, deleteWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
-import { useGenerationStore } from '../../../stores/generation';
+import { selectStreamingWorkId, useGenerationStore } from '../../../stores/generation';
 import { groupByTag } from '../read/ReadShelf';
 import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
 
@@ -279,8 +279,8 @@ export default function MobileBookshelf() {
   const [busy, setBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  /** 全局单槽生成状态：书架上标出哪本书正在写（反馈：显示方式） */
-  const streamingWorkId = useGenerationStore((s) => (s.streaming ? s.workId : null));
+  /** 全局生成状态（多槽化）：遍历槽位取任一 streaming 的书 id，书架上标出哪本书正在写 */
+  const streamingWorkId = useGenerationStore(selectStreamingWorkId);
 
   function reload(): void {
     listWorks()

@@ -15,7 +15,7 @@ import {
   OUTLINE_DIRECTIVE,
 } from '../generation-flow';
 import { buildChapterMessage } from '../generation-flow';
-import { useGenerationStore } from '../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../stores/generation';
 import { useSettingsStore } from '../../stores/settings';
 import { useWorkStore } from '../../stores/work';
 
@@ -124,7 +124,7 @@ const bodyOf = (i: number): string => {
 
 beforeEach(() => {
   generateBodies = [];
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
 });
@@ -137,7 +137,7 @@ afterEach(async () => {
   });
   roots.length = 0;
   document.body.innerHTML = '';
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
 });
 
@@ -157,7 +157,7 @@ describe('useGenerate.runByOutline（📖按大纲生成，反馈⑤）', () => 
     expect(bodyOf(1)).toContain('本章大纲：标题《私囤万千》');
     expect(bodyOf(1)).not.toContain('落地嫡长'); // 各章只注入本章大纲
     expect(bodyOf(2)).toContain('本章大纲：标题《幼学启蒙》');
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
   });
 
   it('区别于目标章节数：desiredChapterCount=3 而大纲覆盖到 5 章 → 仍写满 5 章', async () => {
@@ -214,7 +214,7 @@ describe('useGenerate.runByOutline（📖按大纲生成，反馈⑤）', () => 
       await latest!.runByOutline(workFixture(), []);
     });
     expect(generateCalls).toBe(2); // 第 1 章成功、第 2 章错误即停
-    expect(useGenerationStore.getState().error).toMatchObject({ code: 'LLM_TIMEOUT' });
+    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'LLM_TIMEOUT' });
     expect(useWorkStore.getState().messages.filter((m) => m.chapter)).toHaveLength(1);
   });
 

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aiVersion, type Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
-import { useGenerationStore } from '../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../stores/generation';
 import { useSettingsStore } from '../../stores/settings';
 
 import { buildChapterMessage } from '../generation-flow';
@@ -108,7 +108,7 @@ async function renderHook(): Promise<void> {
 
 beforeEach(() => {
   calls = [];
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
 });
 
@@ -120,7 +120,7 @@ afterEach(async () => {
   });
   roots.length = 0;
   document.body.innerHTML = '';
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
 });
 
 describe('useGenerate（review #1 断流事务）', () => {
@@ -132,7 +132,7 @@ describe('useGenerate（review #1 断流事务）', () => {
       result = await latest!.generateChapter(baseWork(), [], '写第一章');
     });
     expect(result).toBeNull();
-    const store = useGenerationStore.getState();
+    const store = getGenSlot('w1')!;
     expect(store.error).toMatchObject({ code: 'streamIncomplete' });
     expect(store.partialKept).toBe(true);
     expect(store.buffer).toBe('半成品'); // 半成品保留在界面供「继续」
@@ -152,7 +152,7 @@ describe('useGenerate（review #1 断流事务）', () => {
     expect(result!.role).toBe('assistant');
     expect(result!.chapter?.index).toBe(1);
     expect(calls.filter((c) => c.path.endsWith('/messages'))).toHaveLength(1);
-    const store = useGenerationStore.getState();
+    const store = getGenSlot('w1')!;
     expect(store.error).toBeNull();
     expect(store.buffer).toBe(''); // finish+reset 收束
   });
@@ -175,9 +175,9 @@ describe('useGenerate.swipeRegenerate（review #13 上限 / #10 上下文截断�
       result = await latest!.swipeRegenerate(baseWork(), [target], target);
     });
     expect(result).toBeNull();
-    expect(useGenerationStore.getState().error).toMatchObject({ code: 'SWIPE_LIMIT' });
-    expect(useGenerationStore.getState().error?.message).toContain('50');
-    expect(useGenerationStore.getState().partialKept).toBe(false);
+    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'SWIPE_LIMIT' });
+    expect(getGenSlot('w1')?.error?.message).toContain('50');
+    expect(getGenSlot('w1')?.partialKept).toBe(false);
     expect(calls).toHaveLength(0); // 未发任何流/入库请求
   });
 
@@ -338,7 +338,7 @@ describe('useGenerate（D4 thinking_delta 全链路：💭折叠真实内容）'
     expect(result!.content).not.toContain('先想兄妹动机'); // 思考不混入正文
     expect(result!.content).toContain('妹妹攥紧了哥哥的袖口。');
     // store 收束：finish+reset 后 thinkingBuffer 一并复位（不串味到下一章）
-    expect(useGenerationStore.getState().thinkingBuffer).toBe('');
+    expect(getGenSlot('w1')?.thinkingBuffer).toBe('');
   });
 
   it('正文内嵌 <think> 标签仍走 extractThinking 兜底；流式+标签同时存在时拼接不丢内容', async () => {

@@ -11,7 +11,7 @@ import type { Message } from '@shared/message';
 import type { Work } from '@shared/work';
 
 import { defaultNovelSettings } from '@shared/work';
-import { useGenerationStore } from '../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../stores/generation';
 import { useSettingsStore } from '../../stores/settings';
 import { useWorkStore } from '../../stores/work';
 
@@ -106,7 +106,7 @@ beforeEach(() => {
   generateTexts = [];
   generateBodies = [];
   messageBodies = [];
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
 });
@@ -119,7 +119,7 @@ afterEach(async () => {
   });
   roots.length = 0;
   document.body.innerHTML = '';
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
 });
 
@@ -150,7 +150,7 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
     expect(messageBodies[0]!.id).toBe(messageBodies[1]!.id); // 同 messageId 幂等覆盖（重试带首次消息 id）
     expect(messageBodies[1]!.directive).toBe(DIRECTIVE);
     expect(messageBodies[1]!.content).toBe(VALID);
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
   });
 
   it('两次均崩溃 → 链式补救救不回 → 不上架且三次落库同 id（无孤儿行）', async () => {
@@ -170,7 +170,7 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
     // 两次 run 各幂等入库一次且同一消息 id（末次覆盖，不产生重复章节行）
     expect(messageBodies).toHaveLength(2);
     expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
   });
 
   it('首次即有效输出 → 单次调用，directive 干净', async () => {
@@ -204,7 +204,7 @@ describe('useGenerate 崩溃自动重试（重复循环 → 反重复后缀）',
     expect(msg!.content).toBe(POLITE_HALF + VALID); // 半章为基底拼接补完（同 id 覆盖入库）
     expect(messageBodies).toHaveLength(2);
     expect(new Set(messageBodies.map((b) => b.id)).size).toBe(1);
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
   });
 
   it('finish_reason=stop 且标点完整 → 不触发续写（单次调用）', async () => {

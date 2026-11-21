@@ -39,7 +39,7 @@ export async function runChunkLoop(
   setBatch: (b: BatchProgress | null) => void,
 ): Promise<void> {
   const total = work.settings.desiredChapterCount;
-  if (useGenerationStore.getState().streaming) return; // 防重入（单章生成中不可发起连写）
+  if (useGenerationStore.getState().slots[work.id]?.streaming) return; // 防重入（本书单章生成中不可发起连写）
   cancelRef.current = false;
   const completed: number[] = [];
   try {
@@ -64,7 +64,7 @@ export async function runChunkLoop(
     // 批次收尾汇总：完成 N 章正常结束 / 中途停止 / 到达目标
     const remaining = remainingChapters(useWorkStore.getState().messages, total);
     if (completed.length > 0) {
-      if (cancelRef.current || useGenerationStore.getState().error) {
+      if (cancelRef.current || useGenerationStore.getState().slots[work.id]?.error) {
         showToast(`⏹ 连写已停止——本次完成 ${completed.length} 章（第${completed.join('、第')}章），点「继续」可接着写`, { duration: 6000 });
       } else if (remaining > 0) {
         showToast(`本批 ${completed.length} 章完成（第${completed.join('、第')}章）——还剩 ${remaining} 章，再点「一键连写」继续`, { duration: 6000 });
@@ -87,7 +87,7 @@ export async function runOutlineLoop(
 ): Promise<void> {
   const plan = outlineRunPlan(messages, work.settings.chapterOutlines);
   if (!plan) return; // 无大纲/已覆盖完：按钮不应出现，防御兜底
-  if (useGenerationStore.getState().streaming) return; // 防重入
+  if (useGenerationStore.getState().slots[work.id]?.streaming) return; // 防重入
   cancelRef.current = false;
   const completed: number[] = [];
   try {

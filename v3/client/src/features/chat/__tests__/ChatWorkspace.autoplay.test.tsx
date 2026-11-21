@@ -122,7 +122,7 @@ function stubGeneration(): {
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.getState().reset();
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
 });
@@ -136,7 +136,7 @@ afterEach(async () => {
   });
   roots.length = 0;
   document.body.innerHTML = '';
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.getState().reset();
 });
 

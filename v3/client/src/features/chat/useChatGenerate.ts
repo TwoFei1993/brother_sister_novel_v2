@@ -17,7 +17,7 @@ import type { TavernRegexScript } from '@shared/tavern';
 import type { Work } from '@shared/work';
 
 import { buildGenerateBody } from '../../api/llm';
-import { useGenerationStore } from '../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../stores/generation';
 import type { ChatMember } from '../../engine/prompt/chat/activation';
 import { MAX_SWIPES, historyBeforeTarget, swipeLimitError } from '../../hooks/generation-flow';
 import { runGenerationStream } from '../../hooks/generation-runtime';
@@ -131,49 +131,52 @@ export function useChatGenerate(work: Work, messages: Message[]): UseChatGenerat
 
   const sendMessage = useCallback(
     (userText: string, speaker: ChatMember, sendOpts?: { implicit?: boolean; otherNames?: string[] }) =>
-      runChatWithMetaRetry(run, messagesRef.current, userText, speaker, {
+      runChatWithMetaRetry(run, work.id, messagesRef.current, userText, speaker, {
         targetId: uuid(),
         initialBuffer: '',
         ...(sendOpts?.implicit ? { implicitUser: true } : {}),
         otherNames: sendOpts?.otherNames,
       }),
-    [run],
+    [run, work.id],
   );
 
   const continueFromPartial = useCallback(
     (partial: string, userText: string, speaker: ChatMember, opts?: { otherNames?: string[] }) => {
-      const targetId = useGenerationStore.getState().targetMessageId ?? uuid();
-      return runChatWithMetaRetry(run, messagesRef.current, userText, speaker, { targetId, initialBuffer: partial, otherNames: opts?.otherNames });
+      const targetId = getGenSlot(work.id)?.targetMessageId ?? uuid();
+      return runChatWithMetaRetry(run, work.id, messagesRef.current, userText, speaker, { targetId, initialBuffer: partial, otherNames: opts?.otherNames });
     },
-    [run],
+    [run, work.id],
   );
 
   const swipeRegenerate = useCallback(
     (target: Message, speaker: ChatMember, opts?: { otherNames?: string[] }) => {
       if (target.swipes.length >= MAX_SWIPES) {
-        useGenerationStore.getState().fail(swipeLimitError(), false);
+        useGenerationStore.getState().fail(work.id, swipeLimitError(), false);
         return Promise.resolve(null);
       }
       // 历史 = 目标消息之前的部分（重 roll 不把旧候选装进上下文）
-      return runChatWithMetaRetry(run, historyBeforeTarget(messagesRef.current, target.id), '', speaker, {
+      return runChatWithMetaRetry(run, work.id, historyBeforeTarget(messagesRef.current, target.id), '', speaker, {
         targetId: target.id,
         initialBuffer: '',
         swipeTarget: target,
         otherNames: opts?.otherNames,
       });
     },
-    [run],
+    [run, work.id],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
-  const clearError = useCallback(() => useGenerationStore.getState().clearError(), []);
+  const clearError = useCallback(() => useGenerationStore.getState().clearError(work.id), [work.id]);
+
+  // 多槽化（M2 Chunk 4）：hook 返回面语义收窄为「本书槽位」（chat 页一次只呈现一本）
+  const slot = useGenerationStore((s) => s.slots[work.id]);
 
   return {
-    streaming: useGenerationStore((s) => s.streaming),
-    buffer: useGenerationStore((s) => s.buffer),
-    error: useGenerationStore((s) => s.error),
-    partialKept: useGenerationStore((s) => s.partialKept),
-    targetMessageId: useGenerationStore((s) => s.targetMessageId),
+    streaming: slot?.streaming ?? false,
+    buffer: slot?.buffer ?? '',
+    error: slot?.error ?? null,
+    partialKept: slot?.partialKept ?? false,
+    targetMessageId: slot?.targetMessageId ?? null,
     regexScripts,
     sendMessage,
     continueFromPartial,

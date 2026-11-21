@@ -19,7 +19,7 @@ import { batchProgressText } from '../../hooks/generation-flow';
 import { loadRegexScripts } from '../../hooks/generation-pipeline';
 import type { UseGenerateResult } from '../../hooks/useGenerate';
 import { useWorkbenchData } from '../../hooks/useWorkbenchData';
-import { useGenerationStore } from '../../stores/generation';
+import { getGenSlot, useGenSlot } from '../../stores/generation';
 import { useWorkStore } from '../../stores/work';
 
 import ChatWorkspace from '../chat/ChatWorkspace';
@@ -44,8 +44,8 @@ export interface WorkViewRouterProps {
 export default function WorkViewRouter({ work, currentView, gen, hasMore, loadingOlder, loadOlder }: WorkViewRouterProps) {
   const messages = useWorkStore((s) => s.messages);
   const upsertLocal = useWorkStore((s) => s.upsertLocal);
-  /** 思考流缓冲（B 阅读视图正文上方滚动显示；A/C 视图不显示） */
-  const thinkingBuffer = useGenerationStore((s) => s.thinkingBuffer);
+  /** 思考流缓冲（B 阅读视图正文上方滚动显示；A/C 视图不显示）——本书槽位（多槽化） */
+  const thinkingBuffer = useGenSlot(work.id)?.thinkingBuffer ?? '';
   const wb = useWorkbenchData(work);
   /** C 侧栏指令复填：非 null 时 CommandBar 注入输入框（消费后复位） */
   const [directiveSeed, setDirectiveSeed] = useState<string | null>(null);
@@ -105,7 +105,7 @@ export default function WorkViewRouter({ work, currentView, gen, hasMore, loadin
   }
 
   async function handleContinue(): Promise<void> {
-    const partial = useGenerationStore.getState().buffer;
+    const partial = getGenSlot(work.id)?.buffer ?? '';
     const msg = await gen.continueFromPartial(work, messages, partial);
     if (msg) upsertLocal(msg);
   }

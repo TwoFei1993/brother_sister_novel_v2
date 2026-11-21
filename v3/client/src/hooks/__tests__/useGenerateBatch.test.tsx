@@ -10,7 +10,7 @@ import type { Message } from '@shared/message';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
 import { buildChapterMessage } from '../generation-flow';
-import { useGenerationStore } from '../../stores/generation';
+import { getGenSlot, useGenerationStore } from '../../stores/generation';
 import { useSettingsStore } from '../../stores/settings';
 import { useWorkStore } from '../../stores/work';
 
@@ -111,7 +111,7 @@ function seedChapter(index: number): Message {
 beforeEach(() => {
   calls = [];
   generateBodies = [];
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
 });
@@ -124,7 +124,7 @@ afterEach(async () => {
   });
   roots.length = 0;
   document.body.innerHTML = '';
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
 });
 
@@ -150,7 +150,7 @@ describe('useGenerate.runBatch（一键连写）', () => {
     expect(bodyOf(1)).not.toContain('剧情指引');
     expect(bodyOf(2)).not.toContain('剧情指引');
 
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
   });
 
   it('已达目标章数（下一章号 > 目标）→ 零请求直接返回', async () => {
@@ -192,7 +192,7 @@ describe('useGenerate.runBatch（一键连写）', () => {
       await latest!.runBatch(work, '');
     });
     expect(generateBodies).toHaveLength(10); // 达标后零请求
-    expect(useGenerationStore.getState().error).toBeNull();
+    expect(getGenSlot('w1')?.error).toBeNull();
   });
 
   it('中途 stop()：当前章中止（不入库）且不再发起下一章，batch 归 null', async () => {
@@ -233,7 +233,7 @@ describe('useGenerate.runBatch（一键连写）', () => {
 
     expect(calls.filter((c) => c.path === '/api/llm/generate')).toHaveLength(1); // 只发起第一章
     expect(calls.some((c) => c.path.endsWith('/messages'))).toBe(false); // 半成品不入库
-    const store = useGenerationStore.getState();
+    const store = getGenSlot('w1')!;
     expect(store.error).toBeNull(); // 用户停止非错误
     expect(store.partialKept).toBe(true); // 半成品保留可「继续」
     expect(store.buffer).toBe('写到一半');
@@ -262,7 +262,7 @@ describe('useGenerate.runBatch（一键连写）', () => {
       await latest!.runBatch(workFixture(5), '第一章指令');
     });
     expect(generateCalls).toBe(2); // 第一章成功、第二章错误即停
-    expect(useGenerationStore.getState().error).toMatchObject({ code: 'LLM_TIMEOUT' });
+    expect(getGenSlot('w1')?.error).toMatchObject({ code: 'LLM_TIMEOUT' });
     expect(calls.filter((c) => c.path.endsWith('/messages'))).toHaveLength(1); // 仅第一章入库
   });
 });
