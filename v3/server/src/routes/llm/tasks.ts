@@ -1,35 +1,47 @@
 /**
  * LLM 后台任务路由（用户需求：切出 App 后生成继续，回来取结果）
  *
- * POST /llm/tasks        提交任务（立即 202 返回 taskId，server 后台调上游执行）
- * GET  /llm/tasks/:id    查询：running（执行中）/ done（含结果文本）/ failed（含错误）
- *                        / lost（server 重启丢失）/ expired（30 分钟未取）
+ * POST /llm/tasks          提交任务（立即 202 返回 taskId，server 后台执行）
+ *                          kind 缺省/'llm' = 单次 LLM 调用；'novel-chapter' = 整书章节生成（M2）
+ * GET  /llm/tasks/active   进行中任务列表（novel-chapter 恢复现场用；须注册在 /:id 之前）
+ * GET  /llm/tasks/:id      查询：running（执行中，?since=N 增量切片）/ done（含结果文本）
+ *                          / failed（含错误）/ lost（server 重启丢失）/ expired（30 分钟未取）
+ * POST /llm/tasks/:id/cancel  取消：pending/running 置 cancelRequested 标志（段间/章间生效），
+ *                          终态 ok:false，文件缺失 404 lost
  *
  * 生命周期（纯文件状态机——无内存 Map，杜绝跨实例不一致）：
- * - 提交：同步落盘 status:'pending'（messages/params 一并落盘供后台执行读取）
- * - 后台执行：读回任务 → runGenerate（stream:false 聚合全文；空输出自动加倍预算 ≤4 轮 cap 64000）
- *   → 更新同一文件 status:'done'|'failed'（messages 置空，隐私不落盘二份）
- * - 查询：pending/running → running；done → 返回文本并取走即焚（删文件）；
- *   failed → 返回错误并删；文件缺失 → lost（server 重启丢失，前端提示重试）
- * - 过期：done/failed 落盘 30 分钟未取 → 410 expired
+ * - 提交：novel-chapter 先做同书互斥扫描（pending/running 含取消中 → 409 GEN_BUSY）；
+ *   同步落盘 status:'pending'（提交参数一并落盘供后台执行读取）→ 后台执行更新终态
+ * - 后台执行：kind 分流——llm 走 execute（stream:true 聚合全文，三级稳定性防线）；
+ *   novel-chapter 走 executeNovelChapter（Task 3.3 实装，暂占位 throw → failed）
+ * - 查询：pending/running → running（带 ?since=N 时返回 progress 增量切片）；
+ *   done → 返回文本（永久保留 draft 幂等 GET，附 resultMessages/resultMessageIds）；
+ *   failed → 返回错误；文件缺失 → lost（前端提示重试）
  */
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { LlmError, runGenerate } from '../../services/llm';
 import { zodBody } from '../../middleware/validate';
 import { readJson, writeJsonAtomic } from '../../storage/store';
 import { dataDir } from '../core/paths';
 import { wrap } from '../works/works';
+import { execute, writeJsonAtomicRetry } from './tasksExecute';
+import { executeNovelChapter, novelChapterSchema, scanActiveTasks, sourceSchema } from './tasksNovel';
 
-const TASKS_DIR = join(dataDir(), 'llm-tasks');
+/** 任务落盘目录（每次实时解析 env DATA_DIR——与路由层实时读 env 约定一致，测试可覆盖） */
+function tasksDir(): string {
+  return join(dataDir(), 'llm-tasks');
+}
 
-/** 与 routes/llm.ts 同源（内联避免循环依赖） */
-const sourceSchema = z.enum(['openai', 'claude', 'gemini']);
+function taskFile(id: string): string {
+  return join(tasksDir(), `${id}.json`);
+}
 
-const createSchema = z.object({
+/** 旧客户端单次 LLM 调用提交体（原样保留——旧请求零影响）；kind 缺省即 'llm' */
+const llmTaskSchema = z.object({
+  kind: z.literal('llm').optional(), // discriminated union 判别字段（旧请求无此键 → undefined）
   source: sourceSchema,
   model: z.string().min(1),
   messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: z.string() })).min(1),
@@ -38,8 +50,23 @@ const createSchema = z.object({
   label: z.string().max(30).optional(),
 });
 
-/** 任务文件（pending 执行期含 messages；终态置空 messages 隐私不落盘二份） */
-interface TaskFile {
+const createSchema = z.union([llmTaskSchema, novelChapterSchema]);
+
+/** 执行期增量进度（novel-chapter；换章重置 text；节流 1s 落盘——节流器 Task 3.3 接） */
+interface TaskProgress {
+  chapterIndex: number; // 当前章（1 起）
+  chapterTotal: number; // 任务总章数
+  phase: 'assembling' | 'generating' | 'continuing' | 'polishing' | 'saving';
+  text: string; // 当前章累计正文（换章重置）
+  done: number; // 已完成章数
+  updatedAt: number;
+}
+
+/**
+ * 任务文件（纯文件状态机的持久化形状；全部向后兼容——旧字段不动，新字段全 optional）。
+ * novel-chapter 提交参数（prefs/mode/directive/...）落盘供后台执行与断点恢复读取。
+ */
+export interface TaskFile {
   id: string;
   status: 'pending' | 'running' | 'done' | 'failed';
   text?: string;
@@ -50,136 +77,20 @@ interface TaskFile {
   messages?: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   params?: Record<string, unknown>;
   thinking?: boolean;
-}
-
-function taskFile(id: string): string {
-  return join(TASKS_DIR, `${id}.json`);
-}
-
-
-/** writeJsonAtomic 的 Windows 加固：EPERM（读者占用+rename 撞车）重试 3 次 */
-async function writeJsonAtomicRetry(file: string, data: unknown): Promise<void> {
-  for (let i = 0; i < 3; i += 1) {
-    try {
-      await writeJsonAtomic(file, data);
-      return;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (!/EPERM|EBUSY/.test(msg) || i === 2) throw err;
-      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
-    }
-  }
-}
-
-/** 瞬态错误退避序列：覆盖分钟级上游过载窗口（实测 MiniMax 偶发 529/500 持续数分钟）；测试可经 env 注入快速值（每次调用读取） */
-function retryDelaysMs(): number[] {
-  return (process.env.LLM_TASK_RETRY_DELAYS_MS ?? '5000,15000,45000,90000,90000')
-    .split(',')
-    .map((n) => Number(n.trim()) || 5000);
-}
-
-/** 灾备通道默认模型（主通道持续过载时自动切换；用户未配密钥的通道自动跳过） */
-const FALLBACK_MODELS: Record<'openai' | 'claude' | 'gemini', string> = {
-  claude: 'MiniMax-M3.1-Flash',
-  openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash',
-};
-
-/** secrets.json 中已配置 apiKey 的 LLM 通道（claude=MiniMax 端点 / openai / gemini） */
-async function configuredChannels(exclude: string): Promise<Array<'openai' | 'claude' | 'gemini'>> {
-  const s: Record<string, { apiKey?: string }> =
-    (await readJson<Record<string, { apiKey?: string }>>(join(dataDir(), 'secrets.json')).catch(
-      () => ({}),
-    )) ?? {};
-  const all: Array<'openai' | 'claude' | 'gemini'> = ['gemini', 'openai', 'claude'];
-  return all.filter((c) => c !== exclude && Boolean(s?.[c]?.apiKey));
-}
-
-/**
- * 后台任务执行（稳定性三级防线，用户要求 2026-11-11：上游过载不再全停）：
- * ① 同通道瞬态重试：指数退避覆盖分钟级过载窗口
- * ② 预算协商：空输出 → max_tokens 加倍（cap 64000）
- * ③ 灾备通道：主通道重试耗尽 → 自动切换 secrets 中已配置的其他 LLM 通道（内置各通道默认快模型）
- */
-async function execute(task: TaskFile, source: 'openai' | 'claude' | 'gemini', model: string): Promise<void> {
-  const t0 = Date.now();
-  const messages = task.messages ?? [];
-  const baseParams = task.params ?? {};
-  let text = '';
-  let lastErr = '';
-  let maxTokens = Math.max(Number(baseParams.max_tokens ?? 8192), task.thinking === false ? 8192 : 32000);
-  const delays = retryDelaysMs();
-  for (let round = 0; round <= delays.length; round += 1) {
-    try {
-      const events = runGenerate({
-        source,
-        model,
-        messages,
-        params: { ...baseParams, max_tokens: maxTokens, thinking: task.thinking },
-        // 必须流式：非流式下上游生成全程无字节返回，长输入任务（整集拆解等）必撞 120s 空闲超时；
-        // 流式下增量 chunk 持续重置空闲计时（llm.ts 双超时设计正是为此）
-        stream: true,
-      });
-      for await (const ev of events) {
-        if (ev.kind === 'error') throw new LlmError(ev.code as never, ev.message);
-        if (ev.kind === 'text') text += ev.text;
-      }
-      console.log('[execute] round', round, 'textLen', text.length, 'err', lastErr);
-      if (text.trim()) break;
-      // 空输出：加倍预算下一轮
-    } catch (err) {
-      lastErr = err instanceof Error ? err.message : String(err);
-      // 瞬态上游故障（LLM_NET=5xx/网络、LLM_QUOTA=429 限流）：指数退避后同参数重试
-      // 非瞬态（LLM_AUTH 密钥 / LLM_REJECTED 内容审核）：直接落盘 failed
-      const isTransient =
-        err instanceof LlmError && (err.code === 'LLM_NET' || err.code === 'LLM_QUOTA');
-      if (!isTransient) break;
-      const delay = delays[Math.min(round, delays.length - 1)];
-      console.log(`[execute] 瞬态失败（${lastErr.slice(0, 80)}），${delay / 1000}s 后重试`);
-      await new Promise((r) => setTimeout(r, delay));
-      continue;
-    }
-    maxTokens = Math.min(maxTokens * 2, 64000);
-  }
-
-  // ③ 灾备通道：主通道耗尽（含瞬态重试）仍无产出 → 切换其他已配置通道（内置该通道默认快模型）
-  if (!text.trim()) {
-    const fallbacks = await configuredChannels(source);
-    for (const fbSource of fallbacks) {
-      const fbModel = FALLBACK_MODELS[fbSource];
-      console.log(`[execute] 主通道无产出 → 灾备通道 ${fbSource}/${fbModel}`);
-      try {
-        const events = runGenerate({
-          source: fbSource,
-          model: fbModel,
-          messages,
-          params: { ...baseParams, max_tokens: Math.max(Number(baseParams.max_tokens ?? 8192), 32000), thinking: task.thinking },
-          stream: true,
-        });
-        for await (const ev of events) {
-          if (ev.kind === 'error') throw new LlmError(ev.code as never, ev.message);
-          if (ev.kind === 'text') text += ev.text;
-        }
-        if (text.trim()) {
-          lastErr = '';
-          break;
-        }
-      } catch (fbErr) {
-        lastErr = fbErr instanceof Error ? fbErr.message : String(fbErr);
-      }
-    }
-  }
-
-  const next: TaskFile = {
-    ...task,
-    status: text.trim() ? 'done' : 'failed',
-    text: text.trim() || undefined,
-    error: text.trim() ? undefined : `${lastErr || '模型无输出（预算加倍后仍空）'}（主通道+灾备通道均无产出）`,
-    elapsedMs: Date.now() - t0,
-    messages: undefined,
-    params: undefined,
-  };
-  await writeJsonAtomicRetry(taskFile(task.id), next);
+  // ---- novel-chapter 专属（kind 缺省 'llm' 的旧任务文件无这些字段）----
+  kind?: 'llm' | 'novel-chapter';
+  workId?: string;
+  prefs?: z.infer<typeof novelChapterSchema>['prefs'];
+  mode?: z.infer<typeof novelChapterSchema>['mode'];
+  directive?: string;
+  chapters?: number;
+  outline?: boolean;
+  targetId?: string;
+  partial?: string;
+  cancelRequested?: boolean; // 取消标志：段间/章间生效（当前段跑完即停）
+  progress?: TaskProgress; // 执行期增量；终态置 undefined
+  resultMessages?: number; // 终态：本次任务入库章数（done 时有）
+  resultMessageIds?: string[]; // 终态：入库消息 id 列表（客户端同步本地视图的唯一依据）
 }
 
 export const llmTasksRouter = Router();
@@ -190,22 +101,52 @@ llmTasksRouter.post(
   '/',
   zodBody(createSchema),
   wrap(async (req, res) => {
-    const { source, model, messages, params, thinking, label } = req.body as z.infer<typeof createSchema>;
+    const body = req.body as z.infer<typeof createSchema>;
+    if (body.kind === 'novel-chapter') {
+      // 同书互斥（权威层，先查后写避免自见）：pending/running 含取消中任务一律 409
+      // ——取消最多等当前段跑完，期间重提交会双任务竞态，安全第一
+      const busy = await scanActiveTasks(
+        tasksDir(),
+        (t) => t.kind === 'novel-chapter' && t.workId === body.workId,
+      );
+      if (busy.length > 0) {
+        res.status(409).json({ code: 'GEN_BUSY', message: '该书已有生成任务进行中' });
+        return;
+      }
+    }
     const id = randomUUID();
-    const task: TaskFile = {
-      id,
-      status: 'pending',
-      text: undefined,
-      error: undefined,
-      label,
-      createdAt: Date.now(),
-      messages,
-      params,
-      thinking,
-    };
+    const task: TaskFile =
+      body.kind === 'novel-chapter'
+        ? {
+            id,
+            status: 'pending',
+            createdAt: Date.now(),
+            kind: 'novel-chapter',
+            workId: body.workId,
+            prefs: body.prefs,
+            mode: body.mode,
+            directive: body.directive,
+            chapters: body.chapters,
+            outline: body.outline,
+            targetId: body.targetId,
+            partial: body.partial,
+          }
+        : {
+            id,
+            status: 'pending',
+            text: undefined,
+            error: undefined,
+            label: body.label,
+            createdAt: Date.now(),
+            messages: body.messages,
+            params: body.params,
+            thinking: body.thinking,
+          };
     // 同步先落盘 pending（查询立即可见 running 语义）→ 后台执行更新终态
     await writeJsonAtomic(taskFile(id), task);
-    void execute(task, source, model).catch(async (err) => {
+    const run =
+      body.kind === 'novel-chapter' ? executeNovelChapter(task) : execute(task, body.source, body.model);
+    void run.catch(async (err) => {
       await writeJsonAtomicRetry(taskFile(id), {
         ...task,
         status: 'failed',
@@ -218,6 +159,45 @@ llmTasksRouter.post(
   }),
 );
 
+// GET /active 必须注册在 GET /:id 之前（Express 按注册顺序匹配，否则 active 被当 id 吞掉）
+llmTasksRouter.get('/active', wrap(async (_req, res) => {
+  const tasks = await scanActiveTasks(tasksDir());
+  res.json({
+    tasks: tasks.map((t) => ({
+      id: t.id,
+      kind: t.kind ?? 'llm',
+      workId: t.workId,
+      label: t.label,
+      progressLen: t.progress?.text.length ?? 0,
+      done: t.progress?.done ?? 0,
+      chapterTotal: t.progress?.chapterTotal ?? 0,
+      phase: t.progress?.phase,
+      createdAt: t.createdAt,
+    })),
+  });
+}));
+
+llmTasksRouter.post('/:id/cancel', wrap(async (req, res) => {
+  const task = await readJson<TaskFile>(taskFile(req.params.id)).catch(() => null);
+  if (!task) {
+    res.status(404).json({ status: 'lost', error: '任务不存在或服务已重启——请重新提交' });
+    return;
+  }
+  if (task.status === 'pending' || task.status === 'running') {
+    // 只置标志不改状态：取消在段间/章间生效（当前段跑完即停），执行器读盘感知
+    await writeJsonAtomicRetry(taskFile(task.id), { ...task, cancelRequested: true });
+    res.json({ ok: true });
+    return;
+  }
+  res.json({ ok: false });
+}));
+
+/** ?since=N 的合法值：非负整数（query 到手是 string；非法忽略走无 since 分支） */
+function parseSince(raw: unknown): number | null {
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return null;
+  return Number(raw);
+}
+
 llmTasksRouter.get('/:id', wrap(async (req, res) => {
   const id = req.params.id;
   const task = await readJson<TaskFile>(taskFile(id)).catch(() => null);
@@ -227,8 +207,31 @@ llmTasksRouter.get('/:id', wrap(async (req, res) => {
   }
   if (task.status === 'done' || task.status === 'failed') {
     // 结果永久保留为 draft（用户要求：不设 30 分钟过期）——前端取走后 slot 清除不重复回填，
-    // server 侧文件留存可随时复查/重取（幂等 GET）
-    res.json({ status: task.status, text: task.text, error: task.error, label: task.label });
+    // server 侧文件留存可随时复查/重取（幂等 GET）；resultMessages/resultMessageIds 有则带
+    res.json({
+      status: task.status,
+      text: task.text,
+      error: task.error,
+      label: task.label,
+      resultMessages: task.resultMessages,
+      resultMessageIds: task.resultMessageIds,
+    });
+    return;
+  }
+  const since = parseSince(req.query.since);
+  if (since !== null) {
+    // 增量切片协议（novel-chapter 轮询）：progressText=当前章全文 slice(since)；无 progress 视为尚未开始
+    const p = task.progress;
+    res.json({
+      status: 'running',
+      label: task.label,
+      progressLen: p?.text.length ?? 0,
+      progressText: p ? p.text.slice(since) : '',
+      done: p?.done ?? 0,
+      chapterTotal: p?.chapterTotal ?? 0,
+      phase: p?.phase ?? 'assembling',
+      chapterIndex: p?.chapterIndex ?? 0,
+    });
     return;
   }
   res.json({ status: 'running' });
