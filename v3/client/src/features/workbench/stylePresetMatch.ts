@@ -15,10 +15,10 @@ export interface PresetLite {
 
 /** 预设 tag/名称 ↔ 书风格关键词 匹配（双向包含，如 tag「治愈」匹配基调「温情治愈」） */
 export function tagMatches(tag: string, keywords: string[]): boolean {
-  return keywords.some((k) => k && (tag.includes(k) || k.includes(tag)));
+  return keywords.some((k) => k && tag && (tag.includes(k) || k.includes(tag)));
 }
 
-/** 书风格关键词：题材 + 各基调按「·」/空白拆词 + 风格中文标签拆词（过滤空串与「—」） */
+/** 书风格关键词：题材 + 各基调按「·」/空白/「、」拆词 + 风格中文标签拆词（过滤空串与「—」） */
 export function buildStyleKeywords(
   subGenre: string,
   storyTones: string[],

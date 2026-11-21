@@ -31,6 +31,9 @@ describe('buildStyleKeywords', () => {
     expect(kw).toContain('番茄'); // 风格标签拆词
     expect(kw).not.toContain('');
   });
+  it('「—」占位符不入关键词', () => {
+    expect(buildStyleKeywords('—', [], 'default')).not.toContain('—');
+  });
 });
 
 describe('matchReasons', () => {
