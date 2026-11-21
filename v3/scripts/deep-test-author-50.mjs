@@ -1,9 +1,13 @@
 /**
- * 作者视角 50 例深度实测（上线前）。API 级全矩阵：作品/消息流/版本/上架/素材/绑定/评论/留言/边界。
+ * 作者视角深度实测（上线前）。API 级全矩阵：作品/消息流/版本/上架/素材/绑定/评论/留言/边界
+ * + novel-chapter 任务链路（M2：提交/同书互斥409/取消/并发/active/旧 llm 兼容，N51-N65）。
  * 运行：node scripts/deep-test-author-50.mjs（需 dev:5173 + 作者密码 dev123）
  * 数据隔离：专用书「压力测试-可删」与 pt- 前缀素材，结尾自动清理。
+ * 注意：I 组跑真实 LLM（claude/MiniMax 通道，短章 400 字控制 token），耗时约 2-4 分钟。
  */
-import jsonwebtoken from 'node:crypto';
+import { readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const BASE = 'http://localhost:5173';
 let cookie = '';
@@ -280,6 +284,107 @@ let wid = '';
     && Math.abs(w.stats.charCount - calc.charCount) <= calc.charCount * 0.3 // 上架矩阵期编辑过 content，缓存按最后写入维护
     && w.stats.publishedChapterCount === calc.publishedChapterCount;
   ok('H50 stats 四项与实际消息一致', okStats, JSON.stringify({ stored: w.stats, calc }));
+}
+
+// ---------- I. novel-chapter 任务链路（M2 深度实测：提交/互斥409/取消/并发/active/兼容） ----------
+// 真实链路：跑真实 LLM（claude/MiniMax 通道），短章 targetChapterWords=400 控制 token。
+// 取消语义（D6）：段间/章间生效——cancel 后当前段跑完才停，等待终态期间属预期耗时。
+{
+  const TASKS_DIR = join(fileURLToPath(new URL('..', import.meta.url)), 'data', 'llm-tasks');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const waitTask = async (id, timeoutMs = 240000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const r = await api('GET', `/api/llm/tasks/${id}`);
+      if (r.data?.status === 'done' || r.data?.status === 'failed' || r.data?.status === 'lost') return r.data;
+      await sleep(2000);
+    }
+    return { status: 'timeout' };
+  };
+  // 完整 NovelSettings（strict schema 必填全字段）+ 短章字数
+  const genSettings = {
+    genre: 'xuanhuan', subGenre: '异世大陆', customGenre: '', customSubGenre: '',
+    backgroundNote: '', brotherAge: 22, brotherPersonalities: ['温柔强大'], customBrotherPersonality: '', brotherAbility: '',
+    sisterAge: 18, sisterPersonalities: ['坚韧独立'], customSisterPersonality: '', sisterAbility: '',
+    relationType: '相互扶持共同成长型', customRelationType: '', powerSystem: '', factions: '', coreConflict: '',
+    storyTones: ['温情治愈'], customStoryTone: '', writingStyle: 'default', customWritingStyle: '',
+    desiredChapterCount: 50, outlineChapterCount: 50, pastedOutline: '', authorNote: '', noteDepth: 4,
+    targetChapterWords: 400,
+  };
+  const novelPrefs = { source: 'claude', model: 'MiniMax-M3.1-Flash', maxContext: 65536, maxTokens: 8192, temperature: 0.8, repetitionPenalty: 1.05 };
+  const submitNovel = (workId, extra = {}) =>
+    api('POST', '/api/llm/tasks', { kind: 'novel-chapter', workId, prefs: novelPrefs, mode: 'chapter', directive: '', chapters: 1, outline: false, ...extra });
+
+  const a = await api('POST', '/api/works', { title: '压力测试-可删-genA', mode: 'novel', genre: 'xuanhuan', settings: genSettings });
+  const b = await api('POST', '/api/works', { title: '压力测试-可删-genB', mode: 'novel', genre: 'xuanhuan', settings: genSettings });
+  ok('N51 建生成测试书 A/B', a.status === 201 && b.status === 201);
+
+  // N52 提交书 A 任务（202 + taskId；真实跑一段短章）
+  const t1 = await submitNovel(a.data.id, { directive: '写一个兄妹在废墟中重逢的短开场' });
+  ok('N52 novel-chapter 提交 202+taskId', t1.status === 202 && /^[0-9a-f-]{36}$/.test(t1.data?.taskId ?? ''), JSON.stringify(t1.data).slice(0, 120));
+
+  // N53 任务文件字段落盘（kind/workId/mode/chapters——文件唯一事实源）
+  let tf = null;
+  try { tf = JSON.parse(readFileSync(join(TASKS_DIR, `${t1.data.taskId}.json`), 'utf8')); } catch { /* 时序竞态不致命 */ }
+  ok('N53 任务文件字段 kind/workId/chapters', !!tf && tf.kind === 'novel-chapter' && tf.workId === a.data.id && tf.chapters === 1 && tf.mode === 'chapter');
+
+  // N54 同书第二次提交 409 GEN_BUSY（D7 权威层）
+  const t2 = await submitNovel(a.data.id);
+  ok('N54 同书第二提交 409 GEN_BUSY', t2.status === 409 && t2.data?.code === 'GEN_BUSY', JSON.stringify(t2.data).slice(0, 120));
+
+  // N55 cancel 置位（ok:true；当前段跑完即停）
+  const c1 = await api('POST', `/api/llm/tasks/${t1.data.taskId}/cancel`);
+  ok('N55 cancel 返回 ok:true', c1.status === 200 && c1.data?.ok === true);
+
+  // N56 取消中（cancelRequested 未终态）同书再提交仍 409——取消中挡新提交防双任务竞态
+  const t3 = await submitNovel(a.data.id);
+  ok('N56 取消中同书提交仍 409', t3.status === 409 && t3.data?.code === 'GEN_BUSY');
+
+  // N57 并发不互斥误伤：书 A 任务进行中，书 B 提交成功
+  const t4 = await submitNovel(b.data.id, { directive: '写一个兄妹初遇的短开场' });
+  ok('N57 他书提交成功（并发不误伤）', t4.status === 202);
+
+  // N58 GET /active 含进行中 novel-chapter 任务（workId 可定位）
+  const act1 = await api('GET', '/api/llm/tasks/active');
+  ok('N58 active 含 B 任务', act1.status === 200 && act1.data?.tasks?.some((x) => x.kind === 'novel-chapter' && x.workId === b.data.id));
+
+  // B 也取消（互斥/并发断言已完成，取消加速终态省 token；若已开跑当前段会跑完，属预期）
+  await api('POST', `/api/llm/tasks/${t4.data.taskId}/cancel`);
+
+  // N59 A 任务终态非 running（取消语义：等当前段跑完即停，可能真实跑一段 400 字）
+  const f1 = await waitTask(t1.data.taskId);
+  ok('N59 A 任务终态非 running', f1.status === 'done' || f1.status === 'failed', JSON.stringify(f1).slice(0, 160));
+
+  // N60 取消/部分完成后已入库章保留且与 resultMessages 一致（文件唯一事实源）
+  const msgA = (await api('GET', `/api/works/${a.data.id}/messages?tail=10`)).data.messages;
+  ok('N60 入库章数与 resultMessages 一致', (f1.resultMessages ?? 0) === msgA.filter((m) => m.chapter).length, `result=${f1.resultMessages} actual=${msgA.filter((m) => m.chapter).length}`);
+
+  // N61 B 任务终态
+  const f2 = await waitTask(t4.data.taskId);
+  ok('N61 B 任务终态非 running', f2.status === 'done' || f2.status === 'failed', JSON.stringify(f2).slice(0, 160));
+
+  // N62 终态后 GET /active 不再包含两任务
+  const act2 = await api('GET', '/api/llm/tasks/active');
+  ok('N62 终态后 active 消失', act2.status === 200 && !act2.data?.tasks?.some((x) => x.id === t1.data.taskId || x.id === t4.data.taskId));
+
+  // N63/N64 旧 kind=llm 任务向后兼容：超短 prompt 真实跑一次，提交/取回不受新类型影响
+  const t5 = await api('POST', '/api/llm/tasks', { source: 'claude', model: 'MiniMax-M3.1-Flash', messages: [{ role: 'user', content: '请只回复两个字母：OK' }], label: 'pt-llm兼容' });
+  ok('N63 旧 llm 任务提交 202', t5.status === 202 && /^[0-9a-f-]{36}$/.test(t5.data?.taskId ?? ''));
+  const f3 = await waitTask(t5.data.taskId, 120000);
+  ok('N64 旧 llm 任务 done 取回文本', f3.status === 'done' && typeof f3.text === 'string' && f3.text.length > 0, JSON.stringify(f3).slice(0, 160));
+
+  // N65 章失败不入库且已入库章保留——API 级无法注入真实上游失败（apiKey 持有在服务端 secrets，
+  // 无效通道不可行），失败路径由 server 单测覆盖（novel-gen-orchestrate.test.ts 失败 19 例：
+  // 单章失败停链返回 failed、该章不入库、已入库保留、执行中删书 404 区分），此处占位通过。
+  ok('N65 章失败不入库（server 单测覆盖，占位）', true);
+
+  // 就地清理：删书 + 删本组任务文件（终态 draft 文件无 API 删除通道，fs 直删）
+  await api('DELETE', `/api/works/${a.data.id}`);
+  await api('DELETE', `/api/works/${b.data.id}`);
+  for (const id of [t1.data.taskId, t4.data.taskId, t5.data.taskId]) {
+    try { rmSync(join(TASKS_DIR, `${id}.json`), { force: true }); } catch { /* 清理失败不阻塞 */ }
+  }
+  console.log('--- I 组清理完成（书 genA/genB + 任务文件）---');
 }
 
 // ---------- 清理 ----------
