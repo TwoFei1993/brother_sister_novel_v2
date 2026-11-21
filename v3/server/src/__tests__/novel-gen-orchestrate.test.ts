@@ -244,7 +244,7 @@ describe('单章链（generateChapter 移植语义）', () => {
     expect(joined).toContain('本章总计约 2000 字'); // 收束口径锚定 targetWords
   });
 
-  it('超写治理：超目标 50% → 带超写后缀重 roll（幂等覆盖），采纳更短的重试稿', async () => {
+  it('超写收尾（用户裁决：不重写不裁剪）：超目标 30% → 小预算收尾续写拼接完整结尾（title 还原不标未写完）', async () => {
     // 随机字符池伪自然文本（4-gram 全随机频次极低——不触发 collapse 检测的模板句式禁用）
     const pool = '山镇雨夜剑光影灯街石桥河林雾霜原野星光火把行囊马蹄泥路苔痕渡口柴门酒旗废塔荒祠井绳断崖';
     const genText = (n: number): string => {
@@ -256,41 +256,27 @@ describe('单章链（generateChapter 移植语义）', () => {
       }
       return out;
     };
+    const longText = genText(10500); // tw=2000，产出 ~10500 字 > 1.3× → 触发超写收尾
+    const tailText = '夜色彻底沉下来，两人在渡口收了伞。';
     mockUpstream([
-      { sse: { text: genText(10500), finish: 'stop' } }, // tw=2000，产出 ~10500 字 > 1.5× → 触发超写重试
-      { sse: { text: '重试稿收敛在目标字数内的正文。', finish: 'stop' } },
+      { sse: { text: longText, finish: 'stop' } },
+      { sse: { text: tailText, finish: 'stop' } }, // 收尾续写轮：~17 字小补尾
     ]);
     const result = await runOrchestrate({});
     expect(result.done).toBe(1);
-    const retryCall = calls[1] as { messages: Array<{ content: string }> };
-    const joined = retryCall.messages.map((m) => m.content).join('\n');
-    expect(joined).toContain('系统重试指令'); // 超写后缀进提示词
-    expect(joined).toContain('严格控制在 2000 字左右'); // 后缀按 targetWords 定字数
-    expect(result.messageIds.length).toBe(1);
-  });
-
-  it('超写兜底：重试稿仍超 30% → 硬裁剪到最后句号入库（不标未写完）', async () => {
-    const pool = '山镇雨夜剑光影灯街石桥河林雾霜原野星光火把行囊马蹄泥路苔痕渡口柴门酒旗废塔荒祠井绳断崖';
-    const genText = (n: number): string => {
-      let out = '';
-      while (out.length < n) {
-        const len = 6 + Math.floor(Math.random() * 8);
-        for (let i = 0; i < len; i++) out += pool[Math.floor(Math.random() * pool.length)];
-        out += '。';
-      }
-      return out;
-    };
-    mockUpstream([
-      { sse: { text: genText(10500), finish: 'stop' } },
-      { sse: { text: genText(10500) + '最终收尾句。', finish: 'stop' } }, // 重试仍超 → 硬裁剪
-    ]);
-    const result = await runOrchestrate({});
-    expect(result.done).toBe(1);
-    expect(result.messageIds.length).toBe(1);
+    // 收尾轮是 continuation 语义（无缝续写 + continueRemaining=400 收束）
+    const closeCall = calls[1] as { messages: Array<{ content: string }> };
+    const joined = closeCall.messages.map((m) => m.content).join('\n');
+    expect(joined).toContain('补写约 400 字'); // continueRemaining 收束机制
+    expect(joined).toContain(longText.slice(-40, -1)); // 半章 grounding 进历史
+    // 入库：原稿 + 收尾拼接、title/directive 还原（不被续写指令污染）、不标未写完
     const rows = await readMessages();
-    const trimmed = rows[rows.length - 1]!;
-    expect(trimmed.content.length).toBeLessThanOrEqual(Math.ceil(2000 * 1.3)); // cap=2600
-    expect(trimmed.extra?.truncatedSwipeId).toBeUndefined(); // 裁剪稿不标未写完
+    const stored = rows[rows.length - 1]!;
+    expect(stored.content).toContain(tailText);
+    expect(stored.content.length).toBe(longText.length + tailText.length);
+    expect(stored.chapter?.title).not.toContain('接着写完这一章');
+    expect(stored.extra?.truncatedSwipeId).toBeUndefined();
+    expect(result.messageIds.length).toBe(1);
   });
 
   it('meta 占位重试：首输出 META_ONLY_PLACEHOLDER → 后缀重试成功 + 同 id 幂等覆盖', async () => {

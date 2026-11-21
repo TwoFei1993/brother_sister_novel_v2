@@ -26,7 +26,7 @@ import {
   nextChapterIndex,
   withPartialInHistory,
 } from '@shared/hooks/generation-flow';
-import { COLLAPSE_RETRY_SUFFIX, MAX_TRUNCATE_ROUNDS, META_RETRY_SUFFIX, overlongRetrySuffix } from '@shared/hooks/novel-constants';
+import { COLLAPSE_RETRY_SUFFIX, MAX_TRUNCATE_ROUNDS, META_RETRY_SUFFIX } from '@shared/hooks/novel-constants';
 
 import { collectWithDefense } from '../llm/defense';
 import { upsertMessageInternal } from '../../routes/works/messages';
@@ -38,12 +38,10 @@ import { invalidReasonOf, progressOf, type ChapterOutcome, type ChainState, type
 /**
  * 字数收束参数（写满型模型防线，M3.1-Flash 实测无视 max_tokens 上限）：
  * - WORD_GOAL_RATIO：字数达标线（已写 ≥ 目标×0.9 即不再续写——「腰斩」但字数够 = 灌水）
- * - TRIM_CAP_RATIO：硬裁剪线（超目标×1.3 → 截到最后句号入库，不标「未写完」）
+ * - OVERLONG_RATIO：超写收尾线（超目标×1.3 → 一次小预算收尾续写给完整结尾，不重写不裁剪——用户裁决）
  */
 const WORD_GOAL_RATIO = 0.9;
-const TRIM_CAP_RATIO = 1.3;
-/** 超写重试线（超目标 50% 才触发重 roll——30% 内属「上下浮动 20%」要求可容忍区间，白烧一次整章成本不值） */
-const RETRY_CAP_RATIO = 1.5;
+const OVERLONG_RATIO = 1.3;
 
 /** 一次「组装 → LLM → finalize 入库」的完整单轮（client run 的 server 等价物） */
 export async function runOnce(
@@ -274,42 +272,38 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
   }
   // 润色 pass（P2-2）：仅对有效产出润色；失败静默保留原稿
   msg = await polishChapter(st, msg);
-  // 超写治理（写满型模型，prompt 层优先于裁剪）：
-  // ① 超目标 50% → 带超写重试后缀重 roll 一次（同 meta/collapse 架构：幂等覆盖、预算不变
-  //    ——max_tokens 对该模型无硬约束，加预算无意义；用户要求优先 prompt 手段保剧情完整）
-  // ② 重试仍超 30% → 硬裁剪兜底（截到最后句号；不标「未写完」——内容自洽只是长）
-  if (msg && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * RETRY_CAP_RATIO)) {
+  // 超写收尾（用户裁决 2026-11-21：超太多不重写——重写丢剧情且白烧整章成本；也不硬裁剪——
+  // 断在半截影响阅读。质量保证手段 = 一次小预算「收尾续写」：不推新剧情，用 ~400 字收束
+  // 当前场景并给本章完整结尾（复用 continueRemaining「补完剩余后收束」机制，预算 1024 封顶）。
+  // 收尾失败的极端场景保留原稿（长而完整的章优于砍半截）。
+  if (msg && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * OVERLONG_RATIO) && !st.isCancelled()) {
     const over = msg;
-    const retry = await runOnce(st, st.messages, directive + overlongRetrySuffix(tw), {
+    const closed = await runOnce(st, withPartialInHistory(st.messages, over.content), buildContinueDirective(over.content), {
       targetId,
-      promptDirective: directive + overlongRetrySuffix(tw),
+      initialBuffer: over.content,
+      promptDirective: directive,
       persistMessageId: over.id,
-      ...(seg1 ? { segment: seg1 } : {}),
+      keepTitle: over.chapter?.title,
+      continuation: true,
+      continueRemaining: 400,
+      effMaxTokensOverride: 1024, // 收尾只需几百字：floor 由调用方直控，小预算防再放飞
     });
-    if (retry && invalidReasonOf(retry) === null && retry.content.length <= over.content.length) {
-      msg = retry;
-      st.chapterText = retry.content;
+    if (closed && invalidReasonOf(closed) === null && closed.content.length > over.content.length) {
+      // 续写轮元数据还原（title 不被续写指令污染）后落库
+      const restored: Message = {
+        ...closed,
+        directive: over.directive,
+        ...(over.chapter ? { chapter: { ...over.chapter } } : {}),
+      };
+      await upsertMessageInternal(st.workId, restored);
+      st.chapterText = restored.content;
+      msg = restored;
     }
   }
-  let hardTrimmed = false;
-  if (msg && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * TRIM_CAP_RATIO)) {
-    const over = msg; // 收窄提取（TS narrowing 不入闭包）
-    const cap = Math.ceil(tw * TRIM_CAP_RATIO);
-    const cut = over.content.lastIndexOf('。', cap);
-    const trimmedContent = cut > tw * 0.5 ? over.content.slice(0, cut + 1) : over.content.slice(0, cap);
-    const trimmed: Message = {
-      ...over,
-      content: trimmedContent,
-      swipes: over.swipes.map((v, i) => (i === over.swipeId ? { ...v, content: trimmedContent } : v)),
-    };
-    await upsertMessageInternal(st.workId, trimmed);
-    st.chapterText = trimmedContent;
-    msg = trimmed;
-    hardTrimmed = true;
-  }
-  // 最后防线：仅对有效产出标记，且在润色之后（润色生成新版本时标记跟随最终版本）；
-  // 硬裁剪稿不标（finish=length 是超写腰斩而非「未写完」）
-  if (!hardTrimmed) msg = await markTruncatedSwipe(st, msg, msg?.swipeId ?? 0);
+  // 截断标记：仅对「真腰斩」（字数远低于目标且 finish=length）生效——超写收尾稿不标
+  //（finish=length 是写满额度而非「未写完」；且收尾续写已给本章完整结尾）
+  const overlong = msg !== null && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * OVERLONG_RATIO);
+  if (!overlong) msg = await markTruncatedSwipe(st, msg, msg?.swipeId ?? 0);
   if (!msg || invalidReasonOf(msg) !== null) {
     return {
       msg: null,
