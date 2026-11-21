@@ -15,7 +15,7 @@ import { defaultNovelSettings, type Work } from '@shared/work';
 
 import { llmTasksRouter } from '../routes/llm/tasks';
 import { llmTasksDir } from '../routes/llm/tasksNovel';
-import { queuedNovelCount, runningNovelCount } from '../services/novelQueue';
+import { queuedNovelCount, resetDesiredParallel, runningNovelCount } from '../services/novelQueue';
 import { readAll } from '../storage/jsonl';
 import { readJson, writeJsonAtomic } from '../storage/store';
 import { authRequired, signToken } from '../middleware/auth';
@@ -137,6 +137,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllGlobals();
   delete process.env.NOVEL_GEN_PARALLEL;
+  resetDesiredParallel(); // 清批量并发意图（模块级内存态，跨用例残留防御）
   delete process.env.LLM_TASK_RETRY_DELAYS_MS;
   await rm(root, { recursive: true, force: true });
 });
@@ -230,6 +231,36 @@ describe('runner 与并发编排器接入（D7）', () => {
     await waitFor(() => runningNovelCount() === 1);
     expect(queuedNovelCount()).toBe(1); // FIFO 队列中等待槽位
     expect(runningNovelCount()).toBe(1); // 并发上限 1 生效
+    hold = false;
+    const fa = await waitFinished(a, first.body.taskId);
+    const fb = await waitFinished(a, second.body.taskId);
+    expect(fa.status).toBe('done');
+    expect(fb.status).toBe('done');
+    expect(runningNovelCount()).toBe(0);
+    expect(queuedNovelCount()).toBe(0);
+  });
+
+  it('提交带 parallel=1：全局 desired limit 即时生效（env 未设，批量并发参数优先）', async () => {
+    await seedWork('w-q-c');
+    await seedWork('w-q-d');
+    let hold = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        while (hold) await new Promise((r) => setTimeout(r, 20));
+        return sseResponse('# 第1章 正文\n并发参数测试正文。');
+      }),
+    );
+    const app = testApp();
+    const a = authed(app);
+    // 第一次提交带 parallel=1（互斥通过后应用 setDesiredParallel）——后续提交（不带 parallel）同受其约束
+    const first = await a.post('/api/llm/tasks').send(novelBody('w-q-c', { parallel: 1 }));
+    const second = await a.post('/api/llm/tasks').send(novelBody('w-q-d'));
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(202);
+    await waitFor(() => runningNovelCount() === 1);
+    expect(runningNovelCount()).toBe(1); // desired=1 生效（默认上限 2 被覆盖）
+    expect(queuedNovelCount()).toBe(1); // 第二个任务排队
     hold = false;
     const fa = await waitFinished(a, first.body.taskId);
     const fb = await waitFinished(a, second.body.taskId);

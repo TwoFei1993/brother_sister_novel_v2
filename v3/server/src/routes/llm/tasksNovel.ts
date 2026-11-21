@@ -63,6 +63,9 @@ export const novelChapterSchema = z.object({
   outline: z.boolean().default(false), // true=第 2..N 章用大纲链
   targetId: z.string().optional(), // swipe/append/expand 目标消息 id
   partial: z.string().optional(), // continue 半成品基底
+  /** 批量发起的期望并发（1-4，书架弹窗透传）：全局「意图」非任务属性——handler 应用到
+   *  novelQueue.setDesiredParallel（最近一次设置生效，调高主动放行），不落盘任务文件 */
+  parallel: z.number().int().min(1).max(4).optional(),
 });
 
 export type NovelChapterBody = z.infer<typeof novelChapterSchema>;

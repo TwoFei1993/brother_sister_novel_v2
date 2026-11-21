@@ -28,6 +28,7 @@ import { z } from 'zod';
 
 import { zodBody } from '../../middleware/validate';
 import { readJson, writeJsonAtomic, writeJsonAtomicRetry } from '../../storage/store';
+import { setDesiredParallel } from '../../services/novelQueue';
 import { wrap } from '../works/works';
 import { execute } from './tasksExecute';
 import {
@@ -146,6 +147,9 @@ llmTasksRouter.post(
         res.status(409).json({ code: 'GEN_BUSY', message: '该书已有生成任务进行中' });
         return;
       }
+      // 批量并发意图（Chunk 6）：带 parallel 时更新全局期望上限（最近一次设置生效，
+      // 调高主动放行排队任务）——互斥检查后才应用：被 409 拒绝的提交不改全局并发
+      if (body.parallel !== undefined) setDesiredParallel(body.parallel);
     }
     const id = randomUUID();
     const task: TaskFile =

@@ -158,9 +158,9 @@ export interface NovelChapterSubmitBody {
   outline?: boolean;
   targetId?: string;
   partial?: string;
-  /** 批量发起的期望并发数（1-4，书架 BatchGenerateDialog）：server 端 novel-gen 全局并发
-   *  编排器目前走 env NOVEL_GEN_PARALLEL（默认 2），尚不接受每请求并发——字段前向预留，
-   *  server zod strip 静默忽略，后续 schema 支持后即生效（Chunk 6 Task 6.1） */
+  /** 批量发起的期望并发数（1-4，书架 BatchGenerateDialog）：server 端 novelChapterSchema
+   *  已消费——应用到全局并发编排器（novelQueue 动态 desired limit，最近一次提交的设置
+   *  生效；调高主动放行排队任务，server 重启回落 env NOVEL_GEN_PARALLEL 基线） */
   parallel?: number;
 }
 

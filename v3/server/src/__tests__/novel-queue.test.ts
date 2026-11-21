@@ -10,7 +10,9 @@ import {
   acquireNovelSlot,
   queuedNovelCount,
   releaseNovelSlot,
+  resetDesiredParallel,
   runningNovelCount,
+  setDesiredParallel,
 } from '../services/novelQueue';
 
 /** microtask 冲刷若干轮：冲刷后旁路标记仍未置位即判定「仍在排队」 */
@@ -40,11 +42,13 @@ function drainAll(): void {
 
 beforeEach(() => {
   drainAll(); // 上一个用例若有残留占用，先清干净
+  resetDesiredParallel(); // 清显式并发期望（回落 env 基线）——模块级内存态跨用例残留防御
   delete process.env.NOVEL_GEN_PARALLEL; // 回到默认并发 2 基线
 });
 
 afterEach(() => {
   drainAll();
+  resetDesiredParallel();
   delete process.env.NOVEL_GEN_PARALLEL;
 });
 
@@ -147,5 +151,69 @@ describe('novelQueue 全局并发编排器', () => {
     releaseNovelSlot();
     expect(runningNovelCount()).toBe(0);
     expect(queuedNovelCount()).toBe(0);
+  });
+});
+
+describe('novelQueue 动态 desired limit（批量并发参数，最近设置优先）', () => {
+  it('desired 优先于 env：setDesiredParallel(1) 后 env=4 仍按 1 排队', async () => {
+    process.env.NOVEL_GEN_PARALLEL = '4';
+    setDesiredParallel(1);
+    await acquireNovelSlot();
+    void acquireNovelSlot();
+    expect(runningNovelCount()).toBe(1);
+    expect(queuedNovelCount()).toBe(1);
+    drainAll();
+  });
+
+  it('resetDesiredParallel 回落 env 基线：清除后 env=4 重新生效', async () => {
+    setDesiredParallel(1);
+    resetDesiredParallel();
+    process.env.NOVEL_GEN_PARALLEL = '4';
+    for (let i = 0; i < 6; i += 1) void acquireNovelSlot();
+    expect(runningNovelCount()).toBe(4); // env 公式重新生效
+    expect(queuedNovelCount()).toBe(2);
+    drainAll();
+  });
+
+  it('调高主动放行：setDesiredParallel(4) 后 waiters 逐个出列占槽，running 超过旧 env 上限', async () => {
+    process.env.NOVEL_GEN_PARALLEL = '2';
+    await acquireNovelSlot();
+    await acquireNovelSlot();
+    const p3 = acquireNovelSlot(); // 满槽排队
+    const p4 = acquireNovelSlot();
+    expect(runningNovelCount()).toBe(2);
+    expect(queuedNovelCount()).toBe(2);
+    setDesiredParallel(4); // 上限 2 → 4：两个 waiter 立即出列占新槽
+    await flush();
+    expect(runningNovelCount()).toBe(4); // 超过旧 env 上限
+    expect(queuedNovelCount()).toBe(0);
+    expect(await isSettled(p3)).toBe(true);
+    expect(await isSettled(p4)).toBe(true);
+    drainAll();
+  });
+
+  it('调低不中断已 running：超额者继续跑，新 acquire 按新上限排队', async () => {
+    setDesiredParallel(4);
+    for (let i = 0; i < 4; i += 1) await acquireNovelSlot();
+    expect(runningNovelCount()).toBe(4);
+    setDesiredParallel(1); // 调低：已占槽者不受影响
+    expect(runningNovelCount()).toBe(4);
+    expect(queuedNovelCount()).toBe(0);
+    const p = acquireNovelSlot(); // 新 acquire 按新上限排队
+    expect(await isSettled(p)).toBe(false);
+    expect(queuedNovelCount()).toBe(1);
+    drainAll();
+  });
+
+  it.each([
+    [0, 1], // 越界夹下限
+    [99, 4], // 越界夹上限
+    [2.7, 2], // 小数截断
+  ])('setDesiredParallel(%i) clamp 到 %i', (raw, expected) => {
+    setDesiredParallel(raw);
+    for (let i = 0; i < 6; i += 1) void acquireNovelSlot();
+    expect(runningNovelCount()).toBe(expected);
+    expect(queuedNovelCount()).toBe(6 - expected);
+    drainAll();
   });
 });
