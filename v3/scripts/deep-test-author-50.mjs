@@ -2,6 +2,9 @@
  * 作者视角深度实测（上线前）。API 级全矩阵：作品/消息流/版本/上架/素材/绑定/评论/留言/边界
  * + novel-chapter 任务链路（M2：提交/同书互斥409/取消/并发/active/旧 llm 兼容，N51-N65）。
  * 运行：node scripts/deep-test-author-50.mjs（需 dev:5173 + 作者密码 dev123）
+ * 环境注入：DEEP_BASE（默认 http://localhost:5173）与 DEEP_PASSWORD（默认 dev123）——
+ * 可对生产环境实测（如 DEEP_BASE=http://124.222.187.155:3001 DEEP_PASSWORD=*** node …）；
+ * 数据隔离约定在生产同样适用（专用书「压力测试-可删」与 pt- 前缀素材，结尾自动清理）。
  * 数据隔离：专用书「压力测试-可删」与 pt- 前缀素材，结尾自动清理。
  * 注意：I 组跑真实 LLM（claude/MiniMax 通道，短章 400 字控制 token），耗时约 2-4 分钟。
  */
@@ -9,7 +12,8 @@ import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const BASE = 'http://localhost:5173';
+const BASE = process.env.DEEP_BASE ?? 'http://localhost:5173';
+const PASSWORD = process.env.DEEP_PASSWORD ?? 'dev123';
 let cookie = '';
 let pass = 0;
 let fail = 0;
@@ -44,7 +48,7 @@ const userMsg = (id, text) => ({ id, role: 'user', name: '作者', content: text
 
 // ---------- 登录 ----------
 {
-  const res = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'dev123' }) });
+  const res = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: PASSWORD }) });
   cookie = res.headers.get('set-cookie').split(';')[0];
   ok('00 作者登录', res.status === 200);
 }
