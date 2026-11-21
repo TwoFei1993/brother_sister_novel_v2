@@ -229,6 +229,21 @@ describe('单章链（generateChapter 移植语义）', () => {
     expect(rows[0]?.extra?.truncatedSwipeId).toBe(0); // 末轮仍截断 → 版本级未写完标记
   });
 
+  it('截断续写轮 tail 接线 continueRemaining：要求块字数行切「补写约 N 字后收束」（防膨胀激活）', async () => {
+    // 首轮 5 字截断 → remaining = max(400, 2000−5) = 1995；续写轮要求块按剩余字数收束，
+    // 不再「写约 targetWords−targetWords+1500 字」满额再写（章节逐轮膨胀的根因）
+    mockUpstream([
+      { sse: { text: '秋夜很长。', finish: 'length' } },
+      { sse: { text: '续写补完剩余剧情后自然收尾。', finish: 'stop' } },
+    ]);
+    const result = await runOrchestrate({});
+    expect(result.done).toBe(1);
+    const second = calls[1] as { messages: Array<{ content: string }> };
+    const joined = second.messages.map((m) => m.content).join('\n');
+    expect(joined).toContain('补写约 1995 字后自然收束'); // continueRemaining 进要求块（tail 接线）
+    expect(joined).toContain('本章总计约 2000 字'); // 收束口径锚定 targetWords
+  });
+
   it('meta 占位重试：首输出 META_ONLY_PLACEHOLDER → 后缀重试成功 + 同 id 幂等覆盖', async () => {
     mockUpstream([
       { sse: { text: META_ONLY_PLACEHOLDER, finish: 'stop' } },

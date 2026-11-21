@@ -80,7 +80,8 @@ export interface RunOpts {
   segment?: SegmentInfo;
   /** 覆盖输出预算（分段轮：只给本段的量 → finish=length 提前停，后续段自动续写） */
   effMaxTokensOverride?: number;
-  /** 续写轮剩余字数（与 client 一致进 RunOpts；client 现 tail 未接线，server 复刻同现状） */
+  /** 续写轮剩余字数（target−已有）：经 runOnce 进 tail 要求块，「补写约 N 字后自然收束」
+   *  防章节膨胀（508bbd7 根因修复；分段轮被 segment 分支忽略，仅截断续写轮生效） */
   continueRemaining?: number;
   /** 章节 title 兜底（续写轮沿用原章标题） */
   keepTitle?: string;
