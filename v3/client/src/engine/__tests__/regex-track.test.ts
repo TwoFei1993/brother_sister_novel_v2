@@ -12,7 +12,8 @@ import type { TavernRegexScript } from '@shared/tavern';
 
 import { applyDisplayRegex } from '../../lib/reading/markdown';
 import { assemblePrompt } from '../prompt/assemble';
-import { EMPTY_SCAN, makeCtx, makeHistory } from './assemble-fixtures';
+// assemble-fixtures 已随 engine 树下沉 shared（本测试因依赖 client 渲染轨 markdown.ts 留在 client）
+import { EMPTY_SCAN, makeCtx, makeHistory } from '@shared/engine/__tests__/assemble-fixtures';
 
 /** 构造脚本（regex.test.ts 同款骨架） */
 function makeScript(overrides: Partial<TavernRegexScript> = {}): TavernRegexScript {

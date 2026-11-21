@@ -1,6 +1,2 @@
-/**
- * budget 模块汇出：token 近似估算 + 预算装填
- */
-export { countTokensApprox } from './tokenize';
-export { fillBudget } from './budget';
-export type { FillResult } from './budget';
+// 兼容 shim：实现已同构下沉 shared 包，此处仅 re-export 保持旧 import 路径可用
+export * from '@shared/engine/budget';

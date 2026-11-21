@@ -1,6 +1,2 @@
-/**
- * 世界书扫描引擎汇出（设计 §5.1②）
- */
-export { matchKeys, matchEntry, parseRegexKey, WORLD_INFO_LOGIC } from './match';
-export { scanWorldInfo } from './scan';
-export type { DepthEntry, ScanInput, ScanResult, ScanSettings } from './types';
+// 兼容 shim：实现已同构下沉 shared 包，此处仅 re-export 保持旧 import 路径可用
+export * from '@shared/engine/worldbook';
