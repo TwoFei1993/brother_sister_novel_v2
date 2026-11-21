@@ -3,7 +3,7 @@
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import StylePresetConfirmDialog from '../StylePresetConfirmDialog';
 import type { PresetLite } from '../stylePresetMatch';
@@ -18,7 +18,13 @@ const presets: PresetLite[] = [
 
 const roots: Root[] = [];
 
-async function mount(draft: string[]): Promise<{ container: HTMLElement }> {
+interface MountOpts {
+  draft: string[];
+  onConfirm?: (picked: string[]) => void;
+  onClose?: () => void;
+}
+
+async function mount({ draft, onConfirm = () => undefined, onClose = () => undefined }: MountOpts): Promise<{ container: HTMLElement }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -29,8 +35,8 @@ async function mount(draft: string[]): Promise<{ container: HTMLElement }> {
         presets={presets}
         draft={draft}
         keywords={['欢乐']}
-        onConfirm={() => undefined}
-        onClose={() => undefined}
+        onConfirm={onConfirm}
+        onClose={onClose}
       />,
     );
   });
@@ -45,6 +51,14 @@ function toggle(container: HTMLElement, id: string): Promise<void> {
   });
 }
 
+async function click(container: HTMLElement, testId: string): Promise<void> {
+  const el = container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`);
+  if (!el) throw new Error(`missing [data-testid="${testId}"]`);
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
 describe('StylePresetConfirmDialog', () => {
   afterEach(async () => {
     await act(async () => {
@@ -55,7 +69,7 @@ describe('StylePresetConfirmDialog', () => {
   });
 
   it('三分组渲染：通用/匹配推荐（含理由）/其余', async () => {
-    const { container } = await mount(['a', 'b']);
+    const { container } = await mount({ draft: ['a', 'b'] });
     expect(container.querySelector('[data-group="general"]')?.textContent).toContain('通用基础');
     const matched = container.querySelector('[data-group="matched"]');
     expect(matched?.textContent).toContain('番茄欢乐');
@@ -65,26 +79,38 @@ describe('StylePresetConfirmDialog', () => {
 
   it('弹窗内改勾选后确认，回传最终勾选列表', async () => {
     const onConfirm = vi.fn();
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    roots.push(root);
-    await act(async () => {
-      root.render(
-        <StylePresetConfirmDialog
-          presets={presets}
-          draft={['a']}
-          keywords={['欢乐']}
-          onConfirm={onConfirm}
-          onClose={() => undefined}
-        />,
-      );
-    });
+    const { container } = await mount({ draft: ['a'], onConfirm });
     await toggle(container, 'b'); // 勾上匹配推荐
-    const ok = container.querySelector<HTMLButtonElement>('[data-testid="preset-confirm-ok"]');
-    await act(async () => {
-      ok!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await click(container, 'preset-confirm-ok');
     expect(onConfirm).toHaveBeenCalledWith(['a', 'b']);
+  });
+
+  it('反选方向：已勾选再点取消勾选，确认回传不含它的列表', async () => {
+    const onConfirm = vi.fn();
+    const { container } = await mount({ draft: ['a', 'b'], onConfirm });
+    await toggle(container, 'b'); // 反选去掉 b（filter 分支）
+    await click(container, 'preset-confirm-ok');
+    expect(onConfirm).toHaveBeenCalledWith(['a']);
+  });
+
+  it('取消按钮与点遮罩背景均触发 onClose', async () => {
+    const onClose = vi.fn();
+    const { container } = await mount({ draft: ['a'], onClose });
+    await click(container, 'preset-confirm-cancel');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    const mask = container.querySelector('[data-testid="preset-confirm-dialog"]');
+    await act(async () => {
+      mask!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('Escape 键关闭弹窗', async () => {
+    const onClose = vi.fn();
+    const { container } = await mount({ draft: ['a'], onClose });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

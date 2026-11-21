@@ -3,13 +3,13 @@
  * 通用（常驻）/ 匹配推荐（含命中理由）/ 其余 三分组展示，弹窗内可改勾选，
  * 「确认应用」回传最终勾选列表（由 StylePresetSection 打开并 PATCH settings）。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { groupPresets, matchReasons, type PresetLite } from './stylePresetMatch';
 
 interface StylePresetConfirmDialogProps {
   presets: PresetLite[];
-  /** 打开弹窗时的勾选草稿（stylePresetIds） */
+  /** 打开弹窗时的勾选草稿（stylePresetIds）；仅在挂载时读取一次——本组件须条件渲染挂载（{open && <Dialog/>}），勿以 visible prop 控制显隐 */
   draft: string[];
   /** 书风格关键词（buildStyleKeywords 产物），匹配推荐与理由展示用 */
   keywords: string[];
@@ -26,6 +26,15 @@ export default function StylePresetConfirmDialog({
 }: StylePresetConfirmDialogProps) {
   const [picked, setPicked] = useState<string[]>(draft);
   const groups = groupPresets(presets, keywords);
+
+  // Esc 关闭（桌面端习惯，模式照 ChapterDrawer）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   function toggle(id: string): void {
     setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -86,6 +95,7 @@ export default function StylePresetConfirmDialog({
           <button
             type="button"
             onClick={onClose}
+            data-testid="preset-confirm-cancel"
             className="h-8 rounded-lg border border-[hsl(var(--border-soft))] px-3 text-xs text-[hsl(var(--fg-muted))] hover:bg-[hsl(var(--bg))]"
           >
             取消
