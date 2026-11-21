@@ -51,7 +51,7 @@ describe('兜底预设 buildFallbackPreset', () => {
   it('novel 兜底主提示词字数透传设置值（不再硬编码 1500）', () => {
     const p = buildFallbackPreset('directive', 'medium', 5000);
     const main = p.prompts.find((x) => x.identifier === 'main');
-    expect(main?.content).toContain('每章正文 5000-6500 字');
+    expect(main?.content).toContain('每章正文 5000 字左右');
     expect(main?.content).not.toContain('1500');
   });
 });
@@ -61,7 +61,8 @@ describe('novel 写作要求注入（requirements）', () => {
     const { buildChapterRequirement } = await import('../prompt/novel/requirements');
     const text = buildChapterRequirement(3000);
     expect(text).toContain('【本章写作要求】');
-    expect(text).toContain('3000-4500 字');
+    expect(text).toContain('【字数纪律（硬性要求）】');
+    expect(text).toContain('3000 字左右');
     expect(text).toContain('System');
     expect(text).toContain('禁止');
   });
@@ -351,7 +352,7 @@ describe('分段生成 + 本章加长/续写（用户需求：单段太长拆分
     expect(cont).toContain('本段写约 2500 字');
     expect(cont).toContain('后续还会继续写');
     const contFinal = pickChapterRequirement({ continuation: true, targetWords: 5000 });
-    expect(contFinal).toContain('自然收束本章');
+    expect(contFinal).toContain('立即收束本章');
   });
 
   it('buildExpandRequirement：扩写=情节不变原地加厚，要求输出完整章带标题', async () => {
@@ -366,7 +367,7 @@ describe('分段生成 + 本章加长/续写（用户需求：单段太长拆分
   it('无分段时常规要求块保持原字数行（回归）', async () => {
     const { pickChapterRequirement } = await import('../prompt/novel/requirements');
     const plain = pickChapterRequirement({ targetWords: 3000 });
-    expect(plain).toContain('本章正文 3000-4500 字');
+    expect(plain).toContain('本章正文 3000 字左右');
     expect(plain).not.toContain('分段生成');
   });
 });

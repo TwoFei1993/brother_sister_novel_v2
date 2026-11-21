@@ -26,7 +26,7 @@ import {
   nextChapterIndex,
   withPartialInHistory,
 } from '@shared/hooks/generation-flow';
-import { COLLAPSE_RETRY_SUFFIX, MAX_TRUNCATE_ROUNDS, META_RETRY_SUFFIX } from '@shared/hooks/novel-constants';
+import { COLLAPSE_RETRY_SUFFIX, MAX_TRUNCATE_ROUNDS, META_RETRY_SUFFIX, overlongRetrySuffix } from '@shared/hooks/novel-constants';
 
 import { collectWithDefense } from '../llm/defense';
 import { upsertMessageInternal } from '../../routes/works/messages';
@@ -42,6 +42,8 @@ import { invalidReasonOf, progressOf, type ChapterOutcome, type ChainState, type
  */
 const WORD_GOAL_RATIO = 0.9;
 const TRIM_CAP_RATIO = 1.3;
+/** 超写重试线（超目标 50% 才触发重 roll——30% 内属「上下浮动 20%」要求可容忍区间，白烧一次整章成本不值） */
+const RETRY_CAP_RATIO = 1.5;
 
 /** 一次「组装 → LLM → finalize 入库」的完整单轮（client run 的 server 等价物） */
 export async function runOnce(
@@ -272,8 +274,23 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
   }
   // 润色 pass（P2-2）：仅对有效产出润色；失败静默保留原稿
   msg = await polishChapter(st, msg);
-  // 超写硬裁剪（写满型模型的最终防线）：超目标 30% → 截到最后句号（不标「未写完」——
-  // 内容自洽，只是比目标长）；裁剪后跳过截断标记（looksTruncated 会被 finish=length 误标）
+  // 超写治理（写满型模型，prompt 层优先于裁剪）：
+  // ① 超目标 50% → 带超写重试后缀重 roll 一次（同 meta/collapse 架构：幂等覆盖、预算不变
+  //    ——max_tokens 对该模型无硬约束，加预算无意义；用户要求优先 prompt 手段保剧情完整）
+  // ② 重试仍超 30% → 硬裁剪兜底（截到最后句号；不标「未写完」——内容自洽只是长）
+  if (msg && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * RETRY_CAP_RATIO)) {
+    const over = msg;
+    const retry = await runOnce(st, st.messages, directive + overlongRetrySuffix(tw), {
+      targetId,
+      promptDirective: directive + overlongRetrySuffix(tw),
+      persistMessageId: over.id,
+      ...(seg1 ? { segment: seg1 } : {}),
+    });
+    if (retry && invalidReasonOf(retry) === null && retry.content.length <= over.content.length) {
+      msg = retry;
+      st.chapterText = retry.content;
+    }
+  }
   let hardTrimmed = false;
   if (msg && invalidReasonOf(msg) === null && msg.content.length > Math.ceil(tw * TRIM_CAP_RATIO)) {
     const over = msg; // 收窄提取（TS narrowing 不入闭包）

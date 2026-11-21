@@ -18,3 +18,16 @@ export const COLLAPSE_RETRY_SUFFIX =
 /** 截断自动续写轮数上限（4 轮）：推理模型思考吃预算的章常需多轮补完；
  *  「写到一半就没了」的主要治理手段——每轮续完重新检测，直到写完或达上限 */
 export const MAX_TRUNCATE_ROUNDS = 4;
+
+/** 超写自动重试后缀（字数失控治理的 prompt 层防线）：目标 N 字实际产出超 N×1.5——
+ *  「写满型」模型（M3.1-Flash 实测无视 max_tokens 上限）对常规字数行的服从率低，
+ *  但对「视为无效 + 重试」模式响应良好（meta/collapse 重试生产实证）。后缀只进提示词，
+ *  落库按原消息 id 幂等覆盖；重试仍超才走硬裁剪兜底。 */
+export function overlongRetrySuffix(targetWords: number): string {
+  return (
+    `\n\n（系统重试指令：上一次输出约 ${targetWords} 字目标的章写到了远超要求的长度，属无效输出。这次必须：` +
+    `把本章正文严格控制在 ${targetWords} 字左右（上下浮动不超过 20%）——只保留推进主线剧情的必要场景，` +
+    '删掉一切环境铺陈的重复渲染与次要对话，写完本章剧情要点立即收尾；' +
+    '全程用简体中文思考和写作。本括号内是指令，禁止复述。）'
+  );
+}

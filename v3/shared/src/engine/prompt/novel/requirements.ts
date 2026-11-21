@@ -91,7 +91,7 @@ export function buildNovelMainPrompt(targetWords: number): TavernPrompt {
       '你是一位资深中文小说作家。请根据上方的全部设定与剧情指引，续写下一章正文：\n' +
       '- 以小说笔法叙事，融合场景、动作、对话与心理描写，人物性格与关系保持前后一致\n' +
       '- 情节必须承接聊天历史中的前文，不得另起炉灶\n' +
-      `- 每章正文 ${targetWords}-${targetWords + 1500} 字\n` +
+      `- 每章正文 ${targetWords} 字左右（上下浮动不超过 20%），写完剧情要点立即收尾\n` +
       '- 正文第一行必须是本章标题（Markdown 一级标题，格式：`# 第N章 标题`），标题行之后直接写正文\n' +
       '- 除首行标题外，不要输出编号、总结、写作说明或任何与正文无关的元信息\n' +
       '- 绝不以 AI、助手、模型身份说话\n' +
@@ -134,7 +134,7 @@ export function buildChapterRequirement(
           ? '本段不是最后一段：不要收尾、不要结局感，剧情停在推进中（后续由系统自动续写）'
           : '本段是最后一段：写完剩余剧情后自然收束本章'
       }\n`
-    : `- 本章正文 ${targetWords}-${targetWords + 1500} 字（不含标题与任何元信息），写到 ${targetWords + 1500} 字左右即收尾成章，禁止提前收束，也禁止为凑字数拖沓注水\n`;
+    : `- 【字数纪律（硬性要求）】本章正文 ${targetWords} 字左右（上下浮动不超过 20%），不含标题与元信息——写完本章剧情要点后**立即收尾成章**；接近 ${Math.round(targetWords * 1.2)} 字时必须收束当前场景进入章末，禁止超出，也禁止为凑字数拖沓注水或重复描写\n`;
   const chapterEndDiscipline = segment
     ? segment.part < segment.parts
       ? '  ③本段结尾停在场景推进中即可，不需要章末悬念钩子（后续段由系统自动续写拼接）\n'
@@ -175,8 +175,8 @@ export function buildChapterRequirement(
 export function buildContinueRequirement(targetWords: number, final = true, remaining?: number): string {
   const stopLine = final
     ? remaining !== undefined
-      ? `- 直接从剧情的当前时刻继续推进，补写约 ${remaining} 字后自然收束本章（含前面已写部分，本章总计约 ${targetWords} 字；章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n`
-      : `- 直接从剧情的当前时刻继续推进，写约 ${targetWords}-${targetWords + 1500} 字后自然收束本章（章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章）\n`
+      ? `- 【字数纪律（硬性要求）】补写约 ${remaining} 字后**立即收束本章**（含前面已写部分本章总计约 ${targetWords} 字，不得超过）——写完当前场景的收尾句就停，禁止为凑长度继续铺开新剧情；章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章\n`
+      : `- 【字数纪律（硬性要求）】写约 ${targetWords} 字（上下浮动不超过 20%）后**立即收束本章**，禁止超出；章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章\n`
     : `- 直接从剧情的当前时刻继续推进，本段写约 ${targetWords} 字——写满后在**最近的段落末尾**自然停笔（本章由系统分段拼接，后续还会继续写；不要收尾、不要结局感）\n`;
   return (
     '【续写要求（本章已写了一半）】\n' +
