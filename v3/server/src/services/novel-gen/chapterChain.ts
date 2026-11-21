@@ -191,7 +191,8 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
   const tw = st.work.settings.targetChapterWords ?? 3000;
   const parts = Math.max(1, Math.ceil(tw / SEGMENT_WORDS));
   const thinkingOn = st.prefs.thinking !== false;
-  const segmentBudget = calcOutputBudget(SEGMENT_WORDS + 600, thinkingOn, 1);
+  // 段预算 = 段目标字数直算（+600 旧 buffer 移除——「写满预算」型模型下 buffer 就是超写额度）
+  const segmentBudget = calcOutputBudget(SEGMENT_WORDS, thinkingOn, 1);
   st.chapterText = ''; // 换章重置（进度 text）
   const seg1 = parts > 1 ? { part: 1, parts, words: SEGMENT_WORDS } : undefined;
   // 第 1 段：段级预算（写满即停，后续段自动续写）+ 分段要求块（非末段不收尾）
@@ -202,12 +203,13 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
   const reason = invalidReasonOf(msg);
   if (msg && reason) {
     // 残章/重复循环：带专用重试后缀再来一次（后缀只进提示词；按首次消息 id 幂等覆盖）。
-    // meta 的本质常是「思考吃满输出预算」——重试同时把预算提到 3 倍
+    // meta 的本质常是「思考吃满输出预算」——重试预算 ×2（思考与正文各翻倍；旧 ×3 会让
+    // 「写满预算」型模型把正文也放飞到 3 倍容量，字数失控的第二来源）
     msg = await runOnce(st, st.messages, directive, {
       targetId,
       promptDirective: directive + (reason === 'meta' ? META_RETRY_SUFFIX : COLLAPSE_RETRY_SUFFIX),
       persistMessageId: msg.id,
-      maxTokensScale: 3,
+      maxTokensScale: 2,
       ...(seg1 ? { segment: seg1 } : {}),
     });
   }
@@ -218,6 +220,9 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
       if (st.isCancelled()) return { msg: null, cancelled: true };
       if (st.finish === 'stop') break; // 模型自然收束 → 分段链提前完成
       const prev = msg;
+      // 续写段预算跟随 remaining（「补多少字给多少容量」）：要求块说补 400 字就给 ~600 字
+      // 容量——旧全额段预算下模型写满即再超 4000 字（7081 字生产案例的第二来源）
+      const remaining = Math.max(400, tw - prev.content.length);
       const next = await runOnce(st, withPartialInHistory(st.messages, prev.content), buildContinueDirective(prev.content), {
         targetId,
         initialBuffer: prev.content,
@@ -225,7 +230,7 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
         persistMessageId: prev.id, // 当前累积行 id（run1 由 finalize 生成 uuid）
         continuation: true,
         segment: { part, parts, words: SEGMENT_WORDS },
-        effMaxTokensOverride: segmentBudget,
+        effMaxTokensOverride: calcOutputBudget(remaining + 200, thinkingOn, 1),
         maxTokensScale: 1,
       });
       const settled = await settleContinuation(st, prev, next);
@@ -233,7 +238,7 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
       if (settled.stop) break;
     }
   } else {
-    // 截断自动续写（补完结果同 id 幂等覆盖；续写轮抬预算 2 倍）
+    // 截断自动续写（补完结果同 id 幂等覆盖）：预算跟随 remaining（同分段续写，×2 旧补偿移除）
     const baseId = msg?.id ?? targetId;
     const keepTitle = msg?.chapter?.title;
     msg = await continueTruncated(st, st.messages, directive, msg, tw, (partial) => ({
@@ -243,7 +248,7 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
       persistMessageId: baseId,
       keepTitle,
       continueRemaining: Math.max(400, tw - partial.length),
-      maxTokensScale: 2,
+      effMaxTokensOverride: calcOutputBudget(Math.max(400, tw - partial.length) + 200, thinkingOn, 1),
     }));
   }
   // 润色 pass（P2-2）：仅对有效产出润色；失败静默保留原稿
