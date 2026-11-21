@@ -2,12 +2,15 @@
  * StylePresetSection 测试（模式同 StyleClonePanel.test：createRoot + act + data-testid + 原生事件）
  *
  * mock api/works（updateWork）+ stub globalThis.fetch 双路由：
- * - /api/presets → 预设浅列表 fixture
+ * - /api/presets → 预设浅列表 fixture（含 work.presetId 对应条目，验证主预设不参与）
  * - /api/works/:id → 带最新 revision 的 work fixture（apply PATCH 前置 GET 用）；未知 URL 抛错
  *
- * 覆盖（Task 3 六用例）：① 首次自动推荐 ② 改风格推荐重跑（只增不删+置 dirty）
+ * 覆盖（Task 3 六用例 + 复核修复）：
+ * ① 首次自动推荐（m1 命中路径 = customStoryTone「欢乐轻松」——storyTones 枚举无欢乐系值，
+ *    与引擎层 settings-block tones 合并语义一致）② 改风格推荐重跑（只增不删+置 dirty）
  * ③ 手动取消不弹回（dismissed D3①）④ 确认链路走弹窗 ⑤ 弹窗确认写入+弹窗内取消不弹回
- * （dismissed D3②）⑥ 主预设不参与清单
+ * （dismissed D3②）+「新」徽标清空 ⑥ 主预设不参与清单 ⑦ 弹窗打开期间外部并入的推荐
+ * 不被误判取消（差集以打开时草稿 draftAtOpen 为准）
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -31,16 +34,15 @@ const roots: Root[] = [];
 
 const PRESETS = [
   { id: 'g1', name: '通用基础', tags: ['通用'] },
-  { id: 'm1', name: '番茄欢乐', tags: ['欢乐'] }, // tag 命中基调「欢乐轻松」
-  { id: 'f1', name: '番茄极速', tags: [] }, // 仅当风格切「番茄·快节奏」时名称命中
+  { id: 'm1', name: '番茄欢乐', tags: ['欢乐'] }, // tag 命中自定义基调「欢乐轻松」
+  { id: 'f1', name: '番茄极速', tags: [] }, // 仅当风格切「番茄·快节奏」/基调含「番茄」时名称命中
   { id: 'o1', name: '古风正剧', tags: ['古风'] },
+  { id: 'main-preset', name: '主预设', tags: [] }, // work.presetId 对应条目：清单/推荐/弹窗均不参与（用例⑥判别）
 ];
 
-/** storyTones 枚举外的自由文本基调用例（组件仅做字符串匹配，无 schema 校验） */
-const TONES_JOY = ['欢乐轻松'] as unknown as StoryTone[];
-const TONES_JOY_HOT = ['欢乐轻松', '热血'] as unknown as StoryTone[];
-
-function workFixture(opts: { stylePresetIds?: string[]; tones?: StoryTone[]; revision?: number } = {}): Work {
+function workFixture(
+  opts: { stylePresetIds?: string[]; tones?: StoryTone[]; customTone?: string; revision?: number } = {},
+): Work {
   return {
     id: 'w1',
     revision: opts.revision ?? 1,
@@ -49,12 +51,13 @@ function workFixture(opts: { stylePresetIds?: string[]; tones?: StoryTone[]; rev
     genre: 'hunhe',
     characterIds: [],
     worldbookIds: [],
-    presetId: 'main-preset', // 主预设：fixture 无对应预设 → 清单不渲染对应行（用例⑥）
+    presetId: 'main-preset',
     regexScriptIds: [],
     settings: {
       ...defaultNovelSettings,
       subGenre: '都市异能',
-      storyTones: opts.tones ?? TONES_JOY,
+      storyTones: opts.tones ?? ['温情治愈'], // 真实枚举值
+      customStoryTone: opts.customTone ?? '欢乐轻松', // 自由文本基调：m1 推荐命中路径
       ...(opts.stylePresetIds !== undefined ? { stylePresetIds: opts.stylePresetIds } : {}),
     },
     voiceMap: {},
@@ -163,10 +166,10 @@ describe('StylePresetSection', () => {
     vi.unstubAllGlobals();
   });
 
-  it('① 首次自动推荐：通用+tag命中预设自动勾选，未确认提示条可见', async () => {
+  it('① 首次自动推荐：通用+匹配预设自动勾选（m1 经 customStoryTone 命中），未确认提示条可见', async () => {
     const h = await mountSection(workFixture());
     expect(listCheckbox(h, 'g1').checked).toBe(true); // 通用常驻
-    expect(listCheckbox(h, 'm1').checked).toBe(true); // tag「欢乐」命中基调「欢乐轻松」
+    expect(listCheckbox(h, 'm1').checked).toBe(true); // tag「欢乐」命中自定义基调「欢乐轻松」拆词
     expect(listCheckbox(h, 'f1').checked).toBe(false); // 无 tag 且名称未命中
     expect(listCheckbox(h, 'o1').checked).toBe(false); // tag「古风」不命中
     expect(h.container.querySelector('[data-testid="preset-hint"]')).not.toBeNull();
@@ -188,8 +191,8 @@ describe('StylePresetSection', () => {
     const h = await mountSection(workFixture());
     await toggleCheckbox(listCheckbox(h, 'm1'));
     expect(listCheckbox(h, 'm1').checked).toBe(false);
-    // 新数组引用的 storyTones rerender → 推荐重跑 effect 真正执行
-    await h.rerender(workFixture({ tones: TONES_JOY_HOT }));
+    // 新引用 settings（tones 换新数组）rerender → 推荐重跑 effect 真正执行
+    await h.rerender(workFixture({ tones: ['温情治愈', '热血爽文'] }));
     expect(listCheckbox(h, 'm1').checked).toBe(false); // dismissed 生效，不偷偷加回
     expect(listCheckbox(h, 'g1').checked).toBe(true); // 其余推荐不受影响
   });
@@ -201,7 +204,7 @@ describe('StylePresetSection', () => {
     expect(updateWorkMock).not.toHaveBeenCalled();
   });
 
-  it('⑤ 弹窗确认写入最终勾选；弹窗内取消的预设保存后不弹回（dismissed D3②）', async () => {
+  it('⑤ 弹窗确认写入最终勾选；弹窗内取消的预设保存后不弹回（dismissed D3②），「新」徽标清空', async () => {
     updateWorkMock.mockResolvedValue(workFixture({ stylePresetIds: ['g1'], revision: 2 }));
     const h = await mountSection(workFixture());
     await clickTestid(h, 'style-apply');
@@ -212,16 +215,38 @@ describe('StylePresetSection', () => {
     expect(input.revision).toBe(1); // PATCH 前置 GET 取到的最新 revision
     expect(input.settings?.stylePresetIds).toEqual(['g1']); // 弹窗最终勾选（不含 m1）
     expect(input.settings?.writingStyle).toBe('default');
-    // 保存后的 work 回流（新引用 storyTones）→ 重跑不把 m1 并回；提示条消失
-    await h.rerender(workFixture({ stylePresetIds: ['g1'], tones: TONES_JOY_HOT, revision: 2 }));
+    // 已确认保存 → 「新」徽标清空
+    expect(h.container.querySelectorAll('[data-testid="preset-new-rec"]').length).toBe(0);
+    // 保存后的 work 回流（新引用 settings）→ 重跑不把 m1 并回；提示条消失
+    await h.rerender(workFixture({ stylePresetIds: ['g1'], tones: ['温情治愈', '热血爽文'], revision: 2 }));
     expect(listCheckbox(h, 'm1').checked).toBe(false);
     expect(listCheckbox(h, 'g1').checked).toBe(true);
     expect(h.container.querySelector('[data-testid="preset-hint"]')).toBeNull();
   });
 
-  it('⑥ 主预设不参与清单：work.presetId 无对应预设，清单行数=4', async () => {
+  it('⑥ 主预设不参与清单：work.presetId 对应条目不渲染（5 条 fixture 渲染 4 行，无 main-preset 行）', async () => {
     const h = await mountSection(workFixture());
     const rows = h.container.querySelectorAll('[data-testid="preset-pick-list"] label');
-    expect(rows.length).toBe(4);
+    expect(rows.length).toBe(4); // 5 条 fixture 过滤主预设
+    expect(h.container.querySelector('[data-testid="preset-pick-list"] [data-preset-id="main-preset"]')).toBeNull();
+  });
+
+  it('⑦ 弹窗打开期间外部并入的推荐不被误判取消（差集以打开时草稿 draftAtOpen 为准）', async () => {
+    updateWorkMock.mockResolvedValue(workFixture({ stylePresetIds: ['g1', 'm1', 'f1'], revision: 2 }));
+    const h = await mountSection(workFixture());
+    await clickTestid(h, 'style-apply'); // 弹窗开，draftAtOpen=[g1,m1]
+    // 弹窗打开期间外部变化（自定义基调换新引用并入「番茄」）→ 推荐重跑把 f1 并入 picked
+    await h.rerender(workFixture({ customTone: '欢乐轻松 番茄' }));
+    expect(listCheckbox(h, 'f1').checked).toBe(true); // 外部并入成功
+    await clickTestid(h, 'preset-confirm-ok'); // 弹窗内不动，确认 → 不得把 f1 误判为「弹窗内取消」
+    expect(updateWorkMock).toHaveBeenCalledTimes(1);
+    const input = updateWorkMock.mock.calls[0]![1] as UpdateWorkSettingsInput;
+    expect(input.settings?.stylePresetIds).toEqual(['g1', 'm1', 'f1']); // 外部并入项一并写库
+    expect(listCheckbox(h, 'f1').checked).toBe(true); // 仍在 picked（若被误判 dismissed+丢弃则为 false）
+    // 保存后的 work 回流 → f1 保持勾选
+    await h.rerender(
+      workFixture({ stylePresetIds: ['g1', 'm1', 'f1'], customTone: '欢乐轻松 番茄', revision: 2 }),
+    );
+    expect(listCheckbox(h, 'f1').checked).toBe(true);
   });
 });

@@ -34,6 +34,15 @@ describe('buildStyleKeywords', () => {
   it('「—」占位符不入关键词', () => {
     expect(buildStyleKeywords('—', [], 'default')).not.toContain('—');
   });
+  it('自定义基调并入关键词（与引擎层 tones 合并语义一致：storyTones 无欢乐系枚举值，靠 customStoryTone 命中）', () => {
+    const kw = buildStyleKeywords('都市异能', ['温情治愈'], 'default', '欢乐轻松');
+    expect(kw).toContain('欢乐轻松'); // 无分隔符不拆分，整体入关键词
+    expect(kw).toContain('温情治愈');
+    expect(tagMatches('欢乐', kw)).toBe(true); // tag「欢乐」经双向包含命中 → 「番茄欢乐」可被推荐
+  });
+  it('自定义基调缺省（空串）不产生空关键词', () => {
+    expect(buildStyleKeywords('都市异能', ['温情治愈'], 'default')).not.toContain('');
+  });
 });
 
 describe('matchReasons', () => {

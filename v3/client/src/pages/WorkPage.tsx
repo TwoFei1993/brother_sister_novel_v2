@@ -282,7 +282,7 @@ export default function WorkPage() {
         />
       )}
       {settingsOpen && work && (
-        <WorkSettingsSheet work={work} onClose={() => setSettingsOpen(false)} onSaved={setWork} />
+        <WorkSettingsSheet key={work.id} work={work} onClose={() => setSettingsOpen(false)} onSaved={setWork} />
       )}
     </div>
   );

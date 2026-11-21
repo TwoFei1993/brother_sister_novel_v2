@@ -18,13 +18,14 @@ export function tagMatches(tag: string, keywords: string[]): boolean {
   return keywords.some((k) => k && tag && (tag.includes(k) || k.includes(tag)));
 }
 
-/** 书风格关键词：题材 + 各基调按「·」/空白/「、」拆词 + 风格中文标签拆词（过滤空串与「—」） */
+/** 书风格关键词：题材 + 各基调 + 自定义基调（与引擎层 tones 合并语义一致）按「·」/空白/「、」拆词 + 风格中文标签拆词（过滤空串与「—」） */
 export function buildStyleKeywords(
   subGenre: string,
   storyTones: string[],
   writingStyle: WritingStyle,
+  customStoryTone = '',
 ): string[] {
-  return [subGenre, ...storyTones, WRITING_STYLE_LABELS[writingStyle]]
+  return [subGenre, ...storyTones, customStoryTone, WRITING_STYLE_LABELS[writingStyle]]
     .flatMap((k) => (k ?? '').split(/[·\s、]/))
     .map((k) => k.trim())
     .filter((k) => k && k !== '—');

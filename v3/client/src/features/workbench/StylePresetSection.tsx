@@ -11,7 +11,7 @@
  *   → PATCH settings { writingStyle, stylePresetIds }（乐观锁，独立保存）
  * - 主预设（work.presetId）始终生效不参与勾选；组装层把附加预设 prompts 叠加进主栈尾部
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiFetch } from '../../api/client';
 import { updateWork } from '../../api/works';
@@ -30,14 +30,25 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
   const [newRecs, setNewRecs] = useState<ReadonlySet<string>>(new Set());
   /** 确认弹窗开关（条件渲染挂载——弹窗 draft 仅挂载时读取一次） */
   const [confirmOpen, setConfirmOpen] = useState(false);
+  /** 打开弹窗那一刻的草稿快照：确认差集以此为准，弹窗打开期间外部并入的推荐不会被误判「弹窗内取消」 */
+  const [draftAtOpen, setDraftAtOpen] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   /** D3：用户明确取消过的预设 id——①主列表手动取消 ②弹窗确认差集；会话内存态不持久化，推荐重跑不得弹回 */
   const dismissedRef = useRef<Set<string>>(new Set());
 
-  /** 书风格关键词（题材/基调拆词+风格中文标签）：用本地草稿 style，改风格未保存时推荐即时跟随 */
-  const keywords = useMemo(() => buildStyleKeywords(s.subGenre, s.storyTones, style), [s.subGenre, s.storyTones, style]);
+  /** 书风格关键词（题材/基调/自定义基调拆词+风格中文标签）：用本地草稿 style，改风格未保存时推荐即时跟随 */
+  const keywords = useMemo(
+    () => buildStyleKeywords(s.subGenre, s.storyTones, style, s.customStoryTone),
+    [s.subGenre, s.storyTones, style, s.customStoryTone],
+  );
+
+  /** 清单/确认弹窗/自动推荐共用：主预设（work.presetId）常驻主栈——不渲染、不推荐、不进弹窗 */
+  const listPresets = useMemo(
+    () => (presets ?? []).filter((p) => p.id !== work.presetId),
+    [presets, work.presetId],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +69,7 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
   useEffect(() => {
     if (!presets) return;
     const dismissed = dismissedRef.current;
-    const auto = presets
+    const auto = listPresets
       .filter((p) => {
         const tags = p.tags ?? [];
         return tags.includes('通用') || matchReasons(p.name, tags, keywords).length > 0;
@@ -69,32 +80,45 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
     setPicked((prev) => [...new Set([...prev, ...added])]);
     setNewRecs((prev) => new Set([...prev, ...added]));
     setDirty(true);
-  }, [presets, keywords, picked]);
+  }, [presets, listPresets, keywords, picked]);
 
   function togglePick(id: string): void {
     setDirty(true);
-    if (picked.includes(id)) dismissedRef.current.add(id); // D3①：手动取消不再被推荐自动加回
+    if (picked.includes(id)) {
+      dismissedRef.current.add(id); // D3①：手动取消不再被推荐自动加回
+    } else {
+      dismissedRef.current.delete(id); // 手动重新勾选=意愿反转，移出 dismissed
+    }
     setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  /** 点「确认应用」→ 打开确认弹窗（不直接 PATCH；弹窗内可最终改勾选） */
+  /** 点「确认应用」→ 快照草稿并打开确认弹窗（不直接 PATCH；弹窗内可最终改勾选） */
   function openConfirm(): void {
-    if (saving) return;
+    if (saving || !presets) return;
+    setDraftAtOpen(picked);
     setConfirmOpen(true);
   }
 
-  /** 弹窗确认：草稿−最终勾选的差集进 dismissed（D3②，弹窗内取消的保存后不得弹回）→ PATCH */
+  const closeConfirm = useCallback(() => setConfirmOpen(false), []);
+
+  /**
+   * 弹窗确认：打开时草稿 − 最终勾选的差集进 dismissed（D3②，弹窗内取消的保存后不得弹回）；
+   * 差集只对 draftAtOpen 做——弹窗打开期间外部并入的推荐不在弹窗视野内，不得误判取消，
+   * 该部分并入最终列表一并写库（与首推自动并入语义一致）。
+   */
   async function applyConfirmed(finalPicked: string[]): Promise<void> {
     setConfirmOpen(false);
-    for (const id of picked) if (!finalPicked.includes(id)) dismissedRef.current.add(id);
-    setPicked(finalPicked);
+    const externalAdds = picked.filter((id) => !draftAtOpen.includes(id));
+    const finalIds = [...new Set([...finalPicked, ...externalAdds])];
+    for (const id of draftAtOpen) if (!finalIds.includes(id)) dismissedRef.current.add(id);
+    setPicked(finalIds);
     setSaving(true);
     setErr(null);
     try {
       const latest = await apiFetch<Work>(`/api/works/${work.id}`);
       const updated = await updateWork(work.id, {
         revision: latest.revision,
-        settings: { ...latest.settings, stylePresetIds: finalPicked, writingStyle: style, customWritingStyle: customStyle.trim() },
+        settings: { ...latest.settings, stylePresetIds: finalIds, writingStyle: style, customWritingStyle: customStyle.trim() },
       });
       onSaved(updated);
       setDirty(false);
@@ -159,8 +183,8 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
       {presets === null && <p className="py-2 text-xs text-[hsl(var(--fg-muted))]">预设列表加载中…</p>}
       {presets !== null && (
         <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-[hsl(var(--border-soft))] p-2" data-testid="preset-pick-list">
-          {presets.length === 0 && <p className="py-2 text-center text-xs text-[hsl(var(--fg-muted))]">暂无预设资产（先在资产库-预设导入）</p>}
-          {presets.map((p) => {
+          {listPresets.length === 0 && <p className="py-2 text-center text-xs text-[hsl(var(--fg-muted))]">暂无预设资产（先在资产库-预设导入）</p>}
+          {listPresets.map((p) => {
             const tags = p.tags ?? [];
             const reasons = matchReasons(p.name, tags, keywords);
             const recommended = tags.includes('通用') || reasons.length > 0;
@@ -183,7 +207,7 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
                     匹配
                   </span>
                 )}
-                {newRecs.has(p.id) && (
+                {newRecs.has(p.id) && picked.includes(p.id) && (
                   <span data-testid="preset-new-rec" className="shrink-0 rounded bg-[hsl(var(--accent))]/10 px-1 text-[10px] text-[hsl(var(--accent))]">
                     新
                   </span>
@@ -211,11 +235,11 @@ export default function StylePresetSection({ work, onSaved }: { work: Work; onSa
       {confirmOpen && (
         <StylePresetConfirmDialog
           key={work.id}
-          presets={presets ?? []}
-          draft={picked}
+          presets={listPresets}
+          draft={draftAtOpen}
           keywords={keywords}
           onConfirm={(finalPicked) => void applyConfirmed(finalPicked)}
-          onClose={() => setConfirmOpen(false)}
+          onClose={closeConfirm}
         />
       )}
     </section>
