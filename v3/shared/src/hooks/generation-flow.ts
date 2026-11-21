@@ -73,17 +73,20 @@ const CONTINUE_TAIL_CHARS = 200;
 /**
  * 单次生成的输出预算（token）：由章节目标字数反推，而非固定值。
  *
- * 根因（「写到一半就没了」的第一性修复）：此前 effMaxTokens=max(8192, thinking?16384)，
- * 与目标字数完全脱钩——推理模型思考流与正文共用 max_tokens（M3.1 实测思考可烧 12000+），
- * 思考吃多后正文写到一半预算枯竭被上游腰斩（finish_reason=length）。
- * 公式：正文上限字数 × 保守 token 密度（1.5/字，含标点与标题）+ 思考独立余量 12000。
- * 3000 字 → 18750（旧逻辑 16384 不够）；5000 字 → 24750；重试/续写轮再乘 scale，封顶 64000。
+ * 演进一（「写到一半就没了」的第一性修复）：effMaxTokens 与目标字数挂钩——推理模型思考流与
+ * 正文共用 max_tokens（M3.1 实测思考可烧 12000+），固定值下思考吃多正文被上游腰斩。
+ * 演进二（字数失控修复，生产实证：目标 3000 字实际生成 15683/18137 字）：
+ * 中文 token 密度 ≈0.65-0.7 token/字（1 token≈1.5 字），旧公式按 1.5 token/字换算——
+ * 方向反了，给正文留了目标 3-4 倍的容量；「写满 max_tokens」型模型（M3.1-Flash）直接放飞。
+ * 新公式：正文容量 = (目标+500 buffer)×1.2 字，按 0.75 token/字换算；thinking 开启时上游
+ * 取 max_tokens 一半做思考（converters/claude.ts budget_tokens=max_tokens/2），正文只分
+ * 一半预算，故总数 ×2 补偿——两种模式正文容量一致（3000 字目标 ≈3900 字上限，1.3 倍宽容）。
+ * floor 相应下调（旧 16384/8192 是旧公式的量级）；重试/续写轮再乘 scale，封顶 64000。
  */
 export function calcOutputBudget(targetWords: number, thinking: boolean, scale = 1): number {
-  const bodyTokens = Math.ceil((targetWords + 1500) * 1.5);
-  const budget = bodyTokens + (thinking ? 12000 : 0);
-  const floor = thinking ? 16384 : 8192;
-  return Math.min(Math.max(budget, floor) * scale, 64000);
+  const bodyTokens = Math.ceil((targetWords + 500) * 0.75 * (thinking ? 2 : 1));
+  const floor = thinking ? 4096 : 2048;
+  return Math.min(Math.max(bodyTokens, floor) * scale, 64000);
 }
 
 /**

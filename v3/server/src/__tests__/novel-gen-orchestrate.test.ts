@@ -259,7 +259,8 @@ describe('单章链（generateChapter 移植语义）', () => {
     const joined = retry.messages.map((m) => m.content).join('\n');
     expect(joined).toContain('系统重试指令');
     expect(joined).toContain(META_RETRY_SUFFIX.trim().slice(0, 20));
-    expect(retry.max_tokens).toBe(Math.min(Math.ceil((2000 + 1500) * 1.5 + 12000) * 3, 64000));
+    // 新公式：floor(thinking 4096) 顶格 × scale 3（fixture 书 tw=2000 小于 floor 容量）
+    expect(retry.max_tokens).toBe(Math.min(Math.max(Math.ceil((2000 + 500) * 0.75 * 2), 4096) * 3, 64000));
   });
 
   it('重放检测回滚：续写轮从头复述前文 → 回滚为已写内容并停止', async () => {

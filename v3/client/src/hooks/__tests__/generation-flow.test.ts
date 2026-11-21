@@ -221,22 +221,24 @@ describe('toGenerationError', () => {
   });
 });
 
-describe('calcOutputBudget（输出预算按目标字数反推——截断根因①的第一性修复）', () => {
-  it('3000 字目标 + 思考 → 18750（旧固定值 16384 不够写完整章）', () => {
-    expect(calcOutputBudget(3000, true)).toBe(Math.min(Math.ceil((3000 + 1500) * 1.5) + 12000, 64000));
-    expect(calcOutputBudget(3000, true)).toBe(18750);
+describe('calcOutputBudget（输出预算按目标字数反推——字数失控修复：中文 0.75 token/字 + thinking 占半补偿）', () => {
+  it('3000 字目标 + 思考 → 5250（正文容量≈3900 字 = 目标 1.3 倍；旧公式 18750 给了 1.4 万字容量致放飞）', () => {
+    expect(calcOutputBudget(3000, true)).toBe(Math.ceil((3000 + 500) * 0.75 * 2));
+    expect(calcOutputBudget(3000, true)).toBe(5250);
   });
 
-  it('目标字数越大预算越高；思考关 → 无思考余量、下限 8192', () => {
+  it('目标字数越大预算越高；思考开/关正文容量一致（thinking 占半由总数 ×2 补偿）', () => {
     expect(calcOutputBudget(5000, true)).toBeGreaterThan(calcOutputBudget(3000, true));
-    expect(calcOutputBudget(3000, false)).toBe(8192); // 6750 < 下限 → 兜到 8192
-    expect(calcOutputBudget(100, false)).toBe(8192); // 极小目标回落下限
-    expect(calcOutputBudget(6000, false)).toBeGreaterThan(8192); // 大目标按字数上浮
+    expect(calcOutputBudget(3000, false)).toBe(Math.ceil((3000 + 500) * 0.75));
+    expect(calcOutputBudget(3000, false)).toBe(2625); // 与 thinking 版正文容量等价
+    expect(calcOutputBudget(100, false)).toBe(2048); // 极小目标回落下限
+    expect(calcOutputBudget(100, true)).toBe(4096); // thinking 下限
+    expect(calcOutputBudget(6000, false)).toBeGreaterThan(2625); // 大目标按字数上浮
   });
 
   it('续写/重试 scale 乘算且封顶 64000', () => {
-    expect(calcOutputBudget(3000, true, 2)).toBe(18750 * 2);
-    expect(calcOutputBudget(9000, true, 3)).toBe(64000);
+    expect(calcOutputBudget(3000, true, 2)).toBe(5250 * 2);
+    expect(calcOutputBudget(16000, true, 3)).toBe(64000);
   });
 });
 

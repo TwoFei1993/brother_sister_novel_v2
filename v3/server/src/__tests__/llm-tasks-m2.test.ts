@@ -171,7 +171,9 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllGlobals();
   delete process.env.LLM_TASK_RETRY_DELAYS_MS;
-  await rm(root, { recursive: true, force: true });
+  // 后台 execute 的写盘可能晚于本钩子（提交 202 即返回，execute void 在跑）——
+  // Windows 上 rmdir 与并发写撞车报 ENOTEMPTY：maxRetries 覆盖写入窗口（fs.rm 原生重试参数）
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('novel-chapter 提交（schema union）', () => {
