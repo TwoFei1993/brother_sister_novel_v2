@@ -220,9 +220,10 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
       if (st.isCancelled()) return { msg: null, cancelled: true };
       if (st.finish === 'stop') break; // 模型自然收束 → 分段链提前完成
       const prev = msg;
-      // 续写段预算跟随 remaining（「补多少字给多少容量」）：要求块说补 400 字就给 ~600 字
-      // 容量——旧全额段预算下模型写满即再超 4000 字（7081 字生产案例的第二来源）
+      // 续写段预算跟随 remaining（「补多少字给多少容量」），且不走 calcOutputBudget 的
+      // floor（2048 对「补 400 字」是 5 倍容量——6890 字生产案例的第三来源），floor 取协议最低 1024
       const remaining = Math.max(400, tw - prev.content.length);
+      const continuationBudget = Math.max(1024, Math.ceil((remaining + 200) * 0.75));
       const next = await runOnce(st, withPartialInHistory(st.messages, prev.content), buildContinueDirective(prev.content), {
         targetId,
         initialBuffer: prev.content,
@@ -230,7 +231,7 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
         persistMessageId: prev.id, // 当前累积行 id（run1 由 finalize 生成 uuid）
         continuation: true,
         segment: { part, parts, words: SEGMENT_WORDS },
-        effMaxTokensOverride: calcOutputBudget(remaining + 200, thinkingOn, 1),
+        effMaxTokensOverride: continuationBudget,
         maxTokensScale: 1,
       });
       const settled = await settleContinuation(st, prev, next);
@@ -238,7 +239,7 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
       if (settled.stop) break;
     }
   } else {
-    // 截断自动续写（补完结果同 id 幂等覆盖）：预算跟随 remaining（同分段续写，×2 旧补偿移除）
+    // 截断自动续写（补完结果同 id 幂等覆盖）：预算跟随 remaining，floor 1024（同分段续写）
     const baseId = msg?.id ?? targetId;
     const keepTitle = msg?.chapter?.title;
     msg = await continueTruncated(st, st.messages, directive, msg, tw, (partial) => ({
@@ -248,7 +249,7 @@ export async function generateOneChapter(st: ChainState, directive: string): Pro
       persistMessageId: baseId,
       keepTitle,
       continueRemaining: Math.max(400, tw - partial.length),
-      effMaxTokensOverride: calcOutputBudget(Math.max(400, tw - partial.length) + 200, thinkingOn, 1),
+      effMaxTokensOverride: Math.max(1024, Math.ceil((Math.max(400, tw - partial.length) + 200) * 0.75)),
     }));
   }
   // 润色 pass（P2-2）：仅对有效产出润色；失败静默保留原稿
