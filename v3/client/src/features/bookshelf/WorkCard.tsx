@@ -30,6 +30,10 @@ interface WorkCardProps {
   onToggleSelect?: () => void;
   /** 该书进行中的 novel-chapter 任务（active 轮询派生）；有则封面渲染进度徽标 */
   activeTask?: { done: number; chapterTotal: number; phase?: TaskPhase };
+  /** 该书任务取消中（POST cancel 已发出、server 段间生效前）：按钮禁用防重复点击 */
+  cancelling?: boolean;
+  /** 取消该书进行中的后台任务（缝①：书架侧唯一取消入口——书页未打开时） */
+  onCancelTask?: () => void;
 }
 
 /** 全量 Work → 书架 summary（保持字段同源，避免手工拼装漂移） */
@@ -63,7 +67,7 @@ function describeActionError(err: unknown, fallback: string): string {
   return fallback;
 }
 
-export default function WorkCard({ work, onUpdated, onDeleted, selectable = false, selected = false, onToggleSelect, activeTask }: WorkCardProps) {
+export default function WorkCard({ work, onUpdated, onDeleted, selectable = false, selected = false, onToggleSelect, activeTask, cancelling = false, onCancelTask }: WorkCardProps) {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -168,15 +172,29 @@ export default function WorkCard({ work, onUpdated, onDeleted, selectable = fals
           ✓
         </button>
       )}
-      {/* 进行中徽标（Chunk 6）：第x/y章·相位中文；无任务不渲染 */}
+      {/* 进行中徽标（Chunk 6）：第x/y章·相位中文；缝① 补取消按钮（server 段间生效，
+          点击后任务仍会在 active 挂一会儿——按钮转「取消中…」禁用防重复点）；无任务不渲染 */}
       {activeTask && (
-        <span
-          data-testid="work-active-badge"
-          title="后台生成任务进行中"
-          className="absolute left-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium text-amber-300 backdrop-blur"
-        >
-          第{activeTask.done}/{activeTask.chapterTotal}章·{phaseLabel(activeTask.phase)}
-        </span>
+        <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
+          <span
+            data-testid="work-active-badge"
+            title="后台生成任务进行中"
+            className="rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium text-amber-300 backdrop-blur"
+          >
+            第{activeTask.done}/{activeTask.chapterTotal}章·{phaseLabel(activeTask.phase)}
+          </span>
+          <button
+            type="button"
+            data-testid="work-cancel-task"
+            title="取消后台任务（当前段跑完即停，已完成章保留）"
+            aria-label={`取消 ${work.title} 的后台生成任务`}
+            onClick={onCancelTask}
+            disabled={cancelling}
+            className="rounded-md bg-black/60 px-2 py-1.5 text-[10px] font-medium text-white/80 backdrop-blur transition-colors hover:bg-black/80 hover:text-white disabled:opacity-50"
+          >
+            {cancelling ? '取消中…' : '取消'}
+          </button>
+        </div>
       )}
       {/* 封面：点击进入写作台（多选模式下改为勾选） */}
       <button

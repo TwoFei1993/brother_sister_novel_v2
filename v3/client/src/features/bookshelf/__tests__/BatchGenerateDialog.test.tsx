@@ -64,6 +64,7 @@ function q(container: HTMLElement, testid: string): HTMLElement {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  localStorage.clear();
   submitMock.mockReset();
   submitMock.mockResolvedValue('task-1');
   onClose = vi.fn();
@@ -169,6 +170,19 @@ describe('BatchGenerateDialog 提交', () => {
       vi.advanceTimersByTime(2500);
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('提交成功写书页恢复锚点 novel-gen-${workId}（缝①：书页 mount 可认领轮询）；跳过/失败的书不写', async () => {
+    submitMock.mockImplementation(async (body: NovelChapterSubmitBody) => {
+      if (body.workId === 'w1') return 'task-a';
+      if (body.workId === 'w2') throw new ApiError(409, '该书已有生成任务进行中');
+      return 'task-c';
+    });
+    const c = await renderDialog([work('w1', '书一'), work('w2', '书二'), work('w3', '书三')]);
+    await click(q(c, 'batch-submit'));
+    expect(localStorage.getItem('novel-gen-w1')).toBe('task-a');
+    expect(localStorage.getItem('novel-gen-w2')).toBeNull(); // 409 跳过：任务非本次发起，不覆盖旧锚点
+    expect(localStorage.getItem('novel-gen-w3')).toBe('task-c');
   });
 
   it('提交中禁用提交按钮（防重复发起）；完成后切换汇总视图', async () => {

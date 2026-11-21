@@ -281,6 +281,8 @@ export default function Bookshelf() {
               selected={batch.selectedIds.has(work.id)}
               onToggleSelect={() => batch.toggleWork(work.id)}
               activeTask={batch.activeByWork[work.id]}
+              cancelling={batch.cancellingIds.has(work.id)}
+              onCancelTask={() => batch.cancelTask(work.id)}
             />
           ))}
         </div>

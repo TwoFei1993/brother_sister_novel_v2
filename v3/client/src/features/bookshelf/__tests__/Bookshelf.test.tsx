@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { listWorks, type WorkSummary } from '../../../api/works';
 import { fetchActiveTasks, type ActiveTask } from '../../../lib/activeTasks';
+import { cancelTask } from '../../../lib/llmTask';
 import Bookshelf from '../Bookshelf';
 
 vi.mock('../../../api/works', () => ({
@@ -26,8 +27,14 @@ vi.mock('../../../lib/activeTasks', async (importOriginal) => ({
   fetchActiveTasks: vi.fn(),
 }));
 
+vi.mock('../../../lib/llmTask', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  cancelTask: vi.fn(),
+}));
+
 const listWorksMock = vi.mocked(listWorks);
 const fetchActiveTasksMock = vi.mocked(fetchActiveTasks);
+const cancelTaskMock = vi.mocked(cancelTask);
 
 // React 19 act 环境声明（组件测试基础设施尚薄，暂就地声明；后续组件测试增多再上提 setupFile）
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -87,6 +94,8 @@ async function click(el: Element | null | undefined): Promise<void> {
 beforeEach(() => {
   listWorksMock.mockReset();
   fetchActiveTasksMock.mockReset();
+  cancelTaskMock.mockReset();
+  cancelTaskMock.mockResolvedValue(undefined);
   fetchActiveTasksMock.mockResolvedValue([]);
 });
 
@@ -254,6 +263,59 @@ describe('Bookshelf 多选批量（Chunk 6 Task 6.1）', () => {
     const c = await renderBookshelf();
     await flushPoll();
     expect(c.querySelector('[data-testid="work-active-badge"]')!.textContent).toBe('第0/3章·排队中');
+  });
+
+  it('进行中徽标旁取消按钮：点击调 cancel 端点并转「取消中…」禁用（缝①）', async () => {
+    listWorksMock.mockResolvedValue([workSummary({ id: 'w1', title: '穿越之兄妹' })]);
+    fetchActiveTasksMock.mockResolvedValue([activeTask('w1')]);
+    const c = await renderBookshelf();
+    await flushPoll();
+    const btn = c.querySelector('[data-testid="work-cancel-task"]');
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent).toBe('取消');
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    await click(btn);
+    // POST /api/llm/tasks/:id/cancel（cancelTask 以任务 id 调用）
+    expect(cancelTaskMock).toHaveBeenCalledTimes(1);
+    expect(cancelTaskMock).toHaveBeenCalledWith('task-w1');
+    // 取消中：按钮禁用防重复点（server 段间生效前任务仍在 active 挂一会儿）
+    const cancelling = c.querySelector('[data-testid="work-cancel-task"]') as HTMLButtonElement;
+    expect(cancelling.disabled).toBe(true);
+    expect(cancelling.textContent).toBe('取消中…');
+  });
+
+  it('取消请求失败：标记立即撤销，按钮恢复可点（可重试）', async () => {
+    listWorksMock.mockResolvedValue([workSummary({ id: 'w1', title: '穿越之兄妹' })]);
+    fetchActiveTasksMock.mockResolvedValue([activeTask('w1')]);
+    let rejectCancel: (e: unknown) => void = () => undefined;
+    cancelTaskMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectCancel = reject;
+      }),
+    );
+    const c = await renderBookshelf();
+    await flushPoll();
+    await click(c.querySelector('[data-testid="work-cancel-task"]'));
+    expect(cancelTaskMock).toHaveBeenCalledTimes(1);
+    // pending 期间取消中禁用
+    expect((c.querySelector('[data-testid="work-cancel-task"]') as HTMLButtonElement).disabled).toBe(true);
+    // reject（网络失败）→ 标记撤销，按钮恢复可点
+    await act(async () => {
+      rejectCancel(new Error('network blip'));
+      await Promise.resolve();
+    });
+    const btn = c.querySelector('[data-testid="work-cancel-task"]') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('取消');
+  });
+
+  it('无进行中任务的书不渲染取消按钮', async () => {
+    listWorksMock.mockResolvedValue([workSummary({ id: 'w1', title: '穿越之兄妹' })]);
+    fetchActiveTasksMock.mockResolvedValue([]);
+    const c = await renderBookshelf();
+    await flushPoll();
+    expect(c.querySelector('[data-testid="work-cancel-task"]')).toBeNull();
+    expect(c.querySelector('[data-testid="work-active-badge"]')).toBeNull();
   });
 
   it('active 轮询终态（workId 消失）→ 静默刷新作品列表（不闪加载态）', async () => {

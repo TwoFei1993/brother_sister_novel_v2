@@ -12,6 +12,7 @@ import { useState, type FormEvent } from 'react';
 
 import type { WorkSummary } from '../../api/works';
 import { ApiError } from '../../api/client';
+import { novelTaskSlotKey } from '../../hooks/useNovelTask';
 import { submitNovelChapter, taskPrefsOf } from '../../lib/llmTask';
 import { useSettingsStore } from '../../stores/settings';
 
@@ -48,7 +49,7 @@ export default function BatchGenerateDialog({ works, onClose }: BatchGenerateDia
     let failed = 0;
     for (const w of works) {
       try {
-        await submitNovelChapter({
+        const taskId = await submitNovelChapter({
           kind: 'novel-chapter',
           workId: w.id,
           prefs,
@@ -58,6 +59,13 @@ export default function BatchGenerateDialog({ works, onClose }: BatchGenerateDia
           outline: false,
           parallel,
         });
+        // 书页恢复锚点（缝①）：useNovelTask mount 恢复只认 novel-gen-${workId}——
+        // 批量发起的书打开书页才能认领轮询、看到回流与停止入口（与书页提交同款）
+        try {
+          localStorage.setItem(novelTaskSlotKey(w.id), taskId);
+        } catch {
+          /* 隐私模式静默——仅影响刷新恢复 */
+        }
         submitted += 1;
       } catch (err) {
         // 409 GEN_BUSY：该书已有任务进行中 → 跳过计数，不中断其余书
