@@ -7,7 +7,7 @@
  * ① 默认风格随 settings 下发（writingStyle='default'，settings.genre 与顶层 genre 一致）
  * ② 风格下拉选择生效（'番茄·快节奏' → fanqie）
  * ③ chat 模式同样携带 settings.writingStyle
- * ④ duanju 模式无风格项且不走 settings（短剧分支）
+ * ④ duanju 模式无风格项且不走 settings、跳过资产归属补写（短剧分支）
  * ⑤ attributeAssets 只调用一次（重复调用块修复）
  */
 import { act } from 'react';
@@ -158,6 +158,7 @@ describe('NewWorkDialog 写作风格（M1 Task 4）', () => {
     expect(input.mode).toBe('duanju');
     expect('settings' in input).toBe(false);
     expect(input.duanju).toBeDefined();
+    expect(attributeAssetsMock).not.toHaveBeenCalled(); // 短剧不消费绑定，跳过资产归属补写
   });
 
   it('⑤ attributeAssets 只调用一次（重复块已删）', async () => {

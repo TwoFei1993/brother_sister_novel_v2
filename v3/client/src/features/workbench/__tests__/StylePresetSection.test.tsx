@@ -5,12 +5,13 @@
  * - /api/presets → 预设浅列表 fixture（含 work.presetId 对应条目，验证主预设不参与）
  * - /api/works/:id → 带最新 revision 的 work fixture（apply PATCH 前置 GET 用）；未知 URL 抛错
  *
- * 覆盖（Task 3 六用例 + 复核修复）：
+ * 覆盖（Task 3 六用例 + 复核修复 + Task 5 回归补强）：
  * ① 首次自动推荐（m1 命中路径 = customStoryTone「欢乐轻松」——storyTones 枚举无欢乐系值，
  *    与引擎层 settings-block tones 合并语义一致）② 改风格推荐重跑（只增不删+置 dirty）
  * ③ 手动取消不弹回（dismissed D3①）④ 确认链路走弹窗 ⑤ 弹窗确认写入+弹窗内取消不弹回
  * （dismissed D3②）+「新」徽标清空 ⑥ 主预设不参与清单 ⑦ 弹窗打开期间外部并入的推荐
- * 不被误判取消（差集以打开时草稿 draftAtOpen 为准）
+ * 不被误判取消（差集以打开时草稿 draftAtOpen 为准）⑧ 取消后手动勾回（勾入分支清
+ * dismissed，重跑不挤掉勾回项）⑨ 保存失败保留现场（err 显示/dirty 保留/可重试成功）
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -169,7 +170,7 @@ describe('StylePresetSection', () => {
   it('① 首次自动推荐：通用+匹配预设自动勾选（m1 经 customStoryTone 命中），未确认提示条可见', async () => {
     const h = await mountSection(workFixture());
     expect(listCheckbox(h, 'g1').checked).toBe(true); // 通用常驻
-    expect(listCheckbox(h, 'm1').checked).toBe(true); // tag「欢乐」命中自定义基调「欢乐轻松」拆词
+    expect(listCheckbox(h, 'm1').checked).toBe(true); // 「欢乐轻松」无分隔符整词入关键词，tag「欢乐」双向包含命中
     expect(listCheckbox(h, 'f1').checked).toBe(false); // 无 tag 且名称未命中
     expect(listCheckbox(h, 'o1').checked).toBe(false); // tag「古风」不命中
     expect(h.container.querySelector('[data-testid="preset-hint"]')).not.toBeNull();
@@ -248,5 +249,48 @@ describe('StylePresetSection', () => {
       workFixture({ stylePresetIds: ['g1', 'm1', 'f1'], customTone: '欢乐轻松 番茄', revision: 2 }),
     );
     expect(listCheckbox(h, 'f1').checked).toBe(true);
+  });
+
+  it('⑧ 取消后再手动勾回：勾入分支清 dismissed，推荐重跑不把勾回项挤掉', async () => {
+    const h = await mountSection(workFixture());
+    await toggleCheckbox(listCheckbox(h, 'm1')); // 手动取消 → D3① dismissed={m1}
+    await h.rerender(workFixture({ tones: ['温情治愈', '热血爽文'] }));
+    expect(listCheckbox(h, 'm1').checked).toBe(false); // 前置确认：m1 确实进了 dismissed（重跑不加回）
+    await toggleCheckbox(listCheckbox(h, 'm1')); // 手动勾回 = 意愿反转 → dismissedRef.delete('m1')
+    expect(listCheckbox(h, 'm1').checked).toBe(true);
+    // 关键词变化（自定义基调并入「番茄」）rerender → 推荐重跑 effect 真正执行（f1 新命中并入）：
+    // dismissed 只影响 added 合并，不剔除已勾选项——勾回的 m1 保持勾选不消失（锁 delete(id) 不回归）
+    await h.rerender(workFixture({ tones: ['热血爽文'], customTone: '欢乐轻松 番茄' }));
+    expect(listCheckbox(h, 'f1').checked).toBe(true); // 证明确有效重跑发生
+    expect(listCheckbox(h, 'm1').checked).toBe(true); // 勾回项不被 dismissed 残留影响
+    expect(listCheckbox(h, 'g1').checked).toBe(true);
+  });
+
+  it('⑨ 保存失败保留现场：err 显示、dirty 仍 true、勾选态保留可重试；重试成功后恢复', async () => {
+    updateWorkMock.mockRejectedValueOnce(new Error('网络错误'));
+    updateWorkMock.mockResolvedValue(workFixture({ stylePresetIds: ['g1', 'm1'], revision: 2 }));
+    const h = await mountSection(workFixture());
+    await clickTestid(h, 'style-apply');
+    await clickTestid(h, 'preset-confirm-ok'); // 弹窗内不动 → finalIds=[g1,m1]
+    expect(updateWorkMock).toHaveBeenCalledTimes(1);
+    // 失败现场：applyConfirmed catch → setErr，提示显示
+    expect(h.container.textContent).toContain('网络错误');
+    // setDirty(false) 在 try 成功路径内未执行 → dirty 仍 true：「有未应用的更改」在、按钮可点（可重试）
+    expect(h.container.textContent).toContain('有未应用的更改');
+    expect(
+      (h.container.querySelector<HTMLButtonElement>('[data-testid="style-apply"]')!).disabled,
+    ).toBe(false);
+    // setPicked(finalIds) 在确认时已同步 → 勾选态保留
+    expect(listCheckbox(h, 'g1').checked).toBe(true);
+    expect(listCheckbox(h, 'm1').checked).toBe(true);
+    // 重试：再走一次确认链路 → resolve → err 清空、dirty 清、按钮回禁用
+    await clickTestid(h, 'style-apply');
+    await clickTestid(h, 'preset-confirm-ok');
+    expect(updateWorkMock).toHaveBeenCalledTimes(2);
+    expect(h.container.textContent).not.toContain('网络错误');
+    expect(h.container.textContent).not.toContain('有未应用的更改');
+    expect(
+      (h.container.querySelector<HTMLButtonElement>('[data-testid="style-apply"]')!).disabled,
+    ).toBe(true);
   });
 });
