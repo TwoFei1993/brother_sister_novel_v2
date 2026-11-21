@@ -13,7 +13,7 @@ import express, { Router, type Express, type NextFunction, type Request, type Re
 import request from 'supertest';
 
 import { llmTasksRouter } from '../routes/llm/tasks';
-import { dataDir } from '../routes/core/paths';
+import { llmTasksDir } from '../routes/llm/tasksNovel';
 import { readJson, writeJsonAtomic } from '../storage/store';
 import { authRequired, signToken } from '../middleware/auth';
 import { HttpError } from '../middleware/validate';
@@ -79,12 +79,12 @@ function mockUpstream(text: string): void {
   );
 }
 
-/** 任务落盘目录（与 tasks.ts 同源：dataDir() 实时读 env DATA_DIR） */
+/** 任务落盘目录（与生产同源：tasksNovel.llmTasksDir 实时读 env DATA_DIR） */
 function tasksDir(): string {
-  return join(dataDir(), 'llm-tasks');
+  return llmTasksDir();
 }
 
-/** 直写任务文件（预置 pending/running/终态现场，绕开执行器时序） */
+/** 直写任务文件（预置 pending/running/终态现场，绕开执行器时序）；id 须为 36 位格式（:id 校验生效） */
 async function seedTask(task: Record<string, unknown>): Promise<string> {
   await writeJsonAtomic(join(tasksDir(), `${task.id as string}.json`), task);
   return task.id as string;
@@ -108,14 +108,15 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'v3-llm-tasks-m2-'));
   process.env.DATA_DIR = root;
   process.env.OPENAI_API_KEY = 'mock-key';
-  // 占位执行延迟：给互斥/取消用例留 pending 窗口（Task 3.3 实装后该 env 与占位一并移除）
-  process.env.LLM_TASK_NOVEL_DELAY_MS = '200';
+  // 占位执行延迟：给互斥/取消用例留 pending 窗口（1.2s 消 CI 慢机 flaky；Task 3.3 实装后随占位移除）
+  process.env.LLM_TASK_NOVEL_DELAY_MS = '1200';
   await writeFile(join(root, 'secrets.json'), JSON.stringify({ openai: { apiKey: 'mock-key' } }), 'utf8');
 });
 
 afterEach(async () => {
   vi.unstubAllGlobals();
   delete process.env.LLM_TASK_NOVEL_DELAY_MS;
+  delete process.env.LLM_TASK_RETRY_DELAYS_MS;
   await rm(root, { recursive: true, force: true });
 });
 
@@ -189,7 +190,7 @@ describe('POST /:id/cancel', () => {
   it('pending 任务置位 cancelRequested 落盘 → ok:true', async () => {
     const app = testApp();
     const id = await seedTask({
-      id: 't-cancel-pending', status: 'pending', kind: 'novel-chapter', workId: 'w-c1', createdAt: Date.now(),
+      id: '11111111-1111-4111-8111-111111111111', status: 'pending', kind: 'novel-chapter', workId: 'w-c1', createdAt: Date.now(),
     });
     const res = await authed(app).post(`/api/llm/tasks/${id}/cancel`);
     expect(res.status).toBe(200);
@@ -202,7 +203,7 @@ describe('POST /:id/cancel', () => {
   it('终态任务 → ok:false（200，不报错）', async () => {
     const app = testApp();
     const id = await seedTask({
-      id: 't-cancel-done', status: 'done', kind: 'novel-chapter', workId: 'w-c2',
+      id: '22222222-2222-4222-8222-222222222222', status: 'done', kind: 'novel-chapter', workId: 'w-c2',
       text: '成品', createdAt: Date.now(), resultMessages: 1, resultMessageIds: ['m1'],
     });
     const res = await authed(app).post(`/api/llm/tasks/${id}/cancel`);
@@ -210,11 +211,15 @@ describe('POST /:id/cancel', () => {
     expect(res.body.ok).toBe(false);
   });
 
-  it('文件缺失 → 404 lost（与 GET /:id 对齐）', async () => {
+  it('文件缺失 → 404 lost（与 GET /:id 对齐）；id 格式非法同样 404', async () => {
     const app = testApp();
-    const res = await authed(app).post('/api/llm/tasks/ffffffff-ffff-ffff-ffff-ffffffffffff/cancel');
+    const a = authed(app);
+    const res = await a.post('/api/llm/tasks/ffffffff-ffff-ffff-ffff-ffffffffffff/cancel');
     expect(res.status).toBe(404);
     expect(res.body.status).toBe('lost');
+    const badId = await a.post('/api/llm/tasks/not-a-uuid/cancel');
+    expect(badId.status).toBe(404);
+    expect(badId.body.status).toBe('lost');
   });
 });
 
@@ -244,7 +249,7 @@ describe('GET /active', () => {
   it('带 progress 的 running 任务：progressLen/done/chapterTotal/phase 透出', async () => {
     const app = testApp();
     await seedTask({
-      id: 't-active-progress', status: 'running', kind: 'novel-chapter', workId: 'w-active2',
+      id: '33333333-3333-4333-8333-333333333333', status: 'running', kind: 'novel-chapter', workId: 'w-active2',
       label: '连载', createdAt: Date.now(),
       progress: {
         chapterIndex: 2, chapterTotal: 5, phase: 'generating',
@@ -252,7 +257,7 @@ describe('GET /active', () => {
       },
     });
     const listed = await authed(app).get('/api/llm/tasks/active');
-    const mine = (listed.body.tasks as Array<Record<string, unknown>>).find((t) => t.id === 't-active-progress');
+    const mine = (listed.body.tasks as Array<Record<string, unknown>>).find((t) => t.id === '33333333-3333-4333-8333-333333333333');
     expect(mine?.progressLen).toBe(10);
     expect(mine?.done).toBe(1);
     expect(mine?.chapterTotal).toBe(5);
@@ -265,14 +270,14 @@ describe('GET /:id 协议扩展', () => {
   it('?since=N 增量切片：progressText=全文 slice(N) + 进度字段', async () => {
     const app = testApp();
     await seedTask({
-      id: 't-since', status: 'running', kind: 'novel-chapter', workId: 'w-since',
+      id: '44444444-4444-4444-8444-444444444444', status: 'running', kind: 'novel-chapter', workId: 'w-since',
       label: '增量', createdAt: Date.now(),
       progress: {
         chapterIndex: 3, chapterTotal: 8, phase: 'continuing',
         text: '一二三四五六七八九十', done: 2, updatedAt: Date.now(),
       },
     });
-    const res = await authed(app).get('/api/llm/tasks/t-since?since=3');
+    const res = await authed(app).get('/api/llm/tasks/44444444-4444-4444-8444-444444444444?since=3');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       status: 'running',
@@ -288,8 +293,8 @@ describe('GET /:id 协议扩展', () => {
 
   it('?since=0 且无 progress：progressLen=0 / progressText 空 / 缺省进度', async () => {
     const app = testApp();
-    await seedTask({ id: 't-since-none', status: 'running', createdAt: Date.now() });
-    const res = await authed(app).get('/api/llm/tasks/t-since-none?since=0');
+    await seedTask({ id: '55555555-5555-4555-8555-555555555555', status: 'running', createdAt: Date.now() });
+    const res = await authed(app).get('/api/llm/tasks/55555555-5555-4555-8555-555555555555?since=0');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       status: 'running',
@@ -304,25 +309,44 @@ describe('GET /:id 协议扩展', () => {
 
   it('since 非法值（负数/非数字）→ 忽略，走无 since 分支 {status:"running"}', async () => {
     const app = testApp();
-    await seedTask({ id: 't-since-bad', status: 'running', createdAt: Date.now() });
+    await seedTask({ id: '66666666-6666-4666-8666-666666666666', status: 'running', createdAt: Date.now() });
     for (const q of ['?since=-1', '?since=abc', '?since=1.5']) {
-      const res = await authed(app).get(`/api/llm/tasks/t-since-bad${q}`);
+      const res = await authed(app).get(`/api/llm/tasks/66666666-6666-4666-8666-666666666666${q}`);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ status: 'running' });
     }
   });
 
+  it('损坏 progress（缺 text 字段）→ since 分支不 500（progressLen 非空安全）', async () => {
+    const app = testApp();
+    await seedTask({
+      id: '6a666666-6666-4666-8666-666666666666', status: 'running', createdAt: Date.now(),
+      progress: { chapterIndex: 1, chapterTotal: 2, phase: 'generating', done: 0, updatedAt: Date.now() },
+    });
+    const res = await authed(app).get('/api/llm/tasks/6a666666-6666-4666-8666-666666666666?since=0');
+    expect(res.status).toBe(200);
+    expect(res.body.progressLen).toBe(0);
+    expect(res.body.progressText).toBe('');
+  });
+
+  it(':id 格式非法 → 404 lost（defense-in-depth，不做无效落盘读）', async () => {
+    const app = testApp();
+    const res = await authed(app).get('/api/llm/tasks/not-a-valid-uuid');
+    expect(res.status).toBe(404);
+    expect(res.body.status).toBe('lost');
+  });
+
   it('无 since → 响应形状与现状一致（恰为 {status:"running"}，旧消费方零感知）', async () => {
     const app = testApp();
     await seedTask({
-      id: 't-nosince', status: 'running', kind: 'novel-chapter', workId: 'w-nosince',
+      id: '77777777-7777-4777-8777-777777777777', status: 'running', kind: 'novel-chapter', workId: 'w-nosince',
       label: '标签', createdAt: Date.now(),
       progress: {
         chapterIndex: 1, chapterTotal: 2, phase: 'polishing',
         text: '正文', done: 0, updatedAt: Date.now(),
       },
     });
-    const res = await authed(app).get('/api/llm/tasks/t-nosince');
+    const res = await authed(app).get('/api/llm/tasks/77777777-7777-4777-8777-777777777777');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'running' });
   });
@@ -330,10 +354,10 @@ describe('GET /:id 协议扩展', () => {
   it('终态 done：现有形状之上附加 resultMessages/resultMessageIds', async () => {
     const app = testApp();
     await seedTask({
-      id: 't-final', status: 'done', text: '全量正文', label: '连载',
+      id: '88888888-8888-4888-8888-888888888888', status: 'done', text: '全量正文', label: '连载',
       createdAt: Date.now(), resultMessages: 2, resultMessageIds: ['m-a', 'm-b'],
     });
-    const res = await authed(app).get('/api/llm/tasks/t-final');
+    const res = await authed(app).get('/api/llm/tasks/88888888-8888-4888-8888-888888888888');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('done');
     expect(res.body.text).toBe('全量正文');
@@ -344,13 +368,70 @@ describe('GET /:id 协议扩展', () => {
 
   it('终态 done 无结果字段（旧形状文件）→ 不带 resultMessages/resultMessageIds', async () => {
     const app = testApp();
-    await seedTask({ id: 't-final-old', status: 'done', text: '旧任务', createdAt: Date.now() });
-    const res = await authed(app).get('/api/llm/tasks/t-final-old');
+    await seedTask({ id: '99999999-9999-4999-8999-999999999999', status: 'done', text: '旧任务', createdAt: Date.now() });
+    const res = await authed(app).get('/api/llm/tasks/99999999-9999-4999-8999-999999999999');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('done');
     expect(res.body.text).toBe('旧任务');
     expect('resultMessages' in res.body).toBe(false);
     expect('resultMessageIds' in res.body).toBe(false);
+  });
+});
+
+describe('并发写防线（终态/failed 落盘合并磁盘最新态）', () => {
+  it('novel 占位 failed 落盘不抹掉执行期间置位的 cancelRequested', async () => {
+    const app = testApp();
+    const a = authed(app);
+    const sub = await a.post('/api/llm/tasks').send(novelBody('w-merge-novel'));
+    expect(sub.status).toBe(202);
+    const cancel = await a.post(`/api/llm/tasks/${sub.body.taskId}/cancel`);
+    expect(cancel.body.ok).toBe(true);
+    const final = await waitFinished(a, sub.body.taskId);
+    expect(final.status).toBe('failed');
+    const file = await readJson<Record<string, unknown>>(join(tasksDir(), `${sub.body.taskId}.json`));
+    expect(file?.cancelRequested).toBe(true); // failed 落盘合并 disk，取消标志保留
+  });
+
+  it('llm execute 终态写不抹掉执行期间置位的 cancelRequested', async () => {
+    process.env.LLM_TASK_RETRY_DELAYS_MS = '600'; // 首轮上游 500 → 退避 600ms（窗口内置取消标志）
+    let call = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        call += 1;
+        if (call === 1) return new Response('boom', { status: 500 });
+        const frames = [
+          `data: ${JSON.stringify({ choices: [{ delta: { content: '重试后成功正文。' } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ];
+        const stream = new ReadableStream({
+          start(controller) {
+            for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }),
+    );
+    const app = testApp();
+    const a = authed(app);
+    const sub = await a.post('/api/llm/tasks').send(llmBody);
+    expect(sub.status).toBe(202);
+    await new Promise((r) => setTimeout(r, 150)); // 落在首轮失败后的退避窗口内
+    const cancel = await a.post(`/api/llm/tasks/${sub.body.taskId}/cancel`);
+    expect(cancel.body.ok).toBe(true);
+    let final: Record<string, unknown> = {};
+    for (let i = 0; i < 40; i += 1) {
+      const g = await a.get(`/api/llm/tasks/${sub.body.taskId}`);
+      final = g.body as Record<string, unknown>;
+      if (final.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    expect(final.status).toBe('done');
+    const file = await readJson<Record<string, unknown>>(join(tasksDir(), `${sub.body.taskId}.json`));
+    expect(file?.status).toBe('done');
+    expect(file?.cancelRequested).toBe(true); // 终态写合并 disk，取消标志保留
   });
 });
 

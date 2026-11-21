@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createApp } from './app';
 import { logger } from './middleware/logger';
+import { sweepInterruptedTasks } from './routes/llm/tasks';
 import { migrateMessageVersions } from './services/message-migrate';
 
 // server/ 目录（main.ts 位于 src/ 下，上一级即 server/）
@@ -32,5 +33,12 @@ migrateMessageVersions(dataDir)
   .finally(() => {
     createApp().listen(port, () => {
       logger.info(`服务已启动 http://localhost:${port}（数据目录：${dataDir}）`);
+      // 滞留任务启动清扫（单进程零误判）：重启后 pending/running 必无执行者，
+      // 不清扫会永久占用同书互斥——统一标 failed 让前端可见可重试；失败仅告警不阻断
+      sweepInterruptedTasks()
+        .then((n) => {
+          if (n > 0) logger.info(`已清扫重启滞留任务 ${n} 个（标记 failed，可重新提交）`);
+        })
+        .catch((err) => logger.warn(`滞留任务清扫失败（不影响启动，重启可重试）：${String(err)}`));
     });
   });

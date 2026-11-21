@@ -16,7 +16,9 @@
  *   novel-chapter 走 executeNovelChapter（Task 3.3 实装，暂占位 throw → failed）
  * - 查询：pending/running → running（带 ?since=N 时返回 progress 增量切片）；
  *   done → 返回文本（永久保留 draft 幂等 GET，附 resultMessages/resultMessageIds）；
- *   failed → 返回错误；文件缺失 → lost（前端提示重试）
+ *   failed → 返回错误；文件缺失/损坏 → lost（前端提示重试）
+ * - 重启：main.ts 启动时清扫滞留 pending/running → failed（sweepInterruptedTasks），
+ *   否则永无执行者的任务会永久占用同书互斥
  */
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -25,18 +27,12 @@ import { z } from 'zod';
 
 import { zodBody } from '../../middleware/validate';
 import { readJson, writeJsonAtomic } from '../../storage/store';
-import { dataDir } from '../core/paths';
 import { wrap } from '../works/works';
 import { execute, writeJsonAtomicRetry } from './tasksExecute';
-import { executeNovelChapter, novelChapterSchema, scanActiveTasks, sourceSchema } from './tasksNovel';
-
-/** 任务落盘目录（每次实时解析 env DATA_DIR——与路由层实时读 env 约定一致，测试可覆盖） */
-function tasksDir(): string {
-  return join(dataDir(), 'llm-tasks');
-}
+import { executeNovelChapter, llmTasksDir, novelChapterSchema, scanActiveTasks, sourceSchema } from './tasksNovel';
 
 function taskFile(id: string): string {
-  return join(tasksDir(), `${id}.json`);
+  return join(llmTasksDir(), `${id}.json`);
 }
 
 /** 旧客户端单次 LLM 调用提交体（原样保留——旧请求零影响）；kind 缺省即 'llm' */
@@ -93,6 +89,41 @@ export interface TaskFile {
   resultMessageIds?: string[]; // 终态：入库消息 id 列表（客户端同步本地视图的唯一依据）
 }
 
+/** :id 路径段格式校验（defense-in-depth：randomUUID 产物必匹配，其余一律按 lost 404，不落盘读） */
+const TASK_ID_RE = /^[0-9a-f-]{36}$/i;
+
+const LOST_PAYLOAD = { status: 'lost', error: '任务不存在或服务已重启——请重新提交' } as const;
+
+/** 读任务文件：不存在 → null（lost 语义）；存在但损坏 → 告警后同样按 null（区分场景不 500） */
+async function readTaskFile(id: string): Promise<TaskFile | null> {
+  try {
+    return await readJson<TaskFile>(taskFile(id));
+  } catch (err) {
+    console.warn('[llm-tasks] 任务文件损坏，按缺失处理：', taskFile(id), err);
+    return null;
+  }
+}
+
+/**
+ * 启动清扫（main.ts 调用；单进程设计下重启后 pending/running 必无执行者，零误判）：
+ * 统一落盘 failed——否则滞留任务会永久占用同书互斥（409 卡死）。返回清扫数。
+ */
+export async function sweepInterruptedTasks(): Promise<number> {
+  const stale = await scanActiveTasks(llmTasksDir());
+  for (const t of stale) {
+    // 启动期无并发，直接以扫描所得为准落终态（仍走 retry 落盘防 Windows EPERM）
+    await writeJsonAtomicRetry(taskFile(t.id), {
+      ...t,
+      status: 'failed',
+      error: '服务重启中断，请重新提交',
+      messages: undefined,
+      params: undefined,
+      progress: undefined,
+    }).catch(() => undefined);
+  }
+  return stale.length;
+}
+
 export const llmTasksRouter = Router();
 
 // 相对路径（挂载点 llmRouter.use('/llm/tasks', …) 已剥前缀）——
@@ -106,7 +137,7 @@ llmTasksRouter.post(
       // 同书互斥（权威层，先查后写避免自见）：pending/running 含取消中任务一律 409
       // ——取消最多等当前段跑完，期间重提交会双任务竞态，安全第一
       const busy = await scanActiveTasks(
-        tasksDir(),
+        llmTasksDir(),
         (t) => t.kind === 'novel-chapter' && t.workId === body.workId,
       );
       if (busy.length > 0) {
@@ -147,12 +178,16 @@ llmTasksRouter.post(
     const run =
       body.kind === 'novel-chapter' ? executeNovelChapter(task) : execute(task, body.source, body.model);
     void run.catch(async (err) => {
+      // 合并磁盘最新态再落 failed（与 execute 终态写同一硬约束）：不回滚执行期间
+      // 并发落盘的其他字段（如 cancelRequested）；progress 同步清（终态无执行期增量）
+      const disk = await readTaskFile(id);
       await writeJsonAtomicRetry(taskFile(id), {
-        ...task,
+        ...(disk ?? task),
         status: 'failed',
         error: err instanceof Error ? err.message : String(err),
         messages: undefined,
         params: undefined,
+        progress: undefined,
       } satisfies TaskFile).catch(() => undefined);
     });
     res.status(202).json({ taskId: id });
@@ -161,14 +196,14 @@ llmTasksRouter.post(
 
 // GET /active 必须注册在 GET /:id 之前（Express 按注册顺序匹配，否则 active 被当 id 吞掉）
 llmTasksRouter.get('/active', wrap(async (_req, res) => {
-  const tasks = await scanActiveTasks(tasksDir());
+  const tasks = await scanActiveTasks(llmTasksDir());
   res.json({
     tasks: tasks.map((t) => ({
       id: t.id,
       kind: t.kind ?? 'llm',
       workId: t.workId,
       label: t.label,
-      progressLen: t.progress?.text.length ?? 0,
+      progressLen: t.progress?.text?.length ?? 0, // 非空安全：损坏文件 progress.text 缺失按 0
       done: t.progress?.done ?? 0,
       chapterTotal: t.progress?.chapterTotal ?? 0,
       phase: t.progress?.phase,
@@ -178,18 +213,30 @@ llmTasksRouter.get('/active', wrap(async (_req, res) => {
 }));
 
 llmTasksRouter.post('/:id/cancel', wrap(async (req, res) => {
-  const task = await readJson<TaskFile>(taskFile(req.params.id)).catch(() => null);
+  const id = req.params.id;
+  if (!TASK_ID_RE.test(id)) {
+    res.status(404).json(LOST_PAYLOAD);
+    return;
+  }
+  // 有界重读（读→判终态→写前再读一次→写）：把「读到 pending/running」与「落标志」之间的
+  // 窗口压到单次 fs 操作间隙——执行器终态写恰好落在窗口内时，重读即见终态并返回 ok:false，
+  // 绝不把已终态文件覆盖回 pending（配套：终态写侧合并磁盘最新态，见 tasksExecute.execute）
+  let task = await readTaskFile(id);
   if (!task) {
-    res.status(404).json({ status: 'lost', error: '任务不存在或服务已重启——请重新提交' });
+    res.status(404).json(LOST_PAYLOAD);
     return;
   }
-  if (task.status === 'pending' || task.status === 'running') {
-    // 只置标志不改状态：取消在段间/章间生效（当前段跑完即停），执行器读盘感知
-    await writeJsonAtomicRetry(taskFile(task.id), { ...task, cancelRequested: true });
-    res.json({ ok: true });
+  if (task.status !== 'done' && task.status !== 'failed') {
+    const fresh = (await readTaskFile(id)) ?? task;
+    task = fresh;
+  }
+  if (task.status === 'done' || task.status === 'failed') {
+    res.json({ ok: false });
     return;
   }
-  res.json({ ok: false });
+  // 只置标志不改状态：取消在段间/章间生效（当前段跑完即停），执行器读盘感知
+  await writeJsonAtomicRetry(taskFile(id), { ...task, cancelRequested: true });
+  res.json({ ok: true });
 }));
 
 /** ?since=N 的合法值：非负整数（query 到手是 string；非法忽略走无 since 分支） */
@@ -200,9 +247,13 @@ function parseSince(raw: unknown): number | null {
 
 llmTasksRouter.get('/:id', wrap(async (req, res) => {
   const id = req.params.id;
-  const task = await readJson<TaskFile>(taskFile(id)).catch(() => null);
+  if (!TASK_ID_RE.test(id)) {
+    res.status(404).json(LOST_PAYLOAD);
+    return;
+  }
+  const task = await readTaskFile(id);
   if (!task) {
-    res.status(404).json({ status: 'lost', error: '任务不存在或服务已重启——请重新提交' });
+    res.status(404).json(LOST_PAYLOAD);
     return;
   }
   if (task.status === 'done' || task.status === 'failed') {
@@ -225,8 +276,8 @@ llmTasksRouter.get('/:id', wrap(async (req, res) => {
     res.json({
       status: 'running',
       label: task.label,
-      progressLen: p?.text.length ?? 0,
-      progressText: p ? p.text.slice(since) : '',
+      progressLen: p?.text?.length ?? 0, // 非空安全：损坏文件 progress.text 缺失按 0
+      progressText: typeof p?.text === 'string' ? p.text.slice(since) : '',
       done: p?.done ?? 0,
       chapterTotal: p?.chapterTotal ?? 0,
       phase: p?.phase ?? 'assembling',
