@@ -37,6 +37,7 @@ import {
   withPartialInHistory,
   type BatchProgress,
 } from './generation-flow';
+import { COLLAPSE_RETRY_SUFFIX, MAX_TRUNCATE_ROUNDS, META_RETRY_SUFFIX } from '@shared/hooks/novel-constants';
 import { runChunkLoop, runOutlineLoop } from './generation-batch';
 import { persistMessage } from './generation-pipeline';
 import { runGenerationStream } from './generation-runtime';
@@ -258,15 +259,7 @@ export function useGenerate(): UseGenerateResult {
     [],
   );
 
-  /** 元信息残章自动重试后缀（Sudachi 类思维链预设偶发：整轮输出只有思考没有正文） */
-  const META_RETRY_SUFFIX =
-    '\n\n（系统重试指令：上一次输出只有思考没有正文，视为无效。这次请跳过一切思考与提纲，直接输出完整正文；全程用简体中文思考和写作。本括号内是指令，禁止复述。）';
-  /** 重复循环崩溃自动重试后缀（深度测试实测：长上下文连写中后段单短语重复上千次）
-   *  指令要点对照酒馆社区 anti-slop 实践（autonovel ANTI-SLOP / antislop-sampler 的提示词层方案） */
-  const COLLAPSE_RETRY_SUFFIX =
-    '\n\n（系统重试指令：上一次输出在中后段陷入同一短语的机械重复，属无效输出。这次必须：每写一段都推进剧情，' +
-    '禁止用重复描写填充篇幅；同一个比喻/意象全文最多出现一次；不要复用任何章节的开篇句式；' +
-    '句式长短交错，连续三句长句后必须接短句；写完剧情指令要求的事件再收尾；全程用简体中文思考和写作。本括号内是指令，禁止复述。）';
+  /** 重试后缀与续写轮上限：client/server 单一事实源（server orchestrate 同文引用，2026-11-21 M2） */
   /** 无效输出判定：返回需要重试的原因——仅 finalize 成功返回的消息参与判定；
    *  run 返回 null（流中错误/用户停止/防重入）不算无效，交由上层终止/提示，绝不重试；
    *  content 非字符串（异常数据）视为正常消息，不误触发重试 */
@@ -282,10 +275,6 @@ export function useGenerate(): UseGenerateResult {
     meta: META_RETRY_SUFFIX,
     collapse: COLLAPSE_RETRY_SUFFIX,
   };
-
-  /** 截断自动续写轮数上限（4 轮）：推理模型思考吃预算的章常需多轮补完；
-   *  「写到一半就没了」的主要治理手段——每轮续完重新检测，直到写完或达上限 */
-  const MAX_TRUNCATE_ROUNDS = 4;
 
   /** 截断自动续写（generateChapter/swipeRegenerate 共用）：双判据——
    *  判据统一走 looksTruncated（finish 明示 / 无 finish 帧时启发式+字数兜底——句号边界截断盲区）

@@ -7,16 +7,16 @@
  */
 import { join } from 'node:path';
 
-import { convert, type ChatMessage, type GenParams, type LlmSource } from '../converters';
-import { dataDir } from '../routes/core/paths';
-import { readJson } from '../storage/store';
+import { convert, type ChatMessage, type GenParams, type LlmSource } from '../../converters';
+import { dataDir } from '../../routes/core/paths';
+import { readJson } from '../../storage/store';
 import {
   buildUpstreamRequest,
   extractFullText,
   extractStreamDelta,
   sseDataLines,
   type SecretsFull,
-} from './upstream';
+} from '../upstream';
 
 /** 错误分类码（前端据此展示人话，设计 §9.1） */
 export type LlmErrorCode =

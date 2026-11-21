@@ -42,9 +42,19 @@ import { countTokens } from '../tokenize';
 import { readAsset, type AssembleAssets } from './assets';
 import { persistRollingSummary, summarizeDropped } from './helpers';
 
-/** server 组装 prefs：结构同 shared SummarizePrefs（client LlmPrefs 的组装相关子集，
- *  Task 1.1 prefsSchema 的 {source/model/maxContext/maxTokens} 裁剪） */
-export type NovelGenPrefs = SummarizePrefs;
+/**
+ * server 端 novel-gen 生成偏好：shared SummarizePrefs（组装相关 {source/model/maxContext/maxTokens}）
+ * + Task 1.1 prefsSchema 的采样/思考/润色字段（与 client stores/settings LlmPrefs 正文生成相关
+ * 字段一一对应；runner 传入的 z.infer<prefsSchema> 天然满足本结构）。
+ */
+export type NovelGenPrefs = SummarizePrefs & {
+  temperature?: number;
+  thinking?: boolean;
+  polishModel?: string;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
+};
 
 // ---- 宏环境 ----
 

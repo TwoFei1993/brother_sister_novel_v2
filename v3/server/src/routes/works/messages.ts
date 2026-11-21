@@ -21,8 +21,9 @@ import { MessageSchema, type Message } from '@shared/message';
 import type { WorkStats } from '@shared/work';
 import { assertSafeId, readWork, updateWorkStats, wrap, worksDir } from './works';
 
-/** 作品消息文件（与 works.ts 同一布局：data/works/<id>/messages.jsonl，§4.1；复用同一解析杜绝 cwd 漂移） */
-function messagesFile(id: string): string {
+/** 作品消息文件（与 works.ts 同一布局：data/works/<id>/messages.jsonl，§4.1；复用同一解析杜绝 cwd 漂移）。
+ *  server 端生成编排（services/novel-gen）读上下文复用同一布局，导出共用。 */
+export function messagesFile(id: string): string {
   return join(worksDir(), id, 'messages.jsonl');
 }
 
@@ -83,14 +84,17 @@ function computeStats(messages: Message[]): WorkStats {
 
 // ---------- POST：幂等 upsert（§9.2 生成完成入库） ----------
 
-export const upsertMessage: RequestHandler = async (req, res) => {
-  const id = req.params.id;
-  assertSafeId(id);
-  const msg = req.body as Message;
-
-  const revision = await withWorkLock(id, async () => {
-    await readWork(id); // 锁内判存在，与写路径同锁避免竞态
-    const file = messagesFile(id);
+/**
+ * 锁内幂等 upsert 内部函数（Task 3.2 自 upsertMessage 抽出）：server 端生成编排
+ * （services/novel-gen/finalize）入库直调同一逻辑，与 HTTP 通道共享同一事实源。
+ * 锁内判存在（作品不存在抛 404 HttpError，与写路径同锁避免竞态）→ 同 id 整行替换 /
+ * 不存在追加 → stats 缓存重算落盘 → 返回新 revision。
+ * 调用方须自行保证 id 合法（RequestHandler 侧 assertSafeId；服务内部由调用入口校验）。
+ */
+export async function upsertMessageInternal(workId: string, msg: Message): Promise<number | undefined> {
+  return withWorkLock(workId, async () => {
+    await readWork(workId); // 锁内判存在，与写路径同锁避免竞态
+    const file = messagesFile(workId);
     const all = await readAll<Message>(file);
     const idx = all.findIndex((m) => m.id === msg.id);
     if (idx >= 0) {
@@ -100,9 +104,18 @@ export const upsertMessage: RequestHandler = async (req, res) => {
       all.push(msg);
       await appendLine(file, msg); // 追加走行级 append，不整文件重写
     }
-    const work = await updateWorkStats(id, computeStats(all));
+    const work = await updateWorkStats(workId, computeStats(all));
     return work?.revision;
   });
+}
+
+/** HTTP 薄壳：入参校验 + 委托 upsertMessageInternal（行为与抽取前完全一致） */
+export const upsertMessage: RequestHandler = async (req, res) => {
+  const id = req.params.id;
+  assertSafeId(id);
+  const msg = req.body as Message;
+
+  const revision = await upsertMessageInternal(id, msg);
 
   res.json({ ok: true, revision });
 };
