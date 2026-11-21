@@ -13,6 +13,7 @@ import { BookOpen, List, MessageSquare, Settings, Wrench } from 'lucide-react';
 
 import { updateWork } from '../api/works';
 import { apiFetch } from '../api/client';
+import BgGenBadge from '../components/BgGenBadge';
 import DuanjuWorkbench from '../features/duanju/DuanjuWorkbench';
 import ChapterDrawer, { scrollToChapter } from '../features/workbench/ChapterDrawer';
 import { useTtsStore } from '../stores/tts';
@@ -167,6 +168,8 @@ export default function WorkPage() {
         ) : (
           <span className="min-w-0 flex-1 truncate text-sm font-semibold sm:text-base">…</span>
         )}
+        {/* 后台生成中指示（Chunk 6 Task 6.2）：N>0 渲染，点击回书架 */}
+        <BgGenBadge />
         {work && work.mode === 'novel' && chapters.length > 0 && (
           <button
             type="button"
