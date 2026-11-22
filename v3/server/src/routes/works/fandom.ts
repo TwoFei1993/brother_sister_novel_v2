@@ -49,14 +49,14 @@ async function searchAndCompile(
     .filter((m) => m.role === 'user')
     .map((m) => ({ role: 'user' as const, content: m.content }));
 
-  for (let turn = 0; turn < 4; turn += 1) {
+  for (let turn = 0; turn < 6; turn += 1) {
     const res = await fetch(`${base}/v1/messages`, {
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: IMPORT_MODEL,
-        max_tokens: 8000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        max_tokens: 16000, // 单轮给足：M3.1 倾向在预算/轮次边界 pause_turn，充足预算让搜索+整理一轮内完成
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
         ...(system ? { system } : {}),
         messages: convo,
       }),
@@ -79,7 +79,7 @@ async function searchAndCompile(
     throw new Error('模型无有效输出（stop=' + (data.stop_reason ?? 'unknown') + '）');
   }
   void source;
-  throw new Error('搜索整理轮次超限（4 轮未完成）');
+  throw new Error('搜索整理轮次超限（6 轮未完成——上游持续 pause_turn）');
 }
 
 /** 提示词：联网搜索 + 结构化条目输出（JSON 数组，禁 markdown 代码块包裹——解析侧也兜底容错） */
