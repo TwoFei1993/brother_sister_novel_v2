@@ -52,6 +52,9 @@ export interface ClaudeBody {
   repetition_penalty?: number;
   /** 扩展思考（D4）：Claude extended-thinking 同形；MiniMax anthropic 端点同参开启思考流 */
   thinking?: { type: 'enabled'; budget_tokens: number };
+  /** server-side 联网搜索工具（web_search_20250305；MiniMax anthropic 端点实测支持）：
+   *  同人原著资料导入场景开启，搜索结果注入上下文供模型基于真实资料回答 */
+  tools?: Array<{ type: 'web_search_20250305'; name: 'web_search'; max_uses: number }>;
 }
 
 /** Gemini generateContent 请求体 */

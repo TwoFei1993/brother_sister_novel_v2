@@ -18,6 +18,29 @@ export default function FanficSection({ work, onSaved }: { work: Work; onSaved: 
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  /** 联网搜索原著资料 → 自动录入世界书并绑定本书（server /fandom-import） */
+  async function importSource(): Promise<void> {
+    if (importing || !source.trim()) return;
+    setImporting(true);
+    setErr(null);
+    setImportResult(null);
+    try {
+      const r = await apiFetch<{ entryCount: number; titles: string[]; worldbookId: string }>(
+        `/api/works/${work.id}/fandom-import`,
+        { method: 'POST', body: JSON.stringify({ source: source.trim() }) },
+      );
+      setImportResult(`已联网搜索并录入 ${r.entryCount} 条原著设定（世界书《原著设定-${source.trim()}》已绑定本书）——建议在世界书页校对与补充`);
+      const updated = await apiFetch<Work>(`/api/works/${work.id}`);
+      onSaved(updated);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '导入失败，请重试');
+    } finally {
+      setImporting(false);
+    }
+  }
 
   // 外部保存（或切换作品）→ revision 变化 → 本地编辑态与服务端对齐（同 StyleClonePanel）
   useEffect(() => {
@@ -122,8 +145,22 @@ export default function FanficSection({ work, onSaved }: { work: Work; onSaved: 
         >
           {saving ? '保存中…' : '保存同人信息'}
         </button>
+        <button
+          type="button"
+          onClick={() => void importSource()}
+          disabled={importing || !source.trim()}
+          data-testid="fanfic-import"
+          className="h-8 rounded-lg border border-[hsl(var(--accent))] px-3 text-xs font-medium text-[hsl(var(--accent))] disabled:opacity-40"
+        >
+          {importing ? '联网搜索整理中…（约 1-2 分钟）' : '🔍 联网搜索原著资料并录入世界书'}
+        </button>
         {dirty && <span className="text-[11px] text-amber-500">有未保存的更改</span>}
       </div>
+      {importResult && (
+        <p className="mt-2 text-xs text-[hsl(var(--accent))]" data-testid="fanfic-import-result">
+          {importResult}
+        </p>
+      )}
       {err && <p className="mt-1 text-xs text-[hsl(var(--danger))]">{err}</p>}
     </section>
   );

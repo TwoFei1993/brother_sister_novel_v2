@@ -18,6 +18,7 @@ import { mountDuanjuVideos } from '../duanju/videos';
 import { commentsRouter } from './comments';
 import { convertToDuanju } from './convert';
 import { messagesRouter } from './messages';
+import { fandomRouter } from './fandom';
 import {
   createWork,
   createWorkSchema,
@@ -41,6 +42,9 @@ worksRouter.delete('/works/:id', wrap(deleteWork));
 
 // messages 子路由（JSONL 消息流，设计 §6）：读三窗口 + 写三操作，见 messages.ts
 worksRouter.use('/works/:id/messages', messagesRouter);
+
+// 同人原著资料导入（用户需求 2026-11-22）：联网搜索整理 → 世界书自动创建绑定，见 fandom.ts
+worksRouter.use('/works/:id', fandomRouter);
 
 // comments 子路由（安卓 app 划线评论）：全量读 + 幂等 upsert + 删除，见 comments.ts
 worksRouter.use('/works/:id/comments', commentsRouter);

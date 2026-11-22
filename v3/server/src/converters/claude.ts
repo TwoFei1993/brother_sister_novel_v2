@@ -54,5 +54,13 @@ export function toClaude(messages: ChatMessage[], params: GenParams): ClaudeBody
     body.temperature = 1;
     delete body.top_p;
   }
+  // 联网搜索（用户需求 2026-11-22 同人原著资料导入）：params.webSearchUses > 0 时开启
+  // MiniMax anthropic 端点的 server-side web_search 工具（端点实测支持：搜索结果注入上下文，
+  // 模型基于真实资料回答；max_uses 限次控成本）。仅 claude 通道映射（openai/gemini 忽略）；
+  // 与 thinking 不共用（资料导入场景不需要思考流，调用方不传 thinking 即可）。
+  const webSearchUses = Math.floor(Number(params.webSearchUses ?? 0));
+  if (webSearchUses > 0) {
+    body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(webSearchUses, 5) }];
+  }
   return body;
 }
