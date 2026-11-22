@@ -17,10 +17,11 @@ import { workFile } from '../routes/works/works';
 import { libraryDir } from '../routes/library/crud';
 import { defaultNovelSettings, type Work } from '@shared/work';
 
-const collectMock = vi.fn();
-vi.mock('../services/llm/defense', () => ({
-  collectWithDefense: (...args: unknown[]) => collectMock(...args),
-}));
+const fetchMock = vi.fn();
+const okResp = (text: string): { ok: boolean; json: () => Promise<unknown> } => ({
+  ok: true,
+  json: async () => ({ content: [{ type: 'text', text }], stop_reason: 'end_turn' }),
+});
 
 const { fandomRouter } = await import('../routes/works/fandom');
 const { worksDir } = await import('../routes/works/works');
@@ -64,8 +65,11 @@ const OK_JSON = JSON.stringify([
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'v3-fandom-'));
   process.env.DATA_DIR = root;
-  collectMock.mockReset();
+  fetchMock.mockReset();
+  vi.stubGlobal('fetch', fetchMock);
   await writeJsonAtomic(workFile(WID), workFixture('fanfic'));
+  // 专用客户端读 DATA_DIR/secrets.json 的 claude key——测试注入假 key（fetch 已 mock 不真调）
+  await writeJsonAtomic(join(root, 'secrets.json'), { claude: { apiKey: 'test-key', baseUrl: 'https://api.minimaxi.com/anthropic' } });
 
   const testError = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
     const status = err instanceof HttpError ? err.status : 500;
@@ -80,13 +84,14 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   delete process.env.DATA_DIR;
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe('POST /works/:id/fandom-import', () => {
   it('成功：解析条目 → 世界书创建 → work.worldbookIds 绑定', async () => {
-    collectMock.mockResolvedValue({ text: OK_JSON, finish: 'stop', lastErr: '' });
+    fetchMock.mockResolvedValue(okResp(OK_JSON));
     const h = await loginHeader();
     const res = await request(app).post(`/works/${WID}/fandom-import`).set('Cookie', h).send({ source: '诡秘之主' });
     expect(res.status).toBe(200);
@@ -101,7 +106,9 @@ describe('POST /works/:id/fandom-import', () => {
     // work 绑定
     const work = (await readJson<Work>(workFile(WID)))!;
     expect(work.worldbookIds).toContain(res.body.worldbookId);
-    expect(collectMock.mock.calls[0]![0].params.webSearchUses).toBe(3); // 联网开启
+    const sentBody = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body));
+    expect(sentBody.tools?.[0]?.name).toBe('web_search'); // 联网工具开启
+    expect(sentBody.messages.some((m: { content: string }) => String(m.content).includes('诡秘之主'))).toBe(true);
   });
 
   it('非 fanfic 书 → 400 拒绝且不调 LLM', async () => {
@@ -109,18 +116,18 @@ describe('POST /works/:id/fandom-import', () => {
     const h = await loginHeader();
     const res = await request(app).post(`/works/${WID}/fandom-import`).set('Cookie', h).send({ source: '某原著' });
     expect(res.status).toBe(400);
-    expect(collectMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('LLM 输出不可解析 → 502（不落世界书）', async () => {
-    collectMock.mockResolvedValue({ text: '这不是 JSON 的自由发挥文本', finish: 'stop', lastErr: '' });
+    fetchMock.mockResolvedValue(okResp('这不是 JSON 的自由发挥文本')); // end_turn 但非 JSON → 解析 502
     const h = await loginHeader();
     const res = await request(app).post(`/works/${WID}/fandom-import`).set('Cookie', h).send({ source: '某原著' });
     expect(res.status).toBe(502);
   });
 
   it('对象包裹 {entries:[…]} 形态同样解析（容错）', async () => {
-    collectMock.mockResolvedValue({ text: `以下为整理结果：\n\`\`\`json\n{"entries": ${OK_JSON}}\n\`\`\``, finish: 'stop', lastErr: '' });
+    fetchMock.mockResolvedValue(okResp(`以下为整理结果：\n\n${'`'.repeat(3)}json\n{"entries": ${OK_JSON}}\n${'`'.repeat(3)}`));
     const h = await loginHeader();
     const res = await request(app).post(`/works/${WID}/fandom-import`).set('Cookie', h).send({ source: '某原著' });
     expect(res.status).toBe(200);

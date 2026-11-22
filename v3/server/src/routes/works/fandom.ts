@@ -18,18 +18,69 @@ import { z } from 'zod';
 import type { WorldbookAsset } from '@shared/worldbook';
 
 import { zodBody } from '../../middleware/validate';
-import { collectWithDefense } from '../../services/llm/defense';
 import { withWorkLock } from '../../middleware/writer';
 import { readWork, worksDir, wrap } from './works';
-import { writeJsonAtomic } from '../../storage/store';
+import { readJson, writeJsonAtomic } from '../../storage/store';
 import { libraryDir } from '../library/crud';
 import { join } from 'node:path';
 
 const importSchema = z.object({ source: z.string().min(1).max(100) });
 
 /** 资料导入固定走 claude/MiniMax 通道（web_search 仅该端点支持）+ 固定模型（当前生产同款） */
-const IMPORT_SOURCE = 'claude' as const;
 const IMPORT_MODEL = 'MiniMax-M3.1-Flash';
+
+/**
+ * 原著资料专用客户端（直接调 MiniMax anthropic 端点，不走 services/llm 文本聚合层）：
+ * web_search 多轮搜索会触发 stop_reason=pause_turn（长工具链暂停）——此时必须把
+ * assistant content blocks 原样回传继续，直到 end_turn。≤4 轮防失控。
+ */
+async function searchAndCompile(
+  messages: Array<{ role: 'system' | 'user'; content: string }>,
+  source: string,
+): Promise<string> {
+  const secrets = await readJson<{ claude?: { apiKey?: string; baseUrl?: string } }>(
+    join(worksDir(), '..', 'secrets.json'),
+  );
+  const apiKey = secrets?.claude?.apiKey;
+  if (!apiKey) throw new Error('claude 通道未配置（secrets.json 无 apiKey）');
+  const base = (secrets?.claude?.baseUrl ?? 'https://api.minimaxi.com/anthropic').replace(/\/$/, '');
+  const system = messages.find((m) => m.role === 'system')?.content ?? '';
+  let convo: Array<{ role: 'user' | 'assistant'; content: unknown }> = messages
+    .filter((m) => m.role === 'user')
+    .map((m) => ({ role: 'user' as const, content: m.content }));
+
+  for (let turn = 0; turn < 4; turn += 1) {
+    const res = await fetch(`${base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: IMPORT_MODEL,
+        max_tokens: 8000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        ...(system ? { system } : {}),
+        messages: convo,
+      }),
+    });
+    const data = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      stop_reason?: string;
+      error?: { message?: string };
+    };
+    if (!res.ok || data.error) {
+      throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+    }
+    const blocks = data.content ?? [];
+    const text = blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
+    if (data.stop_reason === 'pause_turn') {
+      convo = [...convo, { role: 'assistant', content: blocks }];
+      continue;
+    }
+    if (text.trim()) return text;
+    throw new Error('模型无有效输出（stop=' + (data.stop_reason ?? 'unknown') + '）');
+  }
+  void source;
+  throw new Error('搜索整理轮次超限（4 轮未完成）');
+}
 
 /** 提示词：联网搜索 + 结构化条目输出（JSON 数组，禁 markdown 代码块包裹——解析侧也兜底容错） */
 function importPrompt(source: string): Array<{ role: 'system' | 'user'; content: string }> {
@@ -81,17 +132,18 @@ fandomRouter.post(
       return;
     }
 
-    // 联网搜索 + 整理（三级防线复用：瞬态退避——搜索偶发失败自动重试）
-    const r = await collectWithDefense({
-      source: IMPORT_SOURCE,
-      model: IMPORT_MODEL,
-      messages: importPrompt(source),
-      params: { webSearchUses: 3 },
-      maxTokens: 8000,
-    });
+    // 联网搜索 + 整理（专用客户端：web_search 多轮会触发 anthropic pause_turn——
+    // 需要把 assistant content 块原样回传续跑，通用文本聚合层不认识该语义）
+    let raw: string;
+    try {
+      raw = await searchAndCompile(importPrompt(source), source);
+    } catch (err) {
+      res.status(502).json({ error: `联网搜索失败：${err instanceof Error ? err.message.slice(0, 160) : '未知错误'}` });
+      return;
+    }
     let entries: Array<{ title: string; keys: string[]; content: string }>;
     try {
-      entries = parseEntries(r.text);
+      entries = parseEntries(raw);
     } catch {
       res.status(502).json({ error: '资料整理输出无法解析（上游返回非 JSON），请重试一次' });
       return;
