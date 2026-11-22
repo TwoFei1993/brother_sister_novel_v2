@@ -25,6 +25,7 @@ export const GENRE_OPTIONS: readonly GenreOption[] = [
   { value: 'scifi', label: '星际科幻', hueBase: 180, hueSpan: 45 },
   { value: 'wuxian', label: '无限流', hueBase: 250, hueSpan: 30 },
   { value: 'hunhe', label: '混合类型', hueBase: 288, hueSpan: 47 },
+  { value: 'fanfic', label: '同人衍生', hueBase: 330, hueSpan: 30 },
   { value: 'custom', label: '自定义', hueBase: 215, hueSpan: 15 },
 ];
 

@@ -16,7 +16,7 @@ import { listCharacters, listWorldbooks, listPresets } from '../../api/library';
 import { ApiError } from '../../api/client';
 import { OPTION_CLS } from '../../components/ui-select';
 import FieldHint from '../../components/FieldHint';
-import { defaultNovelSettings, WRITING_STYLE_LABELS, type WorkMode, type WritingStyle } from '@shared/work';
+import { defaultNovelSettings, FANDOM_TYPE_LABELS, WRITING_STYLE_LABELS, type FandomType, type WorkMode, type WritingStyle } from '@shared/work';
 import { GENRE_OPTIONS, type Genre } from './genres';
 import {
   BindingSelector, EMPTY_BINDINGS, EMPTY_OPTIONS,
@@ -44,6 +44,10 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
   const [genre, setGenre] = useState<Genre>(GENRE_OPTIONS[0].value);
   // 写作风格（M1 Task 4）：随 settings 下发，与设置抽屉 StylePresetSection 的风格选择同枚举
   const [writingStyle, setWritingStyle] = useState<WritingStyle>('default');
+  // 同人信息（用户需求 2026-11-22：题材=同人衍生时显示，随 settings 下发）
+  const [fandomSource, setFandomSource] = useState('');
+  const [fandomType, setFandomType] = useState<FandomType | ''>('');
+  const [fandomNotes, setFandomNotes] = useState('');
   // 短剧专属字段（共识 D2/D9：目标集数/画风/主角自由设定）
   const [targetEpisodes, setTargetEpisodes] = useState(DEFAULT_TARGET_EPISODES);
   const [style, setStyle] = useState<string>(STYLE_OPTIONS[0]);
@@ -90,8 +94,19 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
               title: trimmed,
               mode,
               genre,
-              // 完整 settings 整体下发（server strictObject 校验）：默认值 + 建书所选题材/写作风格
-              settings: { ...defaultNovelSettings, genre, writingStyle },
+              // 完整 settings 整体下发（server strictObject 校验）：默认值 + 建书所选题材/写作风格/同人信息
+              settings: {
+                ...defaultNovelSettings,
+                genre,
+                writingStyle,
+                ...(genre === 'fanfic'
+                  ? {
+                      fandomSource: fandomSource.trim(),
+                      ...(fandomType !== '' ? { fandomType } : {}),
+                      fandomNotes: fandomNotes.trim(),
+                    }
+                  : {}),
+              },
               characterIds: bindings.characterIds,
               worldbookIds: bindings.worldbookIds,
               presetId: bindings.presetId,
@@ -177,7 +192,7 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
         {/* 题材 */}
         <label className="mb-4 block">
           <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">题材</span>
-          <select value={genre} onChange={(e) => setGenre(e.target.value as Genre)} className={selectClass}>
+          <select value={genre} onChange={(e) => setGenre(e.target.value as Genre)} data-testid="new-work-genre" className={selectClass}>
             {GENRE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value} className={OPTION_CLS}>
                 {opt.label}
@@ -185,6 +200,57 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
             ))}
           </select>
         </label>
+
+        {/* 同人信息（题材=同人衍生时显示；用户需求 2026-11-22：软件理解「同人」） */}
+        {mode !== 'duanju' && genre === 'fanfic' && (
+          <div className="mb-4 rounded-lg border border-[hsl(var(--border-soft))] p-3" data-testid="new-work-fanfic">
+            <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]">
+              同人创作：原著信息会注入每次生成（忠于原著、禁止 OOC）。详细设定可后续录入世界书/角色卡。
+            </p>
+            <label className="mb-2 block">
+              <span className="mb-1 block text-xs text-[hsl(var(--fg-muted))]">原著名称</span>
+              <input
+                value={fandomSource}
+                onChange={(e) => setFandomSource(e.target.value)}
+                placeholder="如：某小说 / 某影视 / 某动漫"
+                aria-label="原著名称"
+                data-testid="new-work-fandom-source"
+                maxLength={100}
+                className="h-10 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              />
+            </label>
+            <label className="mb-2 block">
+              <span className="mb-1 block text-xs text-[hsl(var(--fg-muted))]">衍生类型</span>
+              <select
+                value={fandomType}
+                onChange={(e) => setFandomType(e.target.value as FandomType | '')}
+                aria-label="衍生类型"
+                data-testid="new-work-fandom-type"
+                className={selectClass}
+              >
+                <option value="">未指定</option>
+                {Object.entries(FANDOM_TYPE_LABELS).map(([v, label]) => (
+                  <option key={v} value={v} className={OPTION_CLS}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-[hsl(var(--fg-muted))]">同人要点（CP / 时间线 / 注意事项，可留空后补）</span>
+              <textarea
+                value={fandomNotes}
+                onChange={(e) => setFandomNotes(e.target.value)}
+                placeholder="如：兄妹主线不变；时间线承接原作大结局"
+                aria-label="同人要点"
+                data-testid="new-work-fandom-notes"
+                rows={2}
+                maxLength={2000}
+                className="w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
+              />
+            </label>
+          </div>
+        )}
 
         {/* 写作风格（M1 Task 4）：novel/chat 显示，短剧不消费 */}
         {mode !== 'duanju' && (

@@ -15,9 +15,27 @@ export const GenreTypeSchema = z.enum([
   'wuxian',
   'xuanhuan',
   'hunhe',
+  'fanfic',
   'custom',
 ]);
 export type GenreType = z.infer<typeof GenreTypeSchema>;
+
+/** 同人衍生类型（用户需求 2026-11-22：软件理解「同人」——原著信息随书资料注入生成） */
+export const FandomTypeSchema = z.enum([
+  'continue', // 续写原作剧情
+  'side_story', // 番外
+  'au', // 平行世界/AU
+  'oc_add', // 原创角色加入原作世界
+  'other',
+]);
+export type FandomType = z.infer<typeof FandomTypeSchema>;
+export const FANDOM_TYPE_LABELS: Record<FandomType, string> = {
+  continue: '续写原作剧情',
+  side_story: '番外',
+  au: '平行世界/AU',
+  oc_add: '原创角色加入原作',
+  other: '其他',
+};
 
 export const BrotherPersonalitySchema = z.enum([
   '冷酷腹黑',
@@ -177,6 +195,11 @@ export const NovelSettingsSchema = z.strictObject({
   /** 按风格挂载的预设 id 列表（用户需求：通用预设常驻+风格预设按需；组装时叠加进主预设栈；
    *  风格变化后在资料分区勾选并经用户确认写入） */
   stylePresetIds: z.array(z.string()).optional(),
+  /** 同人创作三字段（用户需求 2026-11-22：软件理解「同人」——原著信息随设定块注入每次生成；
+   *  原著详细设定建议录入世界书/角色卡，扫描注入走既有通道） */
+  fandomSource: z.string().optional(), // 原著名称（如「某某小说/某影视」）
+  fandomType: FandomTypeSchema.optional(), // 衍生类型
+  fandomNotes: z.string().optional(), // 同人要点备注（CP/时间线/注意事项等）
   /** 分卷大纲（卷规划层，与章细纲分层）：生成第 N 章时按 startChapter 定位所属卷注入本卷主线；缺省视为无 */
   volumeOutlines: z.array(VolumeOutlineItemSchema).optional(),
   /** 人物状态卡（自动记忆）：AI 每 N 章抽取的动态事实（位置/伤势/持有物/关系），随【作品设定】注入；作者可编辑=最终事实源 */

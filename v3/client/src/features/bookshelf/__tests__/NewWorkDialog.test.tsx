@@ -120,6 +120,44 @@ afterEach(async () => {
   document.body.innerHTML = '';
 });
 
+describe('NewWorkDialog 同人信息（用户需求 2026-11-22：软件理解「同人」）', () => {
+  it('⑥ 题材选同人衍生：显示原著字段，提交携带 settings.fandom 三字段', async () => {
+    const container = await renderDialog();
+    await selectOption(container, 'new-work-genre', 'fanfic');
+    expect(container.querySelector('[data-testid="new-work-fanfic"]')).not.toBeNull();
+    // 原著名称（原生 setter + input）
+    const source = container.querySelector<HTMLInputElement>('[data-testid="new-work-fandom-source"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(source!, '某武侠原著');
+      source!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // 衍生类型（select）
+    await selectOption(container, 'new-work-fandom-type', 'continue');
+    // 要点（textarea）
+    const notes = container.querySelector<HTMLTextAreaElement>('[data-testid="new-work-fandom-notes"]');
+    const tsetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    await act(async () => {
+      tsetter.call(notes!, '承接原作大结局');
+      notes!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await submitForm(container);
+    const input = firstCreateInput();
+    expect(input.settings!.fandomSource).toBe('某武侠原著');
+    expect(input.settings!.fandomType).toBe('continue');
+    expect(input.settings!.fandomNotes).toBe('承接原作大结局');
+  });
+
+  it('⑦ 非 fanfic 题材：无同人区块，settings 不带 fandom 字段', async () => {
+    const container = await renderDialog();
+    expect(container.querySelector('[data-testid="new-work-fanfic"]')).toBeNull();
+    await submitForm(container);
+    const input = firstCreateInput();
+    expect(input.settings!.fandomSource).toBeUndefined();
+    expect('fandomType' in input.settings!).toBe(false);
+  });
+});
+
 describe('NewWorkDialog 写作风格（M1 Task 4）', () => {
   it('① 默认风格：settings.writingStyle=default 且 settings.genre 与顶层 genre 一致', async () => {
     const container = await renderDialog();

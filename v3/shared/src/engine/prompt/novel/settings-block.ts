@@ -5,7 +5,7 @@
  * 文风画像（styleGuide）在此做注入侧长度兜底——UI 保存侧（StyleClonePanel）截断为第一道，
  * 本模块 slice 为第二道（历史超长数据不把上下文预算挤爆）。
  */
-import type { NovelSettings } from '@shared/work';
+import { FANDOM_TYPE_LABELS, type NovelSettings } from '@shared/work';
 
 /** 文风画像注入上限（字符）：UI 保存侧截断与本模块注入侧兜底共用同一常量 */
 export const STYLE_GUIDE_MAX_CHARS = 800;
@@ -16,10 +16,29 @@ export const CHARACTER_STATE_MAX_CHARS = 800;
 /** 未回收伏笔注入条数上限：全部列出但超 8 条只保留最近的（防堆砌挤占上下文） */
 export const FORESHADOW_INJECT_LIMIT = 8;
 
+/** 同人要点注入上限（字符）：与 styleGuide 同款注入侧兜底 */
+export const FANDOM_NOTES_MAX_CHARS = 600;
+
 export function buildSettingsBlock(s: NovelSettings): string {
   const parts: string[] = [];
   const genre = s.customGenre || s.subGenre;
   if (genre) parts.push(`题材：${genre}`);
+  // 同人创作块（用户需求 2026-11-22：软件理解「同人」——原著信息与同人纪律注入每次生成；
+  // 原著详细设定走世界书/角色卡扫描注入的既有通道，此处注入的是「同人语义 + 原著锚点」）
+  if (s.genre === 'fanfic') {
+    const fandomParts: string[] = [];
+    if (s.fandomSource?.trim()) fandomParts.push(`原著：${s.fandomSource.trim()}`);
+    if (s.fandomType) fandomParts.push(`衍生类型：${FANDOM_TYPE_LABELS[s.fandomType]}`);
+    const notes = s.fandomNotes?.trim().slice(0, FANDOM_NOTES_MAX_CHARS);
+    if (notes) fandomParts.push(`同人要点：${notes}`);
+    parts.push(
+      '【同人创作纪律（衍生作品，硬性要求）】\n' +
+        '- 本作品是原著的衍生创作：人物性格、说话方式、人物关系必须严格忠于原著，禁止 OOC\n' +
+        '- 世界观/力量体系/规则以原著为准；上方设定与原著冲突时，以原著设定优先（上方为本书的衍生设定）\n' +
+        (fandomParts.length > 0 ? `- ${fandomParts.join('；')}\n` : '') +
+        '- 原著未提及的细节按原著风格合理补全，不要生造与原著气质相悖的设定',
+    );
+  }
   if (s.backgroundNote.trim()) parts.push(`背景：${s.backgroundNote.trim()}`);
   const brother = [...s.brotherPersonalities, s.customBrotherPersonality].filter(Boolean).join('、');
   if (brother || s.brotherAbility.trim()) {
