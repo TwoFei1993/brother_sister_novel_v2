@@ -200,6 +200,9 @@ export const NovelSettingsSchema = z.strictObject({
   fandomSource: z.string().optional(), // 原著名称（如「某某小说/某影视」）
   fandomType: FandomTypeSchema.optional(), // 衍生类型
   fandomNotes: z.string().optional(), // 同人要点备注（CP/时间线/注意事项等）
+  /** 主预设条目按书覆盖（prompt identifier → 是否启用；只存本书明确改动过的条目）——
+   *  文风/情感基调/附加选项等分组条目每本书自己选，不改预设全局启停（分组识别见 preset-overrides） */
+  presetPromptOverrides: z.record(z.string(), z.boolean()).optional(),
   /** 分卷大纲（卷规划层，与章细纲分层）：生成第 N 章时按 startChapter 定位所属卷注入本卷主线；缺省视为无 */
   volumeOutlines: z.array(VolumeOutlineItemSchema).optional(),
   /** 人物状态卡（自动记忆）：AI 每 N 章抽取的动态事实（位置/伤势/持有物/关系），随【作品设定】注入；作者可编辑=最终事实源 */

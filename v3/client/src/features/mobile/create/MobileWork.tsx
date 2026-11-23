@@ -17,6 +17,7 @@ import type { Message } from '@shared/message';
 
 import SelectionTools from '../../workbench/SelectionTools';
 import BindingsPane from './BindingsPane';
+import PresetGroupPicker from '../../workbench/preset/PresetGroupPicker';
 import PublishPanel from './publish/PublishPanel';
 import VoiceCastPane from './voice/VoiceCastPane';
 import { OutlinePane } from './panes/OutlinePane';
@@ -217,6 +218,13 @@ export default function MobileWork() {
               <>
                 <AssetsPane work={work} nextIndex={chapters.length + 1} onUpdated={setWork} />
                 <BindingsPane work={work} onUpdated={setWork} />
+                {work.presetId !== '' && (
+                  <div className="px-4 pb-1" data-testid="preset-overrides-pane">
+                    <section className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
+                      <PresetGroupPicker key={work.id} work={work} onSaved={setWork} />
+                    </section>
+                  </div>
+                )}
                 <div className="px-4">
                   <VoiceCastPane work={work} onUpdated={setWork} />
                 </div>

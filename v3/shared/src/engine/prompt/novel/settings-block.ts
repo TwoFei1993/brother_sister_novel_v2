@@ -5,7 +5,7 @@
  * 文风画像（styleGuide）在此做注入侧长度兜底——UI 保存侧（StyleClonePanel）截断为第一道，
  * 本模块 slice 为第二道（历史超长数据不把上下文预算挤爆）。
  */
-import { FANDOM_TYPE_LABELS, type NovelSettings } from '@shared/work';
+import { FANDOM_TYPE_LABELS, WRITING_STYLE_LABELS, type NovelSettings } from '@shared/work';
 
 /** 文风画像注入上限（字符）：UI 保存侧截断与本模块注入侧兜底共用同一常量 */
 export const STYLE_GUIDE_MAX_CHARS = 800;
@@ -55,7 +55,8 @@ export function buildSettingsBlock(s: NovelSettings): string {
   if (s.coreConflict.trim()) parts.push(`核心矛盾：${s.coreConflict.trim()}`);
   const tones = [...s.storyTones, s.customStoryTone].filter(Boolean).join('、');
   if (tones) parts.push(`基调：${tones}`);
-  const style = s.customWritingStyle || (s.writingStyle !== 'default' ? s.writingStyle : '');
+  // 内置风格写中文标签（此前直接注入英文枚举值如「文风：jjwxc」，晦涩）；写法级指令在要求块
+  const style = s.customWritingStyle || (s.writingStyle !== 'default' ? WRITING_STYLE_LABELS[s.writingStyle] : '');
   if (style) parts.push(`文风：${style}`);
   // 文风复刻画像：非空时以最高优先级注入（标记词供测试与人工排查锚定）；超上限截断兜底
   const styleGuide = s.styleGuide?.trim().slice(0, STYLE_GUIDE_MAX_CHARS);

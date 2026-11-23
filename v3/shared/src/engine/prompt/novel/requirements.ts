@@ -12,13 +12,18 @@
  *   按「他人说话/动作 → 主角所见所想 → 主角接话行动 → 又看到新细节 → 心理」交替推进）
  */
 import type { TavernPrompt } from '@shared/tavern';
+import { WRITING_STYLE_LABELS, type WritingStyle } from '@shared/work';
 
 /** 基调/文风执行位（scanAndAssemble 从 NovelSettings 解析后传入） */
 export interface StyleBits {
   /** 基调列表（内置枚举 + 自定义基调已合并） */
   tones: readonly string[];
-  /** 文风描述（已解析为中文；空串=未指定） */
+  /** 自定义文风描述（settings.customWritingStyle 原文；空串=未指定） */
   style: string;
+  /** 内置写作风格枚举（写法级指令由 WRITING_STYLE_GUIDE 提供；default/custom 无内置指令） */
+  writingStyle?: WritingStyle;
+  /** 主预设里本书所选文风的正文（提权注入最高优先级区；见 preset-overrides 的 extractPresetStyleText） */
+  presetStyle?: string;
 }
 
 /**
@@ -53,17 +58,53 @@ const TONE_GUIDE: Record<string, string> = {
 };
 
 /**
+ * 内置写作风格 → 写法级执行指令（A/B 实测驱动：此前文风只有十几个字的标签 +
+ * 「贴合该文风」，同设定同指令各跑 2 次对照，起点「句子利落」实测句子反而更长、
+ * 番茄「段落短」与无指令无差别——标签压不住模型自身的默认腔调）。
+ * 与基调同待遇：给出可执行、可检验的写法规则；三种风格在句长/段长/描写比重/开场上互斥。
+ */
+export const WRITING_STYLE_GUIDE: Partial<Record<WritingStyle, string>> = {
+  qidian:
+    '以主角的行动为中心推进，主角始终握有主动权；每推进三四百字必须出现一次新的信息、反转或实力展现；' +
+    '句子以短促陈述句为主、动词密集，单句尽量不超过二十字；动作与结果写清楚，心理点到即止，环境描写一次不超过两句；' +
+    '对话干脆带锋芒、少用语气词；本章至少落一个可感的爽点',
+  jjwxc:
+    '以人物情绪为主线，关键情绪要写透——写清起因、迟疑与转变，允许为情绪放慢节奏；' +
+    '句子长短交错，可用复句承载层层递进的心理；多用微表情、小动作与身体感觉承载情绪；' +
+    '对话写潜台词：说出口的话与心里所想可以不一致，要写出弦外之音；每场戏至少一处人物内心的细微波澜',
+  fanqie:
+    '开篇第一段必须直接进入事件或异常，环境铺垫最多一句；段落要短，以一两句成段为主，单段不超过三句；' +
+    '句子短、口语化，平均不超过十五字，少用长定语和从句；每一段都必须推进信息或冲突，删掉纯渲染的描写；' +
+    '对话多而直接；章末悬念明确指向下一步危机',
+};
+
+/**
  * 基调与文风执行块（置于要求块最前，最高优先级）：内置基调给写法级指令，自定义基调
  * 透传并要求执行；末行声明基调高于本块其他纪律（悬念/冲突纪律与治愈类基调冲突时按基调执行）。
+ * 文风：内置风格查 WRITING_STYLE_GUIDE；自定义文风原文以「全文每一句都须遵循」的强度透传。
  * 无任何基调与文风 → 空串（不注入，保持旧行为）。
  */
 export function buildStyleExecution(bits: StyleBits): string {
   const lines: string[] = [];
+  // 主预设文风提权（用户需求：「写作风格」= 预设自带文风）：A/B 实测文风块在提示词靠前位置时
+  // 三种文风产出同一腔调，故把所选文风正文提到本区最前，并声明它高于其他写作纪律
+  const presetStyle = bits.presetStyle?.trim();
+  if (presetStyle) {
+    lines.push(
+      `- 核心文风（本书在主预设中选定的文风，全文每一句的遣词、句式、节奏与叙事方式都必须服从它；` +
+        `与下方其他写作纪律冲突时以核心文风为准，但叙事人称与视角仍遵循下方的视角纪律）：\n${presetStyle}`,
+    );
+  }
   for (const tone of bits.tones) {
     const guide = TONE_GUIDE[tone] ?? '本章所有场景、对话与心理描写的情绪质感必须全程服从该基调';
     lines.push(`- 基调「${tone}」：${guide}`);
   }
-  if (bits.style.trim()) lines.push(`- 文风「${bits.style.trim()}」：叙事语言质感全程贴合该文风`);
+  const styleGuide = bits.writingStyle ? WRITING_STYLE_GUIDE[bits.writingStyle] : undefined;
+  if (bits.writingStyle && styleGuide) {
+    lines.push(`- 文风「${WRITING_STYLE_LABELS[bits.writingStyle]}」（全文执行）：${styleGuide}`);
+  } else if (bits.style.trim()) {
+    lines.push(`- 文风规范（全文每一句都须遵循）：${bits.style.trim()}`);
+  }
   if (lines.length === 0) return '';
   return (
     '【基调与文风（最高优先级）】\n' +

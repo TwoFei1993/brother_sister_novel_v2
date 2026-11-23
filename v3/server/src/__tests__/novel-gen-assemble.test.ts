@@ -221,20 +221,23 @@ describe('scanAndAssemble（server 组装）', () => {
     expect(out.messages.length).toBeGreaterThan(0);
   });
 
-  it('③writingStyle=qidian + 基调 → 要求块含起点风指令与基调执行块', async () => {
+  it('③writingStyle=qidian + 基调 → 要求块含起点风写法指令与基调执行块', async () => {
     await seedAssets();
     const out = await setupAndAssemble(mkWork({}, { writingStyle: 'qidian', storyTones: ['温情治愈'] }), []);
     const joined = out.messages.map((m) => m.content).join('\n');
-    expect(joined).toContain('起点风');
+    expect(joined).toContain('文风「起点·男频爽文」（全文执行）');
+    expect(joined).toContain('至少落一个可感的爽点'); // 写法级指令（A/B 实测：旧标签版不起作用）
     expect(joined).toContain('基调「温情治愈」');
+    expect(joined).not.toContain('叙事语言质感全程贴合'); // 旧的一句标签式措辞已移除
   });
 
-  it('③b customWritingStyle 优先于内置文风表', async () => {
+  it('③b 自定义文风（UI 路径 writingStyle=custom）→ 原文以「全文每一句都须遵循」注入要求块，无内置指令', async () => {
     await seedAssets();
-    const out = await setupAndAssemble(mkWork({}, { writingStyle: 'qidian', customWritingStyle: ' 自定义文风X ' }), []);
+    const out = await setupAndAssemble(mkWork({}, { writingStyle: 'custom', customWritingStyle: ' 自定义文风X ' }), []);
     const joined = out.messages.map((m) => m.content).join('\n');
-    expect(joined).toContain('自定义文风X');
-    expect(joined).not.toContain('起点风');
+    expect(joined).toContain('文风规范（全文每一句都须遵循）：自定义文风X');
+    expect(joined).not.toContain('须遵循）： 自定义文风X'); // 原文 trim，冒号后无多余空格
+    expect(joined).not.toContain('至少落一个可感的爽点');
   });
 
   it('④历史超预算触发滚动摘要：LLM 调用 + 摘要注入 + rollingSummary/summaryUpTo 直写落盘', async () => {

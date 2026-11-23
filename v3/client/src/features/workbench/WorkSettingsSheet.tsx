@@ -21,6 +21,7 @@ import WizardAssetsBind from './WizardAssetsBind';
 import StyleClonePanel from './dialog/StyleClonePanel';
 import FanficSection from './dialog/FanficSection';
 import StylePresetSection from './StylePresetSection';
+import PresetGroupPicker from './preset/PresetGroupPicker';
 
 /** 数字输入兜底：空串/非法值回退 fallback，最小 1（防 PATCH 出非法设置值） */
 function clampInt(value: string, fallback: number): number {
@@ -187,6 +188,14 @@ export default function WorkSettingsSheet({ work, onClose, onSaved }: WorkSettin
           </section>
 
           {/* 写作风格 + 按风格挂预设（用户需求：资料里调风格；选好后确认应用） */}
+          {/* 主预设文风/情感基调/附加选项按书选择（用户需求 2026-11-24）：预设文风为主，
+              下方内置风格为附加微调；未绑主预设时组件自身不渲染 */}
+          {work.presetId !== '' && (
+            <section className="border-t border-[hsl(var(--border-soft))] pt-4" data-testid="preset-overrides-section">
+              <PresetGroupPicker key={work.id} work={work} onSaved={onSaved} />
+            </section>
+          )}
+
           <StylePresetSection work={work} onSaved={onSaved} />
 
           {/* 同人信息（用户需求 2026-11-22：软件理解「同人」）：仅同人题材书显示 */}

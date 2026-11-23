@@ -7,6 +7,7 @@
  * - {{setvar::name::value}} 执行写入并从文本消解为空串；name trim、value 原样
  * - {{getvar::name}} 未命中消解为空串；变量名本身大小写敏感
  * - {{original}} 消费一次：首次取 env.original，再次出现消解为空串（防原文重复注入）
+ * - {{// 注释}} 消解为空串（酒馆注释宏；setvar 存入值里保留原文，展开后再清理）
  * - {{user}}/{{char}} 最后替换（script.js:2980 注释 "Must be substituted last"）：
  *   嵌套宏（getvar 展开物、setvar 存入值）产出的 {{user}}/{{char}} 字面量同样被替换
  * - 未知宏原样保留
@@ -29,6 +30,8 @@ const SETVAR_RE =
   /\{\{\s*setvar\s*::\s*([\s\S]*?)\s*::\s*((?:\{\{[^{}]*\}\}|[^{}])*)\s*\}\}/gi;
 
 const GETVAR_RE = /\{\{\s*getvar\s*::\s*([\s\S]*?)\s*\}\}/gi;
+/** 注释宏 {{// …}}：酒馆语义为纯注释，消解为空串（Sudachi 等预设的分组标题/条目内大量使用） */
+const COMMENT_RE = /\{\{\s*\/\/[\s\S]*?\}\}/g;
 const ORIGINAL_RE = /\{\{\s*original\s*\}\}/gi;
 const USER_RE = /\{\{\s*user\s*\}\}/gi;
 const CHAR_RE = /\{\{\s*char\s*\}\}/gi;
@@ -81,6 +84,12 @@ export function substituteParams(text: string, env: MacroEnv): string {
       if (originalConsumed) return '';
       originalConsumed = true;
       return env.original ?? '';
+    });
+
+    // 注释宏在 setvar 之后清理：既不破坏 setvar 的嵌套结构，也能清掉 getvar 展开物里的注释
+    result = result.replace(COMMENT_RE, () => {
+      touched = true;
+      return '';
     });
 
     if (!touched) break;

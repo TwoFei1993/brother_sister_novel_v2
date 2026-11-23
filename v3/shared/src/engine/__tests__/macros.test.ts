@@ -185,3 +185,25 @@ describe('边界', () => {
     expect(substituteParams('普通文本，没有宏。', env)).toBe('普通文本，没有宏。');
   });
 });
+
+describe('{{// 注释}} 消解为空串（酒馆注释宏；Sudachi 等预设的分组标题大量使用）', () => {
+  it('单行/多行注释、宏名两侧空白', () => {
+    const { env } = makeEnv();
+    expect(substituteParams('A{{//单选}}B', env)).toBe('AB');
+    expect(substituteParams('A{{ // 可多选，\n如遇到Pro/Lite二选一即可 }}B', env)).toBe('AB');
+  });
+
+  it('不破坏 setvar：先执行写入再清注释（Sudachi 字数设定条目形态）', () => {
+    const { env } = makeEnv();
+    const out = substituteParams('{{setvar::mincount::[1200,1400]}}\n{{//字数设定，如:[600,1000]字}}', env);
+    expect(out).toBe('\n');
+    expect(env.getVar('mincount', 'work')).toBe('[1200,1400]');
+  });
+
+  it('setvar 存入值里的注释：存原文，getvar 展开后清理', () => {
+    const { env, store } = makeEnv();
+    const out = substituteParams('{{setvar::a::x{{//注}}y}}{{getvar::a}}', env);
+    expect(store.get('work:a')).toBe('x{{//注}}y');
+    expect(out).toBe('xy');
+  });
+});

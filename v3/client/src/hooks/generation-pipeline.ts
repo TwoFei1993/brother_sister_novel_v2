@@ -21,6 +21,7 @@ import { tokenizeMessages, type GenerateMessage } from '../api/llm';
 import { countTokensApprox } from '../engine/budget';
 import type { MacroEnv } from '../engine/types';
 import { assemblePrompt } from '../engine/prompt/assemble';
+import { applyPresetOverrides, detectPresetGroups, resolvePresetStyle } from '@shared/engine/prompt/preset-overrides';
 import { META_ONLY_PLACEHOLDER, extractThinking, mergeThinking, postprocessMessage } from '../engine/prompt/postprocess';
 import { pickChapterRequirement, type SegmentInfo, type StyleBits } from '../engine/prompt/novel/requirements';
 import { MEMORY_EXTRACT_SYSTEM, mergeForeshadows, parseMemoryExtract } from '../engine/prompt/novel/memory-extract';
@@ -204,10 +205,14 @@ export function buildMacroEnv(work: Work, primaryCharName: string | undefined, p
   return {
     user: '作者',
     char: primaryCharName || '小说家',
-    getVar: (name, scope) =>
-      scope === 'global'
+    getVar: (name, scope) => {
+      // 本次组装已 setvar 的值优先（与 server assemble.ts 的变量传递修复保持一致）
+      const staged = (scope === 'global' ? pending.global : pending.work).get(name);
+      if (staged !== undefined) return staged;
+      return scope === 'global'
         ? useSettingsStore.getState().config?.globalVariables?.[name]
-        : work.settings.variables?.[name],
+        : work.settings.variables?.[name];
+    },
     setVar: (name, value, scope) => {
       (scope === 'global' ? pending.global : pending.work).set(name, value);
     },
@@ -269,17 +274,14 @@ export async function scanAndAssemble(
   let history = plan.kept;
   const targetWords = work.settings.targetChapterWords ?? DEFAULT_TARGET_CHAPTER_WORDS; // 兜底主提示词与末尾写作要求共用
   // 基调与文风执行位（用户反馈①）：解析作品设置的基调/文风为写法级指令，注入要求块最前（最高优先级）
-  const WRITING_STYLE_LABEL: Record<string, string> = {
-    qidian: '起点风：爽点前置、节奏明快、句子利落',
-    jjwxc: '晋江风：情感细腻、人物张力足、心理刻画绵密',
-    fanqie: '番茄风：强钩子、快节奏、段落短',
-  };
+  // 主预设（兜底预设仅用于无绑定时）：条目按书覆盖与文风提权都基于它
+  const basePreset = assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords);
   const styleBits: StyleBits = {
     tones: [...work.settings.storyTones, work.settings.customStoryTone].filter(Boolean),
-    style:
-      (work.settings.customWritingStyle || '').trim() ||
-      WRITING_STYLE_LABEL[work.settings.writingStyle] ||
-      '',
+    style: (work.settings.customWritingStyle || '').trim(), // 自定义文风原文
+    writingStyle: work.settings.writingStyle, // 内置风格：写法级指令见 WRITING_STYLE_GUIDE（单一事实源）
+    // 主预设里本书所选文风的正文，提权到要求块最高优先级区
+    presetStyle: resolvePresetStyle(detectPresetGroups(basePreset), work.settings.presetPromptOverrides, env),
   };
   // 章节大纲联动（一键导入大纲）：第 N 章有预设大纲时 directive 末尾追加本章要点（仅进提示词，入库 directive 保持原指令）
   const outlineHint =
@@ -305,8 +307,13 @@ export async function scanAndAssemble(
     tail.kind === 'directive' && plan.dropped.length > 0 ? skeletonBlock(plan.dropped) : '';
   // 按风格挂载的附加预设（用户需求：通用预设常驻+风格预设按需）合并进主预设栈：
   // 附加预设的 prompts 追加到主栈尾部（identifier 唯一化防冲突），风格细则贴近生成点生效
-  const basePreset = assets.preset ?? buildFallbackPreset(tail.kind, work.settings.chatReplyLength ?? 'medium', targetWords);
-  const preset = await mergeStylePresets(work, basePreset, prefs);
+  // 主预设条目按书覆盖（文风/基调/附加分组）：先应用本书的覆盖表，再叠加附加预设
+  const presetGroups = detectPresetGroups(basePreset);
+  const preset = await mergeStylePresets(
+    work,
+    applyPresetOverrides(basePreset, presetGroups, work.settings.presetPromptOverrides),
+    prefs,
+  );
   // 输出守卫（novel）在 tokenize 校验之后追加：预算需预留其开销（novelGuardPlan 见 context-plan）；
   // 续写轮用「无缝续写」守卫变体（反馈③：常规守卫的「第一行输出标题」会诱发模型重新开章）
   const guardPlan =
