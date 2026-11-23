@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { createWork } from '../../api/works';
 import { createItem } from '../../api/library';
-import { defaultNovelSettings } from '@shared/work';
+import { defaultNovelSettings, WRITING_STYLE_LABELS, type WritingStyle } from '@shared/work';
 import { useSettingsStore } from '../../stores/settings';
 import { useBgLlmTask } from '../../hooks/useBgLlmTask';
 import { importAllAssets, type ImportedAssets } from '../misc/wizard/importAll';
@@ -58,6 +58,8 @@ export default function PlannerPage() {
   });
   const [input, setInput] = useState('');
   const [importing, setImporting] = useState(false);
+  // 写作风格（向导建书随 settings 下发；用户需求：向导内也可选文风）
+  const [writingStyle, setWritingStyle] = useState<WritingStyle>('default');
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   /** 最新会话镜像（bg onDone 异步回调防闭包旧值；解析部分更新需读当轮基准策划案） */
@@ -247,6 +249,7 @@ export default function PlannerPage() {
         ...(itemIds.length > 0 ? { itemIds } : {}),
         settings: {
           ...defaultNovelSettings,
+          writingStyle,
           chapterOutlines,
           volumeOutlines,
           desiredChapterCount,
@@ -464,6 +467,24 @@ export default function PlannerPage() {
                   <div>
                     <dt className="text-xs text-[hsl(var(--fg-muted))]">题材</dt>
                     <dd>{p.genre}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-[hsl(var(--fg-muted))]">写作风格（导入时随书生效）</dt>
+                    <dd>
+                      <select
+                        value={writingStyle}
+                        onChange={(e) => setWritingStyle(e.target.value as WritingStyle)}
+                        aria-label="写作风格"
+                        data-testid="planner-writing-style"
+                        className="mt-1 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 py-1.5 text-sm outline-none focus:border-[hsl(var(--accent))]"
+                      >
+                        {Object.entries(WRITING_STYLE_LABELS).map(([v, label]) => (
+                          <option key={v} value={v}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs text-[hsl(var(--fg-muted))]">人物</dt>
