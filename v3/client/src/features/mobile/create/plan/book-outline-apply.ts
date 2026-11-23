@@ -9,6 +9,7 @@ import { apiFetch } from '../../../../api/client';
 import { updateWork } from '../../../../api/works';
 import type { Work } from '@shared/work';
 
+import { buildCardDraft } from '../../../../lib/outline/draft';
 import {
   loadHistory,
   proposalToSlice,
@@ -33,7 +34,7 @@ export async function applyProposalToBook(
         method: 'POST',
         body: JSON.stringify({
           name: c.name,
-          card: { spec: 'chara_card_v2', spec_version: '2.0', data: { name: c.name, description: `${c.role}。${c.traits.join('；')}` } },
+          card: buildCardDraft(p.extracted, c.name), // 统一卡片构造（身份/特质/背景/矛盾全注入；旧内联拼装在 role/traits 空时产出空卡）
         }),
       });
       characterIds.push(a.id);

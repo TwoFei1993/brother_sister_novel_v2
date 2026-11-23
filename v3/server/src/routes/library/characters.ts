@@ -13,4 +13,5 @@ export const charactersRouter = crudRouter<CharacterAsset>({
   schema: CharacterAssetSchema,
   label: '角色卡',
   idempotentByName: true,
+  upgradeEmptyByName: true,
 });

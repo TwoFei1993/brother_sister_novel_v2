@@ -47,8 +47,13 @@ export interface CrudOptions<Asset extends { id: string; name: string; createdAt
    * POST 按 name 幂等（深度测试报告缺陷「批量导入失败重试产生重复卡」）：
    * 已存在同名资产时直接返回既有资产（200，无新文件落盘），否则照常 201 新建。
    * 客户端以 200/201 区分「既有/新建」；仅对 name 天然唯一的资产类（角色卡）开启。
+   * upgradeEmptyByName：空卡自愈——幂等命中且既有资产内容为空（card.data.description 空）
+   * 而新请求带完整内容时，用新内容升级既有资产（生产实证：早期建卡路径只写名字产生
+   * 空卡钉子户，后续完整导入被幂等挡回永远填不上——65 张空卡案例）。仅角色卡类开启。
    */
   idempotentByName?: boolean;
+  /** 空卡自愈开关（仅角色卡类开启，见 idempotentByName 注释） */
+  upgradeEmptyByName?: boolean;
 }
 
 /**
@@ -129,6 +134,19 @@ export function crudRouter<Asset extends { id: string; name: string; createdAt?:
           for (const f of files) {
             const found = await readJson<Asset>(join(dir, f));
             if (found && found.name === name) {
+              // 空卡自愈：既有卡 description 为空而新卡有内容 → 升级覆盖（保留 id/createdAt/origin/bio）
+              if (opts.upgradeEmptyByName) {
+                const existing = found as Asset & { card?: { data?: { description?: string } } };
+                const incomingCard = (req.body as { card?: { data?: { description?: string } } }).card;
+                const oldDesc = String(existing.card?.data?.description ?? '').trim();
+                const newDesc = String(incomingCard?.data?.description ?? '').trim();
+                if (!oldDesc && newDesc) {
+                  const upgraded = { ...found, name, card: incomingCard, updatedAt: Date.now() } as unknown as Asset;
+                  await writeJsonAtomic(join(dir, f), upgraded);
+                  res.status(200).json(upgraded);
+                  return;
+                }
+              }
               res.status(200).json(found); // 幂等命中：返回既有资产，不新建
               return;
             }
