@@ -65,6 +65,23 @@ function sseResponse(text: string) {
   return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
+/** 分两帧的上游：先发第一帧正文，等 gate 放行后再发第二帧并收尾（模拟生成进行中） */
+function sseGatedResponse(first: string, gate: Promise<void>, second: string): globalThis.Response {
+  const encode = (s: string): Uint8Array => new TextEncoder().encode(s);
+  const frame = (text: string): string => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(encode(frame(first)));
+      await gate;
+      controller.enqueue(encode(frame(second)));
+      controller.enqueue(encode(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`));
+      controller.enqueue(encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+}
+
 /** fixture 书（tw=2000 → parts=1，每章恰好一次上游调用） */
 async function seedWork(workId: string, existingChapters = 0): Promise<void> {
   const work = {
@@ -165,17 +182,21 @@ describe('runner 端到端（提交→轮询→终态→入库）', () => {
     expect(sub.status).toBe(202);
     const id = sub.body.taskId as string;
 
-    // 轮询 ?since=0：第 1 章完成后（第 2 章被 gate 挂起）应观察到中途进度
+    // 轮询 ?since=0：第 1 章完成后（第 2 章被 gate 挂起、尚无输出）应观察到中途进度——
+    // done=1 可见、相位为生成中、当前章正文为 0。
+    //（此前「组装中」之后的相位切换被 1s 节流吞掉，第 2 章生成期间界面一直残留上一章全文——
+    //  用户实测「一章看起来写完了却不停止、字也不增」的来源）
     let mid: Record<string, unknown> = {};
     for (let i = 0; i < 100; i += 1) {
       const g = await a.get(`/api/llm/tasks/${id}?since=0`);
       mid = g.body as Record<string, unknown>;
-      if (Number(mid.done) >= 1 && Number(mid.progressLen) > 0) break;
+      if (Number(mid.done) >= 1 && mid.phase === 'generating') break;
       await new Promise((r) => setTimeout(r, 25));
     }
     expect(mid.status).toBe('running');
-    expect(mid.done).toBe(1); // 第 1 章已完成（saving 进度强制落盘）
-    expect(Number(mid.progressLen)).toBeGreaterThan(0); // 当前章累计正文可见
+    expect(mid.done).toBe(1); // 第 1 章已完成
+    expect(mid.phase).toBe('generating'); // 第 2 章生成中（相位切换不再被节流丢弃）
+    expect(Number(mid.progressLen)).toBe(0); // 新章尚无输出，不残留上一章正文
     expect(Number(mid.chapterTotal)).toBe(2);
 
     release2();
@@ -194,6 +215,70 @@ describe('runner 端到端（提交→轮询→终态→入库）', () => {
     const disk = await readJson<{ status: string; progress?: unknown }>(join(llmTasksDir(), `${id}.json`));
     expect(disk?.status).toBe('done');
     expect(disk?.progress).toBeUndefined();
+  });
+
+  it('生成期间相位显示 generating（修复：assembling 后 1s 内的相位切换被节流吞掉，界面一直显示「组装中」）', async () => {
+    await seedWork('w-phase', 0);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        await gate; // 上游挂起 = 正在生成
+        return sseResponse('# 第1章 试\n第一章写完了。');
+      }),
+    );
+    const app = testApp();
+    const a = authed(app);
+    const sub = await a.post('/api/llm/tasks').send(novelBody('w-phase', { chapters: 1, directive: '写第一章' }));
+    const id = sub.body.taskId as string;
+    let mid: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i += 1) {
+      const g = await a.get(`/api/llm/tasks/${id}?since=0`);
+      mid = g.body as Record<string, unknown>;
+      if (mid.phase === 'generating') break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(mid.status).toBe('running');
+    expect(mid.phase).toBe('generating'); // 不再停留在 assembling
+    release();
+    const final = await waitFinished(a, id);
+    expect(final.status).toBe('done');
+  });
+
+  it('生成过程中正文流式上报：上游分两帧、中途挂起 → progressLen 等于已收到的正文长度', async () => {
+    await seedWork('w-stream', 0);
+    const first = '# 第1章 试\n第一帧正文。';
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => sseGatedResponse(first, gate, '第二帧正文。')),
+    );
+    const app = testApp();
+    const a = authed(app);
+    const sub = await a.post('/api/llm/tasks').send(novelBody('w-stream', { chapters: 1, directive: '写第一章' }));
+    const id = sub.body.taskId as string;
+    let mid: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i += 1) {
+      const g = await a.get(`/api/llm/tasks/${id}?since=0`);
+      mid = g.body as Record<string, unknown>;
+      if (Number(mid.progressLen) >= first.length) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(mid.status).toBe('running');
+    expect(mid.phase).toBe('generating');
+    expect(Number(mid.progressLen)).toBe(first.length); // 第一帧已到达并落盘，第二帧仍未到
+    release();
+    const final = await waitFinished(a, id);
+    expect(final.status).toBe('done');
+    const rows = await readAll<{ id: string; content: string }>(messagesPath('w-stream'));
+    expect(rows[rows.length - 1]?.content).toContain('第一帧正文。');
+    expect(rows[rows.length - 1]?.content).toContain('第二帧正文。');
   });
 
   it('书已删除（work.json 缺失）→ 任务 failed 且错误区分「作品已删除」', async () => {

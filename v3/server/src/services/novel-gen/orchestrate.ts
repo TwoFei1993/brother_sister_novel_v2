@@ -57,6 +57,8 @@ export interface OrchestrateResult {
   done: number;
   /** 单章失败/模式失败原因（取消不是失败——无 failed 字段） */
   failed?: string;
+  /** 停链原因：取消或任务级超时（isCancelled 为真时停链；已完成章保留，D6） */
+  stopped?: 'cancelled-or-timeout';
   /** 本次任务入库消息 id 列表（D9：客户端同步本地视图的唯一依据） */
   messageIds: string[];
 }
@@ -128,11 +130,11 @@ async function runChapterChain(st: ChainState, input: OrchestrateInput, messageI
   st.chapterTotal = total;
   let completedInBatch = 0;
   for (let i = 1; i <= total; i += 1) {
-    if (input.isCancelled()) return { done: st.done, messageIds }; // 章间取消（D6：已入库保留）
+    if (input.isCancelled()) return { done: st.done, stopped: 'cancelled-or-timeout', messageIds }; // 章间取消/超时（D6：已入库保留）
     st.chapterIndex = i;
     const directive = i === 1 ? input.directive : input.outline ? OUTLINE_DIRECTIVE : '';
     const outcome = await generateOneChapter(st, directive);
-    if (outcome.cancelled) return { done: st.done, messageIds }; // 段间取消
+    if (outcome.cancelled) return { done: st.done, stopped: 'cancelled-or-timeout', messageIds }; // 段间取消/超时
     if (!outcome.msg) return { done: st.done, failed: outcome.reason ?? '生成失败', messageIds };
     messageIds.push(outcome.msg.id);
     st.done += 1;

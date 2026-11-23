@@ -36,8 +36,12 @@ async function configuredChannels(exclude: string): Promise<Array<'openai' | 'cl
   return all.filter((c) => c !== exclude && Boolean(s?.[c]?.apiKey));
 }
 
-/** 聚合一次 runGenerate 流式调用的全文/思考流/结束原因（空返回不抛错，由防线决定重试/换通道） */
-async function collectStream(opts: GenerateInput): Promise<{ text: string; thinking: string; finish: string | null }> {
+/** 聚合一次 runGenerate 流式调用的全文/思考流/结束原因（空返回不抛错，由防线决定重试/换通道）。
+ *  onText：每收到正文增量回调一次「本轮累计正文」（供任务进度流式上报——界面可见字数增长） */
+async function collectStream(
+  opts: GenerateInput,
+  onText?: (textSoFar: string) => void,
+): Promise<{ text: string; thinking: string; finish: string | null }> {
   let text = '';
   let thinking = '';
   let finish: string | null = null;
@@ -47,6 +51,7 @@ async function collectStream(opts: GenerateInput): Promise<{ text: string; think
       text += ev.text;
       if (ev.thinking) thinking += ev.thinking;
       if (ev.finish) finish = ev.finish;
+      if (onText && ev.text) onText(text);
     }
   }
   return { text, thinking, finish };
@@ -77,6 +82,8 @@ export async function collectWithDefense(input: {
   params?: Record<string, unknown>;
   /** 首轮 max_tokens（调用方按语义定起始值：旧 llm 任务 thinking 时 32000 下限，novel 段级预算） */
   maxTokens: number;
+  /** 流式回调：每轮以空串起始（重试/预算协商/灾备换通道时先清空），之后为本轮累计正文 */
+  onText?: (textSoFar: string) => void;
 }): Promise<DefendedResult> {
   const baseParams = input.params ?? {};
   let text = '';
@@ -87,13 +94,17 @@ export async function collectWithDefense(input: {
   const delays = retryDelaysMs();
   for (let round = 0; round <= delays.length; round += 1) {
     try {
-      const r = await collectStream({
-        source: input.source,
-        model: input.model,
-        messages: input.messages,
-        params: { ...baseParams, max_tokens: maxTokens },
-        stream: true, // 非流式下上游生成全程无字节返回，长输入任务必撞 120s 空闲超时
-      });
+      input.onText?.(''); // 新一轮从头累计：界面不残留上一轮的片段
+      const r = await collectStream(
+        {
+          source: input.source,
+          model: input.model,
+          messages: input.messages,
+          params: { ...baseParams, max_tokens: maxTokens },
+          stream: true, // 非流式下上游生成全程无字节返回，长输入任务必撞 120s 空闲超时
+        },
+        input.onText,
+      );
       text = r.text;
       thinking = r.thinking;
       finish = r.finish;
@@ -121,13 +132,17 @@ export async function collectWithDefense(input: {
       const fbModel = FALLBACK_MODELS[fbSource];
       console.log(`[llm-defense] 主通道无产出 → 灾备通道 ${fbSource}/${fbModel}`);
       try {
-        const r = await collectStream({
-          source: fbSource,
-          model: fbModel,
-          messages: input.messages,
-          params: { ...baseParams, max_tokens: Math.max(Number(baseParams.max_tokens ?? 8192), 32000) },
-          stream: true,
-        });
+        input.onText?.('');
+        const r = await collectStream(
+          {
+            source: fbSource,
+            model: fbModel,
+            messages: input.messages,
+            params: { ...baseParams, max_tokens: Math.max(Number(baseParams.max_tokens ?? 8192), 32000) },
+            stream: true,
+          },
+          input.onText,
+        );
         if (r.text.trim()) return { text: r.text, thinking: r.thinking, finish: r.finish, lastErr: '' };
         lastErr = lastErr || '灾备通道无产出';
       } catch (fbErr) {

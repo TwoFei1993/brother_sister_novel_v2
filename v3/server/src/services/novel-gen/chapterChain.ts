@@ -88,6 +88,10 @@ export async function runOnce(
       ...(!opts.thinkingOff && thinkingOn ? { thinking: true } : {}),
     },
     maxTokens: effMaxTokens,
+    // 流式进度：生成过程中即上报「当前章累计正文」（节流落盘），界面可见字数增长——
+    // 此前正文整段聚合后才随 saving 一次性出现，生成期间界面只能显示空白或上一章残留
+    onText: (textSoFar) =>
+      st.onProgress(progressOf(st, opts.continuation ? 'continuing' : 'generating', (opts.initialBuffer ?? '') + textSoFar)),
   });
   st.finish = r.finish;
   st.lastError = r.text.trim() ? '' : r.lastErr;

@@ -22,6 +22,7 @@ import { acquireNovelSlot, releaseNovelSlot } from '../../services/novelQueue';
 import {
   orchestrateNovelChapters,
   type OrchestrateInput,
+  type OrchestrateResult,
   type TaskProgress,
 } from '../../services/novel-gen/orchestrate';
 import { dataDir } from '../core/paths';
@@ -151,29 +152,74 @@ function makeCancelChecker(id: string, deadline: number): () => boolean {
  * finally releaseNovelSlot。终态/进度写一律合并磁盘最新态（...(disk ?? task) 打底），
  * 绝不回滚执行期间并发落盘的其他字段（典型：cancel 置位的 cancelRequested）。
  */
+/**
+ * 进度落盘节流器（2026-11-24 修复，用户实测「一章看起来写完了却不停止、字也不增」）：
+ * - 相位切换立即写（此前所有相位都过节流，assembling 写入后 1s 内的 generating 上报被丢弃，
+ *   整个生成期间界面一直显示「组装中、0 字」，下一章生成期间残留上一章正文）；
+ * - saving 每章仅一次，不节流；
+ * - 同相位的正文增量按 PROGRESS_THROTTLE_MS 节流，窗口内的最后一次上报在窗口结束时补写
+ *   （否则上游停在两帧之间时，最后到达的正文永远写不进去）；
+ * - 全部经 enqueueTaskWrite 串行——进度写与 cancel 置位/终态写互不覆盖。
+ */
+function makeProgressSink(
+  taskId: string,
+  fallback: TaskFile,
+  file: string,
+): { onProgress: (p: TaskProgress) => void; dispose: () => void } {
+  let lastWrite = 0;
+  let lastPhase: TaskProgress['phase'] | null = null;
+  let pending: TaskProgress | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const write = (p: TaskProgress): void => {
+    lastWrite = Date.now();
+    lastPhase = p.phase;
+    void enqueueTaskWrite(taskId, async () => {
+      const disk = await readJson<TaskFile>(file).catch(() => null);
+      await writeJsonAtomicRetry(file, {
+        ...(disk ?? fallback),
+        status: 'running',
+        progress: { ...p, updatedAt: Date.now() },
+      } satisfies TaskFile);
+    }).catch(() => undefined); // 进度落盘失败不阻塞生成链（下次上报自然重试）
+  };
+  const onProgress = (p: TaskProgress): void => {
+    const sinceLast = Date.now() - lastWrite;
+    if (p.phase !== lastPhase || FORCED_PHASES.has(p.phase) || sinceLast >= PROGRESS_THROTTLE_MS) {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      pending = null;
+      write(p);
+      return;
+    }
+    pending = p;
+    timer ??= setTimeout(
+      () => {
+        timer = null;
+        if (pending) {
+          const last = pending;
+          pending = null;
+          write(last);
+        }
+      },
+      PROGRESS_THROTTLE_MS - sinceLast,
+    );
+  };
+  const dispose = (): void => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    pending = null;
+  };
+  return { onProgress, dispose };
+}
+
 export async function executeNovelChapter(task: TaskFile): Promise<void> {
   if (!task.workId) throw new Error('novel-chapter 任务缺少 workId');
   await acquireNovelSlot(); // 全局并发编排器（D7）：默认并发 2（NOVEL_GEN_PARALLEL 可调），FIFO 排队
   const t0 = Date.now();
   const file = taskFileOf(task.id);
   try {
-    // 进度节流器（1s）：强制相位（saving）即刻落盘，其余按间隔合并磁盘态写。
-    // 全部经 enqueueTaskWrite 串行——节流写与 cancel 置位/终态写互不覆盖。
-    let lastWrite = 0;
-    const onProgress = (p: TaskProgress): void => {
-      const now = Date.now();
-      if (!FORCED_PHASES.has(p.phase) && now - lastWrite < PROGRESS_THROTTLE_MS) return;
-      lastWrite = now;
-      void enqueueTaskWrite(task.id, async () => {
-        const disk = await readJson<TaskFile>(file).catch(() => null);
-        await writeJsonAtomicRetry(file, {
-          ...(disk ?? task),
-          status: 'running',
-          progress: { ...p, updatedAt: Date.now() },
-        } satisfies TaskFile);
-      }).catch(() => undefined); // 进度落盘失败不阻塞生成链（下次上报自然重试）
-    };
-    const result = await orchestrateNovelChapters({
+    const sink = makeProgressSink(task.id, task, file);
+    const input: OrchestrateInput = {
       workId: task.workId,
       prefs: task.prefs ?? { source: 'openai', model: '' },
       mode: task.mode ?? 'chapter',
@@ -183,8 +229,14 @@ export async function executeNovelChapter(task: TaskFile): Promise<void> {
       ...(task.targetId ? { targetId: task.targetId } : {}),
       ...(task.partial ? { partial: task.partial } : {}),
       isCancelled: makeCancelChecker(task.id, t0 + TASK_TIMEOUT_BASE_MS + CHAPTER_TASK_TIMEOUT_MS * (task.chapters ?? 1)),
-      onProgress,
-    });
+      onProgress: sink.onProgress,
+    };
+    let result: OrchestrateResult;
+    try {
+      result = await orchestrateNovelChapters(input);
+    } finally {
+      sink.dispose(); // 任务结束：不再补写窗口内的进度（终态写会清掉 progress）
+    }
     await enqueueTaskWrite(task.id, async () => {
       const disk = await readJson<TaskFile>(file).catch(() => null);
       await writeJsonAtomicRetry(file, {
