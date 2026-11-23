@@ -89,6 +89,7 @@ export interface TaskFile {
   cancelRequested?: boolean; // 取消标志：段间/章间生效（当前段跑完即停）
   progress?: TaskProgress; // 执行期增量；终态置 undefined
   resultMessages?: number; // 终态：本次任务入库章数（done 时有）
+  warning?: string; // 终态：部分完成说明（取消/超时停链——「已完成 N/M 章」）
   resultMessageIds?: string[]; // 终态：入库消息 id 列表（客户端同步本地视图的唯一依据）
 }
 

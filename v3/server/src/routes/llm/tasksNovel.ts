@@ -120,14 +120,27 @@ export function enqueueTaskWrite<T>(id: string, fn: () => Promise<T>): Promise<T
  * isCancelled：每次调用重读任务文件（文件缺失/损坏 → false——让链自然结束于终态写，
  * 不因文件瞬断误判取消）。
  */
-function makeCancelChecker(id: string): () => boolean {
+/** 任务级总时长上限（每章 20 分钟 + 基础 5 分钟组装/润色余量）：超时视同取消——
+ *  生产实证 30 分钟卡死案例（第 3 章 assembling 阶段上游挂住无进展且无超时保护）。
+ *  已完成章保留（D6），任务终态标「生成超时」可重新发起。 */
+export const CHAPTER_TASK_TIMEOUT_MS = 20 * 60 * 1000;
+const TASK_TIMEOUT_BASE_MS = 5 * 60 * 1000;
+
+function makeCancelChecker(id: string, deadline: number): () => boolean {
   const file = taskFileOf(id);
+  let lastRead = 0;
+  let cached = false;
   return () => {
+    if (Date.now() > deadline) return true; // 超时即取消（时间条件优先，不再读盘）
+    const now = Date.now();
+    if (now - lastRead < 5000) return cached; // 5s 节流：段间/轮间检查不逐次打盘
+    lastRead = now;
     try {
-      return (JSON.parse(readFileSync(file, 'utf8')) as { cancelRequested?: boolean }).cancelRequested === true;
+      cached = (JSON.parse(readFileSync(file, 'utf8')) as { cancelRequested?: boolean }).cancelRequested === true;
     } catch {
-      return false;
+      cached = false;
     }
+    return cached;
   };
 }
 
@@ -169,7 +182,7 @@ export async function executeNovelChapter(task: TaskFile): Promise<void> {
       outline: task.outline ?? false,
       ...(task.targetId ? { targetId: task.targetId } : {}),
       ...(task.partial ? { partial: task.partial } : {}),
-      isCancelled: makeCancelChecker(task.id),
+      isCancelled: makeCancelChecker(task.id, t0 + TASK_TIMEOUT_BASE_MS + CHAPTER_TASK_TIMEOUT_MS * (task.chapters ?? 1)),
       onProgress,
     });
     await enqueueTaskWrite(task.id, async () => {
@@ -178,6 +191,10 @@ export async function executeNovelChapter(task: TaskFile): Promise<void> {
         ...(disk ?? task),
         status: result.failed ? 'failed' : 'done',
         ...(result.failed ? { error: result.failed } : {}),
+        // 部分完成（取消/超时停链）：warning 说明如实透出（书架卡片/书页可展示「已完成 N/M 章」）
+        ...(result.stopped && result.done < (task.chapters ?? 1)
+          ? { warning: `已停止：完成 ${result.done}/${task.chapters ?? 1} 章后达到时长上限或手动取消——已完成章节已保留，可重新发起续写` }
+          : {}),
         elapsedMs: Date.now() - t0,
         resultMessages: result.done, // 终态：本次任务入库章数（取消/部分完成如实计数——D6）
         resultMessageIds: result.messageIds, // 终态：入库消息 id 列表（客户端同步本地视图唯一依据）
