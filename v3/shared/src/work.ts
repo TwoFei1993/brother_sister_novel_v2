@@ -20,6 +20,110 @@ export const GenreTypeSchema = z.enum([
 ]);
 export type GenreType = z.infer<typeof GenreTypeSchema>;
 
+/**
+ * 内容形态（用户需求 2026-11-24：番茄小短篇/红果短剧剧本/电影/电视剧剧本等——
+ * 建书时选形态，形态决定体量目标、结构规范与格式指令，注入每次生成）。
+ * 全部形态走 novel 续写链路：剧本形态的「章」= 集/幕，正文即剧本文本。
+ */
+export const FormatTypeSchema = z.enum([
+  'default', // 不指定（默认网文长篇）
+  'fanqie_short', // 番茄小短篇
+  'novel_fanqie', // 番茄小说
+  'novel_qidian', // 起点小说
+  'script_hongguo', // 红果短剧剧本
+  'script_movie', // 电影剧本
+  'script_tv', // 电视剧剧本
+]);
+export type FormatType = z.infer<typeof FormatTypeSchema>;
+
+export interface FormatPreset {
+  label: string;
+  /** 每章/每集目标字数（建书时自动填 targetChapterWords） */
+  chapterWords: number;
+  /** 章节/集数建议（建书时自动填 desiredChapterCount；0=连载不设限） */
+  chapters: number;
+  /** 结构规范（注入设定块：几幕/分集/章节节奏） */
+  structureNote: string;
+  /** 格式指令（注入要求块最高优先级区：正文形态与写法） */
+  formatNote: string;
+}
+
+export const FORMAT_LABELS: Record<FormatType, string> = {
+  default: '默认网文长篇',
+  fanqie_short: '番茄小短篇',
+  novel_fanqie: '番茄小说',
+  novel_qidian: '起点小说',
+  script_hongguo: '红果短剧剧本',
+  script_movie: '电影剧本',
+  script_tv: '电视剧剧本',
+};
+
+export const FORMAT_PRESETS: Partial<Record<FormatType, FormatPreset>> = {
+  fanqie_short: {
+    label: '番茄小短篇',
+    chapterWords: 2000,
+    chapters: 10,
+    structureNote: '短篇完结体：全篇 8-12 章约 2 万字收束；前三章必须完成冲突建立与核心悬念；每章至少一个反转或钩子；结局闭环不留烂尾',
+    formatNote:
+      '番茄小短篇体：高密度快节奏——开篇前三段直入冲突；每 500 字左右一个信息增量或反转钩；' +
+      '删除一切与主线无关的铺陈；情绪冲击优先于景物描写；完结章必须回收全部伏笔',
+  },
+  novel_fanqie: {
+    label: '番茄小说',
+    chapterWords: 2200,
+    chapters: 0, // 连载不设限
+    structureNote: '番茄连载体：单章 2000-2500 字自成一个小高潮；每 10 章一个大情节段落；黄金三章原则（前三章定生死）',
+    formatNote:
+      '番茄体：快节奏强钩子——每章开头承接上章钩子、结尾必留新钩；对话占比高、句子短；' +
+      '信息密度优先，删一切慢热铺垫；升级/打脸/收获等爽点节奏稳定供应',
+  },
+  novel_qidian: {
+    label: '起点小说',
+    chapterWords: 3600,
+    chapters: 0,
+    structureNote: '起点连载体：单章 3000-4000 字；前三章完成世界观铺陈与主角金手指亮相；升级体系清晰、每个大情节段有明确成长',
+    formatNote:
+      '起点体：爽点前置、渐进化升级——主角每次行动都有目标与收获；铺垫扎实、世界观细节随剧情自然展开；' +
+      '对话与叙述均衡；章末留期待感但不必强反转',
+  },
+  script_hongguo: {
+    label: '红果短剧剧本',
+    chapterWords: 500,
+    chapters: 80,
+    structureNote:
+      '竖屏短剧集：每集一个独立小事件（约 1-2 分钟剧情），集末必留强钩子；全剧主线为「身份误会/逆袭打脸/情感拉扯」式连续反转；每 10 集一个大反转',
+    formatNote:
+      '竖屏短剧剧本格式：每集以场景标注开头（如「内景 - 客厅 - 夜」），正文为「动作描述 + 角色对白」交替；' +
+      '对白口语化、短句、强冲突；每集结尾必须是悬念钩（新危机/真相反转/身份揭露）；不要小说式心理描写，一切通过动作与对白呈现',
+  },
+  script_movie: {
+    label: '电影剧本',
+    chapterWords: 3000,
+    chapters: 10, // 三幕 10 个场景序列 ≈ 3 万字 ≈ 100 分钟
+    structureNote:
+      '电影三幕结构：第一幕建置（25%）、第二幕对抗（50%）、第三幕结局（25%）；每章=一个场景序列；中点必须有一次重大反转',
+    formatNote:
+      '标准电影剧本格式：每个场景以场景头开头（「内景/外景 - 地点 - 日/夜」），随后是动作描述（现在时、只写可见可闻）与角色对白；' +
+      '不写小说式心理描写与镜头术语；每场戏必须推进剧情或揭示人物；全片一个核心戏剧问题贯穿',
+  },
+  script_tv: {
+    label: '电视剧剧本',
+    chapterWords: 8000,
+    chapters: 12,
+    structureNote:
+      '电视剧分集结构：每章=一集（约 45 分钟剧情量），集内有 A 线（主线）+ B 线（副线）交替；集末双钩（主线悬念+情感悬念）；季终集收束当季主线',
+    formatNote:
+      '电视剧剧本格式：场景头 + 动作描述 + 对白；多线并行时以「场景转换」衔接；' +
+      '对白占比高于电影（信息量大）；每集内部有完整小冲突弧，集与集之间主线递进',
+  },
+};
+
+/** 形态 → 模板；default 返回 null（走默认网文长篇，不注入形态块） */
+export function formatPresetOf(format: FormatType): FormatPreset | null {
+  if (format === 'default') return null;
+  return FORMAT_PRESETS[format] ?? null;
+}
+
 /** 同人衍生类型（用户需求 2026-11-22：软件理解「同人」——原著信息随书资料注入生成） */
 export const FandomTypeSchema = z.enum([
   'continue', // 续写原作剧情
@@ -203,6 +307,9 @@ export const NovelSettingsSchema = z.strictObject({
   /** 主预设条目按书覆盖（prompt identifier → 是否启用；只存本书明确改动过的条目）——
    *  文风/情感基调/附加选项等分组条目每本书自己选，不改预设全局启停（分组识别见 preset-overrides） */
   presetPromptOverrides: z.record(z.string(), z.boolean()).optional(),
+  /** 内容形态（用户需求 2026-11-24：番茄小短篇/红果短剧剧本/电影/电视剧剧本等——
+   *  建书时选形态，决定体量目标/结构规范/格式指令，注入每次生成；缺省=default 网文长篇） */
+  format: FormatTypeSchema.optional(),
   /** 分卷大纲（卷规划层，与章细纲分层）：生成第 N 章时按 startChapter 定位所属卷注入本卷主线；缺省视为无 */
   volumeOutlines: z.array(VolumeOutlineItemSchema).optional(),
   /** 人物状态卡（自动记忆）：AI 每 N 章抽取的动态事实（位置/伤势/持有物/关系），随【作品设定】注入；作者可编辑=最终事实源 */

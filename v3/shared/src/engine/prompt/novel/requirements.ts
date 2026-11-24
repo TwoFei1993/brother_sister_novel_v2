@@ -12,6 +12,8 @@
  *   按「他人说话/动作 → 主角所见所想 → 主角接话行动 → 又看到新细节 → 心理」交替推进）
  */
 import type { TavernPrompt } from '@shared/tavern';
+import type { FormatType } from '@shared/work';
+import { buildFormatBlock } from './format-block';
 import { WRITING_STYLE_LABELS, type WritingStyle } from '@shared/work';
 
 /** 基调/文风执行位（scanAndAssemble 从 NovelSettings 解析后传入） */
@@ -153,6 +155,7 @@ export function buildChapterRequirement(
   progress?: { chapter: number; total: number },
   styleBits?: StyleBits,
   segment?: SegmentInfo,
+  format?: FormatType,
 ): string {
   // 全书创作目标（借鉴成熟写作软件：目标章数驱动节奏）——接近尾声时提示收束伏笔，
   // 超出目标不再硬刹车（作者加章是常态，只提示不强制）
@@ -181,7 +184,9 @@ export function buildChapterRequirement(
       ? '  ③本段结尾停在场景推进中即可，不需要章末悬念钩子（后续段由系统自动续写拼接）\n'
       : '  ③本段是本章收尾：章末必须留至少一个未解决的悬念、新麻烦或未完成的行动，驱动读者进入下一章\n'
     : '  ③章末必须留至少一个未解决的悬念、新麻烦或未完成的行动，驱动读者进入下一章\n';
+  const formatHead = buildFormatBlock(format);
   return (
+    (formatHead ? `${formatHead}\n` : '') +
     (styleHead ? `${styleHead}\n` : '') +
     '【本章写作要求】\n' +
     '- 正文第一行先输出本章标题（格式：`# 第N章 标题` 一行），紧接正文；除此之外不要输出其他标题或元信息\n' +
@@ -213,13 +218,20 @@ export function buildChapterRequirement(
  * remaining（可选）：本章还需补写的字数——传入时字数行按「补完剩余后收束（本章总计
  * 约 targetWords）」改写（用户实测：续写轮再写满额字数导致章节越来越长的直接根因）。
  */
-export function buildContinueRequirement(targetWords: number, final = true, remaining?: number): string {
+export function buildContinueRequirement(
+  targetWords: number,
+  final = true,
+  remaining?: number,
+  format?: FormatType,
+): string {
   const stopLine = final
     ? remaining !== undefined
       ? `- 【字数纪律（硬性要求）】补写约 ${remaining} 字后**立即收束本章**（含前面已写部分本章总计约 ${targetWords} 字，不得超过）——写完当前场景的收尾句就停，禁止为凑长度继续铺开新剧情；章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章\n`
       : `- 【字数纪律（硬性要求）】写约 ${targetWords} 字（上下浮动不超过 20%）后**立即收束本章**，禁止超出；章末留一个未解决的悬念或未完成的行动，驱动读者进入下一章\n`
     : `- 直接从剧情的当前时刻继续推进，本段写约 ${targetWords} 字——写满后在**最近的段落末尾**自然停笔（本章由系统分段拼接，后续还会继续写；不要收尾、不要结局感）\n`;
+  const formatHead = buildFormatBlock(format);
   return (
+    (formatHead ? `${formatHead}\n` : '') +
     '【续写要求（本章已写了一半）】\n' +
     '- 上下文最后一条「小说家」消息就是本章已写正文——从它的结尾无缝接着往下写，当作这段文字是你自己刚写出的\n' +
     '- 严格禁止：重新开始本章、另写新开头、输出章节标题（# 第N章 之类）、重写或复述已写内容、总结前文\n' +
@@ -262,6 +274,8 @@ export function pickChapterRequirement(opts: {
   targetWords: number;
   progress?: { chapter: number; total: number };
   styleBits?: StyleBits;
+  /** 内容形态（番茄小短篇/红果短剧剧本等）：形态规范块注入要求块 */
+  format?: FormatType;
 }): string {
   if (opts.continuation) {
     const seg = opts.segment;
