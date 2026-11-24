@@ -47,6 +47,7 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [autoPicked, setAutoPicked] = useState(false);
   const [pickErr, setPickErr] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string> | null>(null);
 
@@ -74,6 +75,16 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
     if (dirtyRef.current) return;
     setOverrides(work.settings.presetPromptOverrides ?? {});
   }, [work.revision]);
+
+  // 自动 AI 预选（用户需求 2026-11-24：AI 先预选好，人工调整）——分组加载完成且本书从未
+  // 保存过覆盖表时自动触发一次；已有覆盖表的书不重触发（尊重人工调整）
+  useEffect(() => {
+    if (autoPicked || groups === null || work.presetId === '') return;
+    if (work.settings.presetPromptOverrides !== undefined) return;
+    setAutoPicked(true);
+    void aiPick();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, autoPicked, work.presetId, work.settings.presetPromptOverrides]);
 
   function apply(next: PresetPromptOverrides): void {
     dirtyRef.current = true;
@@ -152,6 +163,7 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
       <p className="mb-1 text-sm font-medium">主预设《{presetName}》的文风与选项</p>
       <p className="mb-3 text-xs text-[hsl(var(--fg-muted))]">
         只对这本书生效，不改预设本身，也不影响其他书。预设文风为主，下方内置风格为附加微调。
+        标「默认」的为预设默认包含的通用规范（反抢话/反科幻等），保持开启即可。
         {changedCount > 0 && ` 本书已改 ${changedCount} 项（标「已改」）。`}
       </p>
       <div className="mb-3 flex items-center gap-2">
@@ -278,6 +290,14 @@ function GroupSection({ group, workId, isOpen, onToggleOpen, overrides, reasons,
                     <span className="min-w-0 flex-1 break-words">{m.name}</span>
                     {on !== m.enabled && (
                       <span className="shrink-0 rounded bg-[hsl(var(--accent))]/10 px-1 text-[10px] text-[hsl(var(--accent))]">已改</span>
+                    )}
+                    {m.enabled && (
+                      <span
+                        className="shrink-0 rounded bg-[hsl(var(--fg-muted))]/10 px-1 text-[10px] text-[hsl(var(--fg-muted))]"
+                        title="预设默认包含的条目"
+                      >
+                        默认
+                      </span>
                     )}
                     {reasons?.[m.identifier] && (
                       <span
