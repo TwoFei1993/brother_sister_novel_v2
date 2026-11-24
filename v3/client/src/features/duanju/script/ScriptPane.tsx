@@ -95,6 +95,18 @@ export default function ScriptPane({ workId }: { workId: string }) {
     }
   }, [project]);
 
+  // 一键转短剧：转换流程写入的一次性标志 → 剧本已定稿且未拆解时自动发起 AI 拆解
+  //（后续流水线：审核卡 → 提取角色 → 提取场景 → 逐集拆镜头，全部自动；用完即清防误触发）
+  useEffect(() => {
+    const key = `duanju-auto-breakdown-${workId}`;
+    if (sessionStorage.getItem(key) !== '1') return;
+    if (!project) return; // project 未载入时等待下一个 effect 触发
+    sessionStorage.removeItem(key);
+    if (!project.script.confirmed || project.episodes.length > 0 || bgRunning) return;
+    void runBreakdown();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, workId]);
+
   if (!project) return null;
 
   async function saveScript(next?: {

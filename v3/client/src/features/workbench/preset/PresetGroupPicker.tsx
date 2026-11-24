@@ -46,6 +46,9 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
   const dirtyRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [pickErr, setPickErr] = useState<string | null>(null);
+  const [reasons, setReasons] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
     if (work.presetId === '') return undefined;
@@ -76,6 +79,30 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
     dirtyRef.current = true;
     setDirty(true);
     setOverrides(next);
+  }
+
+  /** AI 预选（用户需求：AI 先根据书籍要求预选好，人工调整）——结果进草稿不落库，用户可改再保存 */
+  async function aiPick(): Promise<void> {
+    if (picking) return;
+    setPicking(true);
+    setPickErr(null);
+    setReasons(null);
+    try {
+      const r = await apiFetch<{ overrides: Record<string, boolean>; reasons: Record<string, string> }>(
+        `/api/works/${work.id}/preset-pick`,
+        { method: 'POST', body: '{}' },
+      );
+      dirtyRef.current = true;
+      setDirty(true);
+      setOverrides(r.overrides);
+      setReasons(r.reasons);
+      // 展开有推荐的分组，便于直接看到 AI 选了什么
+      setOpen((o) => ({ ...o, style: true, tone: true }));
+    } catch (e) {
+      setPickErr(e instanceof Error ? e.message : 'AI 预选失败，请重试');
+    } finally {
+      setPicking(false);
+    }
   }
 
   async function save(): Promise<void> {
@@ -127,6 +154,23 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
         只对这本书生效，不改预设本身，也不影响其他书。预设文风为主，下方内置风格为附加微调。
         {changedCount > 0 && ` 本书已改 ${changedCount} 项（标「已改」）。`}
       </p>
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void aiPick()}
+          disabled={picking || groups === null}
+          data-testid="preset-ai-pick"
+          className="min-h-9 rounded-lg border border-[hsl(var(--accent))] px-3 text-xs font-medium text-[hsl(var(--accent))] disabled:opacity-40"
+        >
+          {picking ? 'AI 预选中…（约 30-60 秒）' : '✨ AI 预选（按本书信息自动挑选）'}
+        </button>
+        <span className="text-[11px] text-[hsl(var(--fg-muted))]">AI 按题材/基调/简介先选好，你可逐项调整后再保存</span>
+      </div>
+      {pickErr && (
+        <p className="mb-2 text-xs text-[hsl(var(--danger))]" data-testid="preset-pick-error" role="alert">
+          {pickErr}
+        </p>
+      )}
       {groups.length === 0 && (
         <p className="py-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="preset-overrides-empty">
           当前主预设没有可按书选择的文风分组。
@@ -143,6 +187,7 @@ export default function PresetGroupPicker({ work, onSaved }: Props) {
             isOpen={open[category] ?? DEFAULT_OPEN[category]}
             onToggleOpen={() => setOpen((o) => ({ ...o, [category]: !(o[category] ?? DEFAULT_OPEN[category]) }))}
             overrides={overrides}
+            reasons={reasons}
             onChange={apply}
           />
         );
@@ -172,6 +217,7 @@ interface GroupSectionProps {
   isOpen: boolean;
   onToggleOpen: () => void;
   overrides: PresetPromptOverrides;
+  reasons: Record<string, string> | null;
   onChange: (next: PresetPromptOverrides) => void;
 }
 
@@ -186,7 +232,7 @@ function splitSections(members: PresetGroupMember[]): Array<{ title?: string; me
   return sections;
 }
 
-function GroupSection({ group, workId, isOpen, onToggleOpen, overrides, onChange }: GroupSectionProps) {
+function GroupSection({ group, workId, isOpen, onToggleOpen, overrides, reasons, onChange }: GroupSectionProps) {
   const sections = splitSections(group.members);
   return (
     <section className="mb-2" data-testid={`preset-group-${group.category}`} data-open={isOpen ? 'true' : 'false'}>
@@ -232,6 +278,15 @@ function GroupSection({ group, workId, isOpen, onToggleOpen, overrides, onChange
                     <span className="min-w-0 flex-1 break-words">{m.name}</span>
                     {on !== m.enabled && (
                       <span className="shrink-0 rounded bg-[hsl(var(--accent))]/10 px-1 text-[10px] text-[hsl(var(--accent))]">已改</span>
+                    )}
+                    {reasons?.[m.identifier] && (
+                      <span
+                        className="shrink-0 rounded bg-[hsl(var(--accent))]/10 px-1 text-[10px] text-[hsl(var(--accent))]"
+                        title={`AI 推荐：${reasons[m.identifier]}`}
+                        data-testid="preset-ai-reason"
+                      >
+                        AI 推荐
+                      </span>
                     )}
                   </label>
                 );

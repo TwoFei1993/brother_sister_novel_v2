@@ -56,7 +56,7 @@ export default function MobileWork() {
     if (!work || !id || converting) return;
     if (
       !confirm(
-        '将创建一个新的短剧作品（小说本体不动）：剧本正文 = 小说全文并直接定稿，之后到剧本 tab 点「AI 拆解」即可走完短剧流程。继续？',
+        '将创建一个新的短剧作品（小说本体不动）：剧本正文 = 小说全文并直接定稿，进入后自动 AI 拆解并生成分镜。继续？',
       )
     )
       return;
@@ -65,6 +65,8 @@ export default function MobileWork() {
       const r = await apiFetch<{ work: { id: string } }>(`/api/works/${id}/convert-to-duanju`, {
         method: 'POST',
       });
+      // 一键到底：转换后自动发起 AI 拆解（ScriptPane 读此标志自动跑「拆解→角色→场景→分镜」流水线）
+      sessionStorage.setItem(`duanju-auto-breakdown-${r.work.id}`, '1');
       navigate(`/m/work/${r.work.id}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : '转换失败');

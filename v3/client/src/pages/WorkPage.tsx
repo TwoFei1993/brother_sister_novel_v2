@@ -134,6 +134,8 @@ export default function WorkPage() {
       const r = await apiFetch<{ work: { id: string } }>(`/api/works/${id}/convert-to-duanju`, {
         method: 'POST',
       });
+      // 一键到底：转换后自动发起 AI 拆解（ScriptPane 读此标志自动跑「拆解→角色→场景→分镜」流水线）
+      sessionStorage.setItem(`duanju-auto-breakdown-${r.work.id}`, '1');
       navigate(`/work/${r.work.id}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : '转换失败');
