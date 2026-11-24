@@ -344,6 +344,7 @@ export async function scanAndAssemble(
               segment: tail.segment,
               continueRemaining: tail.continueRemaining,
               targetWords,
+              format: work.settings.format,
               progress: {
                 chapter: nextChapterIndex(messages),
                 total: work.settings.desiredChapterCount,

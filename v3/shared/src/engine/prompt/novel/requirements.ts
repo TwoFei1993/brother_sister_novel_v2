@@ -250,8 +250,10 @@ export const SEGMENT_WORDS = 2500;
  * 情节/对话/事实保持不变，把关键场景写细写透；输出整章（带标题行，postprocess 剥离）。
  * 与「续写本章」（append 新剧情）互补：加长是原地加厚，续写是向后延展。
  */
-export function buildExpandRequirement(targetWords: number): string {
+export function buildExpandRequirement(targetWords: number, format?: FormatType): string {
+  const formatHead = buildFormatBlock(format);
   return (
+    (formatHead ? `${formatHead}\n` : '') +
     '【扩写要求（本章加长）】\n' +
     '- 上下文最后一条「小说家」消息是本章当前版本——把它扩写成更长的完整章节\n' +
     '- 保持情节、对话内容、人物关系与事实完全不变，禁止新增改变走向的情节；把关键场景写细写透：' +
@@ -283,8 +285,9 @@ export function pickChapterRequirement(opts: {
       seg ? seg.words : opts.targetWords,
       seg ? seg.part >= seg.parts : true,
       seg ? undefined : opts.continueRemaining,
+      opts.format,
     );
   }
-  if (opts.expandChapter) return buildExpandRequirement(opts.targetWords);
-  return buildChapterRequirement(opts.targetWords, opts.progress, opts.styleBits, opts.segment);
+  if (opts.expandChapter) return buildExpandRequirement(opts.targetWords, opts.format);
+  return buildChapterRequirement(opts.targetWords, opts.progress, opts.styleBits, opts.segment, opts.format);
 }
