@@ -96,16 +96,19 @@ export default function ScriptPane({ workId }: { workId: string }) {
   }, [project]);
 
   // 一键转短剧：转换流程写入的一次性标志 → 剧本已定稿且未拆解时自动发起 AI 拆解
-  //（后续流水线：审核卡 → 提取角色 → 提取场景 → 逐集拆镜头，全部自动；用完即清防误触发）
+  //（后续流水线：审核卡 → 提取角色 → 提取场景 → 逐集拆镜头，全部自动）
+  // 必须等本地编辑态同步完成再触发：同步 text 的 effect 与本 effect 在同一次提交里先后执行，
+  // 届时闭包里的 text 还是空串，runBreakdown 会按「剧本为空」直接返回（生产实测抓出的 bug）。
+  // 标志只在真正判定时清除；未就绪就等下一次 effect。
   useEffect(() => {
     const key = `duanju-auto-breakdown-${workId}`;
     if (sessionStorage.getItem(key) !== '1') return;
-    if (!project) return; // project 未载入时等待下一个 effect 触发
+    if (!project || text !== project.script.text) return; // project 未载入 / 编辑态未同步：等下一次
     sessionStorage.removeItem(key);
     if (!project.script.confirmed || project.episodes.length > 0 || bgRunning) return;
     void runBreakdown();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, workId]);
+  }, [project, workId, text]);
 
   if (!project) return null;
 

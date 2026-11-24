@@ -125,7 +125,7 @@ export default function WorkPage() {
     if (!work || !id || converting) return;
     if (
       !confirm(
-        '将创建一个新的短剧作品（小说本体不动）：剧本正文 = 小说全文并直接定稿，之后在剧本 tab 点「重新 AI 拆解」即可走完短剧流程。继续？',
+        '将创建一个新的短剧作品（小说本体不动）：剧本正文 = 小说全文并直接定稿，进入后自动 AI 拆解并生成分镜。继续？',
       )
     )
       return;
