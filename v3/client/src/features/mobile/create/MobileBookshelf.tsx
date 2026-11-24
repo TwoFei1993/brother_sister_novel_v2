@@ -11,9 +11,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Check, ListChecks, WandSparkles } from 'lucide-react';
 
 import { createWork, deleteWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
+import { defaultNovelSettings, type FormatType, type GenreType, type WritingStyle } from '@shared/work';
 import { selectStreamingWorkId, useGenerationStore } from '../../../stores/generation';
 import { groupByTag } from '../read/ReadShelf';
 import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
+import NewWorkOptions from '../../bookshelf/NewWorkOptions';
 
 const COLLAPSE_KEY = 'create-shelf-collapse-v1';
 
@@ -57,6 +59,9 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [protagonists, setProtagonists] = useState('');
   /** 手写模式：创建后直达正文，自己写/粘贴，再用 AI 润色（novel 专属） */
   const [handwrite, setHandwrite] = useState(false);
+  /** 写作风格 + 内容形态（用户反馈 2026-11-24：手机端新建小说此前没有这两个下拉——与桌面端建书共用 NewWorkOptions） */
+  const [writingStyle, setWritingStyle] = useState<WritingStyle>('default');
+  const [format, setFormat] = useState<FormatType>('default');
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
@@ -67,7 +72,14 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
       const work = await createWork(
         mode === 'duanju'
           ? { title: t, mode, genre, duanju: { targetEpisodes, style, protagonists: protagonists.trim() } }
-          : { title: t, mode, genre },
+          : {
+              title: t,
+              mode,
+              genre,
+              // 完整 settings 整体下发（server 严格校验）：题材 + 写作风格 + 内容形态（与桌面端建书一致；
+              // 此前手机端建书不传 settings，风格与形态恒为默认）
+              settings: { ...defaultNovelSettings, genre: genre as GenreType, writingStyle, format },
+            },
       );
       if (mode === 'novel' && handwrite) navigate(`/m/work/${work.id}`);
       else {
@@ -171,10 +183,19 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
             />
           </div>
         ) : (
+          <>
+            <NewWorkOptions
+              writingStyle={writingStyle}
+              format={format}
+              onStyleChange={setWritingStyle}
+              onFormatChange={setFormat}
+              selectClass="h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
+            />
           <label className="mb-4 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-handwrite">
             <input type="checkbox" checked={handwrite} onChange={(e) => setHandwrite(e.target.checked)} />
             ✍️ 从手写开始（自己写/粘贴正文，再用 AI 润色）
           </label>
+          </>
         )}
         <button
           type="button"

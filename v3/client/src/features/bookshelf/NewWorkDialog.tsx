@@ -19,15 +19,13 @@ import FieldHint from '../../components/FieldHint';
 import {
     defaultNovelSettings,
     FANDOM_TYPE_LABELS,
-    FORMAT_LABELS,
-    formatPresetOf,
-    WRITING_STYLE_LABELS,
     type FandomType,
     type FormatType,
     type WorkMode,
     type WritingStyle,
   } from '@shared/work';
 import { GENRE_OPTIONS, type Genre } from './genres';
+import NewWorkOptions from './NewWorkOptions';
 import {
   BindingSelector, EMPTY_BINDINGS, EMPTY_OPTIONS,
   type BindingKey, type BindingOptions, type Bindings,
@@ -58,7 +56,6 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
   const [fandomSource, setFandomSource] = useState('');
   // 内容形态（用户需求 2026-11-24：番茄小短篇/红果短剧剧本等——决定体量与格式，随 settings 下发）
   const [format, setFormat] = useState<FormatType>('default');
-  const [formatHint, setFormatHint] = useState('');
   const [fandomType, setFandomType] = useState<FandomType | ''>('');
   const [fandomNotes, setFandomNotes] = useState('');
   // 短剧专属字段（共识 D2/D9：目标集数/画风/主角自由设定）
@@ -215,30 +212,16 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
           </select>
         </label>
 
-        {/* 内容形态（用户需求 2026-11-24：番茄小短篇/红果短剧剧本等——形态决定体量/结构/格式） */}
+        {/* 写作风格 + 内容形态（novel/chat 显示，短剧不消费）——与手机端建书共用 NewWorkOptions */}
         {mode !== 'duanju' && (
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">内容形态</span>
-            <select
-              value={format}
-              onChange={(e) => {
-                const v = e.target.value as FormatType;
-                setFormat(v);
-                // 选形态自动联动体量（每章字数在生成时按形态模板注入，这里只展示提示）
-                const tpl = formatPresetOf(v);
-                setFormatHint(tpl ? `每章约 ${tpl.chapterWords} 字${tpl.chapters > 0 ? ` · 建议 ${tpl.chapters} 章/集完结` : ' · 连载不设限'}` : '');
-              }}
-              data-testid="new-work-format"
-              className={selectClass}
-            >
-              {Object.entries(FORMAT_LABELS).map(([v, label]) => (
-                <option key={v} value={v} className={OPTION_CLS}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            {formatHint && <span className="mt-1 block text-[11px] text-[hsl(var(--fg-muted))]">{formatHint}</span>}
-          </label>
+          <NewWorkOptions
+            writingStyle={writingStyle}
+            format={format}
+            onStyleChange={setWritingStyle}
+            onFormatChange={setFormat}
+            selectClass={selectClass}
+            optionClass={OPTION_CLS}
+          />
         )}
 
         {/* 同人信息（题材=同人衍生时显示；用户需求 2026-11-22：软件理解「同人」） */}
@@ -290,25 +273,6 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
               />
             </label>
           </div>
-        )}
-
-        {/* 写作风格（M1 Task 4）：novel/chat 显示，短剧不消费 */}
-        {mode !== 'duanju' && (
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-sm text-[hsl(var(--fg-muted))]">写作风格</span>
-            <select
-              data-testid="new-work-style"
-              value={writingStyle}
-              onChange={(e) => setWritingStyle(e.target.value as WritingStyle)}
-              className={selectClass}
-            >
-              {Object.entries(WRITING_STYLE_LABELS).map(([value, label]) => (
-                <option key={value} value={value} className={OPTION_CLS}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
         )}
 
         {mode === 'duanju' && (
