@@ -17,7 +17,7 @@ import type { Message } from '@shared/message';
 
 import SelectionTools from '../../workbench/SelectionTools';
 import BindingsPane from './BindingsPane';
-import PresetGroupPicker from '../../workbench/preset/PresetGroupPicker';
+import StylePane from './style/StylePane';
 import PublishPanel from './publish/PublishPanel';
 import VoiceCastPane from './voice/VoiceCastPane';
 import { OutlinePane } from './panes/OutlinePane';
@@ -220,13 +220,10 @@ export default function MobileWork() {
               <>
                 <AssetsPane work={work} nextIndex={chapters.length + 1} onUpdated={setWork} />
                 <BindingsPane work={work} onUpdated={setWork} />
-                {work.presetId !== '' && (
-                  <div className="px-4 pb-1" data-testid="preset-overrides-pane">
-                    <section className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">
-                      <PresetGroupPicker key={work.id} work={work} onSaved={setWork} />
-                    </section>
-                  </div>
-                )}
+                {/* 文风与基调：写作风格 / 故事基调 + 主预设绑定（绑定后才出现预设文风/情感基调/附加选项） */}
+                <div className="px-4 pb-1" data-testid="style-pane-wrap">
+                  <StylePane key={work.id} work={work} onSaved={setWork} />
+                </div>
                 <div className="px-4">
                   <VoiceCastPane work={work} onUpdated={setWork} />
                 </div>
