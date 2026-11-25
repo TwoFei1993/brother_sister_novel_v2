@@ -87,8 +87,9 @@ function easyvoiceBase(): string {
   return (typeof url === 'string' ? url : '').replace(/\/+$/, '');
 }
 
-/** 单段合成 → 可播放音频 URL（speed：MiniMax 走 speed 参数、Edge 走 rate 百分比） */
-async function synthParaUrl(text: string, castId: string, speed: number): Promise<string> {
+/** 单段合成 → 可播放音频 URL（speed：MiniMax 走 speed 参数、Edge 走 rate 百分比）。
+ *  导出供音色试听复用（voice-preview）——双引擎路由只此一份 */
+export async function synthParaUrl(text: string, castId: string, speed: number): Promise<string> {
   if (engineOf(castId) === 'minimax') {
     const res = await fetch('/api/tts/minimax', {
       method: 'POST',
