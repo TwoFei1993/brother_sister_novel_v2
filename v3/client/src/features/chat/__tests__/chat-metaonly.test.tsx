@@ -54,7 +54,7 @@ function stubMessagesPost(): void {
 const SPEAKER = { id: 'c1', name: '哥哥' };
 
 async function finalizeWith(buffer: string): Promise<{ turn: Awaited<ReturnType<typeof finalizeChatGeneration>>; posts: number }> {
-  useGenerationStore.setState({ slots: { w1: { streaming: true, buffer, thinkingBuffer: '', targetMessageId: null, error: null, partialKept: false, finishReason: null } } });
+  useGenerationStore.setState({ slots: { w1: { streaming: true, buffer, thinkingBuffer: '', targetMessageId: null, error: null, partialKept: false, finishReason: null, progress: null, retried: false } } });
   const input: ChatFinalizeInput = {
     work: chatWork(),
     userText: '晚上吃什么',

@@ -15,7 +15,7 @@ import type { Work } from '@shared/work';
 
 import { NOVEL_CHAPTERS_MAX } from '../lib/llmTask';
 import { notifyDone, showToast } from '../lib/toast';
-import { getGenSlot, selectStreamingWorkId, useGenSlot, useGenSlots, useGenerationStore } from '../stores/generation';
+import { getGenSlot, selectStreamingWorkId, useGenSlot, useGenSlots, useGenerationStore, type GenProgress } from '../stores/generation';
 import { useWorkStore } from '../stores/work';
 
 import {
@@ -43,6 +43,10 @@ export interface UseGenerateResult {
   error: { code: string; message: string } | null;
   partialKept: boolean;
   targetMessageId: string | null;
+  /** 后台任务的章进度（任务内口径；null=非后台任务或未开始）——切出回来后的恢复路径同样有值 */
+  progress: GenProgress | null;
+  /** 本章上一稿被判无效、server 已自动重试（同章进度回落）——界面提示「上一稿无效，已自动重试」 */
+  retried: boolean;
   /** novel 模式：按剧情指令生成一章，返回入库消息（失败返回 null） */
   generateChapter: (work: Work, messages: Message[], directive: string) => Promise<Message | null>;
   /** 断流后「继续」（mode=continue 任务）：半成品作 server 续写基底 */
@@ -259,6 +263,8 @@ export function useGenerate(workId?: string | null): UseGenerateResult {
     error: slot?.error ?? null,
     partialKept: slot?.partialKept ?? false,
     targetMessageId: slot?.targetMessageId ?? null,
+    progress: slot?.progress ?? null,
+    retried: slot?.retried ?? false,
     generateChapter,
     continueFromPartial,
     swipeRegenerate,

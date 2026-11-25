@@ -24,6 +24,15 @@ import { polishChapterText } from './polish';
 import MobileTtsBar from '../voice/MobileTtsBar';
 import type { ChapterMsg, Gen } from './types';
 
+/** 流式状态行的完成进度：发起页用 batch（全书口径）；切出回来的恢复路径 batch 已丢，用槽进度（任务内口径） */
+function progressLabel(gen: Gen): string {
+  if (gen.batch && gen.batch.total > 1) return ` · 已完成 ${gen.batch.done}/${gen.batch.total} 章`;
+  if (gen.progress && gen.progress.chapterTotal > 1) {
+    return ` · 已完成 ${gen.progress.done}/${gen.progress.chapterTotal} 章（本批）`;
+  }
+  return '';
+}
+
 export function TextPane({
   work,
   chapters,
@@ -324,8 +333,13 @@ export function TextPane({
           <div className="rounded-xl border border-[hsl(var(--accent))]/40 bg-[hsl(var(--surface))] p-4">
             <p className="mb-1 flex items-center justify-center gap-1.5 text-xs text-[hsl(var(--accent))]">
               <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[hsl(var(--accent))]" />
+              {/* 章号取自本地章数：多章任务每写完一章即回填本地视图（useNovelTask 翻章拍），
+                  所以这里始终是「正在写的那一章」。完成进度：发起页用 batch（全书口径）；
+                  切出回来的恢复路径用槽进度（任务内口径） */}
               <span className="truncate">
-                {rerollTarget ? `AI 重写第${rerollTarget.chapter.index}章（生成新版本）…` : `AI 续写中（第${chapters.length + 1}章）…`}
+                {rerollTarget
+                  ? `AI 重写第${rerollTarget.chapter.index}章（生成新版本）…`
+                  : `AI 续写中（第${chapters.length + 1}章）${progressLabel(gen)}${gen.retried ? '（上一稿无效，已自动重试）' : ''}…`}
               </span>
             </p>
             <p className="m-reader-body whitespace-pre-wrap text-[15px] leading-8">{gen.buffer || '（思考中，正文即将开始…）'}</p>

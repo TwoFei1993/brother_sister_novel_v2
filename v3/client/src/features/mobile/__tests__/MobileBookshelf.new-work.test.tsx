@@ -8,10 +8,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { listPresets } from '../../../api/library';
 import { createWork, listWorks } from '../../../api/works';
 
 import MobileBookshelf from '../create/MobileBookshelf';
 
+vi.mock('../../../api/library', () => ({ listPresets: vi.fn() }));
 vi.mock('../../../api/works', () => ({
   createWork: vi.fn(),
   deleteWork: vi.fn(),
@@ -81,6 +83,7 @@ async function submit(container: HTMLElement): Promise<void> {
 
 beforeEach(() => {
   vi.mocked(listWorks).mockReset().mockResolvedValue([]);
+  vi.mocked(listPresets).mockReset().mockResolvedValue([]);
   createWorkMock.mockReset().mockResolvedValue({ id: 'new-work-1' } as never);
   localStorage.clear();
   sessionStorage.clear();
@@ -142,5 +145,24 @@ describe('手机端新建作品：写作风格与内容形态', () => {
     await click(container.querySelector('[data-testid="new-work-mode-duanju"]'), '短剧模式');
     expect(container.querySelector('[data-testid="new-work-style"]')).toBeNull();
     expect(container.querySelector('[data-testid="new-work-format"]')).toBeNull();
+  });
+
+  it('主预设下拉（2026-11-26：手机端建书此前不带主预设）：默认不绑定，选了随 createWork 下发', async () => {
+    vi.mocked(listPresets).mockResolvedValue([{ id: 'p1', name: 'Sudachi' }]);
+    const container = await openNovelDialog();
+    await act(async () => {
+      await Promise.resolve(); // 等预设列表加载
+    });
+    const preset = container.querySelector<HTMLSelectElement>('[data-testid="new-work-preset"]');
+    expect(preset).not.toBeNull();
+    expect([...preset!.options].map((o) => o.textContent)).toEqual(['不绑定', 'Sudachi']);
+    await fillTitle(container, '不绑定的书');
+    await submit(container);
+    expect(createWorkMock.mock.calls[0]![0].presetId).toBe('');
+    await click(container.querySelector('[data-testid="new-work-btn"]'), '新建入口');
+    await selectOption(container, 'new-work-preset', 'p1');
+    await fillTitle(container, '绑定预设的书');
+    await submit(container);
+    expect(createWorkMock.mock.calls[1]![0].presetId).toBe('p1');
   });
 });

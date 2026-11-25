@@ -8,5 +8,5 @@ export type ChapterMsg = Message & { chapter: NonNullable<Message['chapter']> };
 
 export type Gen = Pick<
   UseGenerateResult,
-  | 'streaming' | 'streamingWorkId' | 'otherStreaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate' | 'extendChapter' | 'thinkingBuffer' | 'runBatch' | 'runByOutline' | 'batch'
+  | 'streaming' | 'streamingWorkId' | 'otherStreaming' | 'buffer' | 'partialKept' | 'error' | 'clearError' | 'generateChapter' | 'continueFromPartial' | 'swipeRegenerate' | 'extendChapter' | 'thinkingBuffer' | 'runBatch' | 'runByOutline' | 'batch' | 'progress' | 'retried'
 >;

@@ -182,7 +182,7 @@ describe('ChatWorkspace 断流「继续」（review #2）', () => {
 
     const c = await renderWorkspace(baseWork());
     // 直接模拟「断流发生」（store 已置 partialKept），未经过本轮 sendMessage → ref 为空
-    useGenerationStore.setState({ slots: { w1: { streaming: false, buffer: '', thinkingBuffer: '', targetMessageId: null, error: { code: 'streamIncomplete', message: '中断' }, partialKept: true, finishReason: null } } });
+    useGenerationStore.setState({ slots: { w1: { streaming: false, buffer: '', thinkingBuffer: '', targetMessageId: null, error: { code: 'streamIncomplete', message: '中断' }, partialKept: true, finishReason: null, progress: null, retried: false } } });
     await act(async () => {});
     await click(c, '[data-testid="chat-continue-btn"]');
     expect(generateRound).toBe(1);

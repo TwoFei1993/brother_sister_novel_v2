@@ -121,6 +121,8 @@ function makeGen(overrides: Partial<Gen> = {}): Gen {
     runBatch: vi.fn(),
     runByOutline: vi.fn(),
     batch: null,
+    progress: null,
+    retried: false,
     ...overrides,
   };
 }

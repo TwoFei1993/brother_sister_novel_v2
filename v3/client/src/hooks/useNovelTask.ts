@@ -72,6 +72,12 @@ interface ActiveLoop {
   workId: string;
   stopRequested: boolean;
   cancelled: boolean;
+  /** 翻章拍回填上一章进行中：期间不回流、since 保持 0（清空 buffer 后从 0 重收当前章全文） */
+  resetting: boolean;
+  /** 已见到的最大章序（任务内序，1 起；0=尚未收到进度）——区分「翻章」与「同章重写」 */
+  chapterIndex: number;
+  /** 进度回落后的下一拍：全文到达时整体替换 buffer（不追加） */
+  replaceNext: boolean;
   /** 本循环是否持有本书槽的 UX（回流 appendChunk/终态收束）：槽已停止/失败态时 false——
    *  只同步终态入库消息，不碰「继续」buffer（D6 半成品保留） */
   ownsSlot: boolean;
@@ -94,6 +100,21 @@ async function syncResultMessages(workId: string, ids: string[]): Promise<Messag
   return ids.map((id) => byId.get(id)).filter((m): m is Message => m !== undefined);
 }
 
+/**
+ * 运行中回填：把已入库的章同步进本地视图（翻章拍调用）。只追加本地没有的消息。
+ * 不等任务终态——否则上一章的正文随 buffer 清空而在界面上「消失」、章数提示停在旧值
+ * （用户实测 2026-11-26：生成第一章完了就消失了，随后写第二章时上面还显示在生成第一章）。
+ * tail 取 done + 30：覆盖已入库的 done 章加少量非章节消息，不拉整本。
+ */
+async function backfillStored(workId: string, done: number): Promise<void> {
+  if (done <= 0) return;
+  const page = await listMessages(workId, { tail: done + 30 });
+  const known = new Set(useWorkStore.getState().messages.map((m) => m.id));
+  for (const m of page.messages) {
+    if (!known.has(m.id)) useWorkStore.getState().upsertLocal(m);
+  }
+}
+
 export function useNovelTask(workId?: string | null) {
   const activeRef = useRef<ActiveLoop | null>(null);
 
@@ -114,21 +135,53 @@ export function useNovelTask(workId?: string | null) {
           continue; // 单次轮询抖动静默重试（网络瞬断/服务重启间隙）
         }
         if (payload.status === 'running') {
-          // 翻章检测：progressLen 回落（含 0）= server 换章 text 清零。槽 buffer 重置为
-          // 新章开头（targetMessageId 保留——入库幂等键不变），since 归零下一拍重收全文
+          if (loop.resetting) continue; // 上一章回填中：不回流、since 保持 0
+          // 进度回落（progressLen < since）有两种来源，按章序区分；两者都 since 归零、下一拍重收全文：
+          // ① 翻章（章序变大）：先把已入库的上一章回填本地视图，再清空 buffer（targetMessageId 保留——入库幂等键不变）
+          // ② 同章重写（首稿无效自动重试 / 续写轮后处理改写）：旧稿不清空（否则正文闪断约一拍），
+          //    标记已重试，新稿到达后整体替换（深度测试实测 2026-11-26）
           if (payload.progressLen < since) {
             since = 0;
+            loop.replaceNext = true;
+            const chapterChanged = payload.chapterIndex > loop.chapterIndex;
+            loop.chapterIndex = Math.max(loop.chapterIndex, payload.chapterIndex);
             if (loop.ownsSlot && !loop.stopRequested) {
-              const prevTarget = getGenSlot(wid)?.targetMessageId ?? '';
-              useGenerationStore.getState().start(wid, prevTarget, '');
+              if (chapterChanged) {
+                loop.resetting = true;
+                void backfillStored(wid, payload.done)
+                  .catch(() => undefined) // 回填失败不阻塞：终态仍按 resultMessageIds 同步
+                  .finally(() => {
+                    loop.resetting = false;
+                    // 期间已停止/卸载/到终态：不再碰槽（停止后的半成品 buffer 要保留供「继续」）
+                    if (loop.cancelled || loop.stopRequested || activeRef.current !== loop) return;
+                    const prevTarget = getGenSlot(wid)?.targetMessageId ?? '';
+                    useGenerationStore.getState().start(wid, prevTarget, '');
+                  });
+              } else {
+                useGenerationStore.getState().setRetried(wid, true);
+              }
             }
             loop.onProgress?.({ done: payload.done, chapterTotal: payload.chapterTotal, phase: payload.phase });
             continue; // 本拍 progressText 是按旧 since 的越界切片，不回流
           }
-          if (payload.progressText && !loop.stopRequested && loop.ownsSlot) {
-            useGenerationStore.getState().appendChunk(wid, payload.progressText);
+          if (loop.ownsSlot && !loop.stopRequested) {
+            const gen = useGenerationStore.getState();
+            if (payload.progressText) {
+              if (loop.replaceNext) {
+                loop.replaceNext = false;
+                gen.replaceBuffer(wid, payload.progressText);
+              } else {
+                gen.appendChunk(wid, payload.progressText);
+              }
+            }
+            gen.setProgress(wid, {
+              done: payload.done,
+              chapterTotal: payload.chapterTotal,
+              chapterIndex: payload.chapterIndex,
+            });
           }
           since = payload.progressLen;
+          loop.chapterIndex = Math.max(loop.chapterIndex, payload.chapterIndex);
           loop.onProgress?.({ done: payload.done, chapterTotal: payload.chapterTotal, phase: payload.phase });
           continue;
         }
@@ -196,6 +249,9 @@ export function useNovelTask(workId?: string | null) {
           workId: work.id,
           stopRequested: false,
           cancelled: false,
+          resetting: false,
+          chapterIndex: 0,
+          replaceNext: false,
           ownsSlot: true,
           ...(input.onProgress ? { onProgress: input.onProgress } : {}),
         };
@@ -256,7 +312,16 @@ export function useNovelTask(workId?: string | null) {
       useGenerationStore.getState().start(workId, slot?.targetMessageId ?? '', '');
       useGenerationStore.getState().setTaskId(workId, taskId);
     }
-    const loop: ActiveLoop = { taskId, workId, stopRequested: false, cancelled: false, ownsSlot };
+    const loop: ActiveLoop = {
+      taskId,
+      workId,
+      stopRequested: false,
+      cancelled: false,
+      resetting: false,
+      chapterIndex: 0,
+      replaceNext: false,
+      ownsSlot,
+    };
     activeRef.current = loop;
     void runLoop(loop).catch(() => undefined);
     return () => {

@@ -16,6 +16,13 @@ export interface GenerationError {
   message: string;
 }
 
+/** 后台任务的章进度（任务内口径：done=本任务已完成章数，chapterIndex=正在写的章序，均从 0/1 起） */
+export interface GenProgress {
+  done: number;
+  chapterTotal: number;
+  chapterIndex: number;
+}
+
 /** 单本书的生成槽位（旧全局单槽字段全部收进槽内；taskId 为 novel-chapter 后台任务 id） */
 export interface GenSlot {
   /** 生成中 */
@@ -34,6 +41,10 @@ export interface GenSlot {
   partialKept: boolean;
   /** 进行中的 server 后台任务 id（novel-chapter 提交后写入：取消/恢复轮询/断点续拿） */
   taskId?: string;
+  /** 后台任务的章进度（提交与切出回来的恢复路径都写入——界面「已完成 x/y 章」在两种路径下都有） */
+  progress: GenProgress | null;
+  /** 本章上一稿被判无效、server 已自动重试（同章进度回落）——界面提示用 */
+  retried: boolean;
 }
 
 const EMPTY_SLOT: GenSlot = {
@@ -44,6 +55,8 @@ const EMPTY_SLOT: GenSlot = {
   error: null,
   finishReason: null,
   partialKept: false,
+  progress: null,
+  retried: false,
 };
 
 /** 槽内变更（槽不存在时 no-op：孤儿 append/fail 不产生半初始化脏槽，防幽灵 streaming UI） */
@@ -58,6 +71,12 @@ export interface GenerationState {
   /** 开始一次生成（写 slots[workId] 全新槽）；initialBuffer 供「继续」场景作基底 */
   start: (workId: string, targetMessageId: string, initialBuffer?: string) => void;
   appendChunk: (workId: string, text: string) => void;
+  /** 用新文本整体替换流式缓冲（server 重写当前章后 since 归零重收全文：替换而不是追加） */
+  replaceBuffer: (workId: string, text: string) => void;
+  /** 记录后台任务的章进度 */
+  setProgress: (workId: string, progress: GenProgress) => void;
+  /** 标记本章上一稿无效、server 已自动重试 */
+  setRetried: (workId: string, retried: boolean) => void;
   /** 记录上游结束原因（finish_reason/stop_reason 提取后写入） */
   setFinishReason: (workId: string, reason: string) => void;
   /** 思考流增量累积（不走打字机——折叠块不需要逐字动画） */
@@ -84,6 +103,9 @@ export const useGenerationStore = create<GenerationState>()((set) => ({
     })),
   appendChunk: (workId, text) =>
     set((s) => ({ slots: withSlot(s.slots, workId, { buffer: (s.slots[workId]?.buffer ?? '') + text }) })),
+  replaceBuffer: (workId, text) => set((s) => ({ slots: withSlot(s.slots, workId, { buffer: text }) })),
+  setProgress: (workId, progress) => set((s) => ({ slots: withSlot(s.slots, workId, { progress }) })),
+  setRetried: (workId, retried) => set((s) => ({ slots: withSlot(s.slots, workId, { retried }) })),
   setFinishReason: (workId, reason) => set((s) => ({ slots: withSlot(s.slots, workId, { finishReason: reason }) })),
   appendThinking: (workId, text) =>
     set((s) => ({ slots: withSlot(s.slots, workId, { thinkingBuffer: (s.slots[workId]?.thinkingBuffer ?? '') + text }) })),

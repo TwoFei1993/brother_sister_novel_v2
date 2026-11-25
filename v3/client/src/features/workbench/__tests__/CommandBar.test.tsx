@@ -167,7 +167,7 @@ describe('CommandBar 状态', () => {
 
 describe('生成中思考指示（已移至 ReadingView 正文上方；指挥条不再显示）', () => {
   it('streaming 且 thinkingBuffer 非空 → 指挥条不渲染思考指示（屏幕中间由阅读区负责）', async () => {
-    useGenerationStore.setState({ slots: { w1: { streaming: true, buffer: '', thinkingBuffer: '思路'.repeat(700), targetMessageId: null, error: null, partialKept: false, finishReason: null } } });
+    useGenerationStore.setState({ slots: { w1: { streaming: true, buffer: '', thinkingBuffer: '思路'.repeat(700), targetMessageId: null, error: null, partialKept: false, finishReason: null, progress: null, retried: false } } });
     const c = await renderBar({ streaming: true });
     expect(c.querySelector('[data-testid="thinking-indicator"]')).toBeNull();
     useGenerationStore.setState({ slots: {} });

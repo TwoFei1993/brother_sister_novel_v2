@@ -15,7 +15,10 @@ import { defaultNovelSettings, type FormatType, type GenreType, type WritingStyl
 import { selectStreamingWorkId, useGenerationStore } from '../../../stores/generation';
 import { groupByTag } from '../read/ReadShelf';
 import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
+import { useShelfBatch } from '../../bookshelf/useShelfBatch';
+import ActiveTaskBadge from './ActiveTaskBadge';
 import NewWorkOptions from '../../bookshelf/NewWorkOptions';
+import NewWorkPresetSelect from './style/NewWorkPresetSelect';
 
 const COLLAPSE_KEY = 'create-shelf-collapse-v1';
 
@@ -62,6 +65,8 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   /** 写作风格 + 内容形态（用户反馈 2026-11-24：手机端新建小说此前没有这两个下拉——与桌面端建书共用 NewWorkOptions） */
   const [writingStyle, setWritingStyle] = useState<WritingStyle>('default');
   const [format, setFormat] = useState<FormatType>('default');
+  /** 主预设（可选）：不绑定则资料页没有预设文风/情感基调/附加选项可选 */
+  const [presetId, setPresetId] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
@@ -79,6 +84,7 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
               // 完整 settings 整体下发（server 严格校验）：题材 + 写作风格 + 内容形态（与桌面端建书一致；
               // 此前手机端建书不传 settings，风格与形态恒为默认）
               settings: { ...defaultNovelSettings, genre: genre as GenreType, writingStyle, format },
+              presetId,
             },
       );
       if (mode === 'novel' && handwrite) navigate(`/m/work/${work.id}`);
@@ -189,6 +195,11 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
               format={format}
               onStyleChange={setWritingStyle}
               onFormatChange={setFormat}
+              selectClass="h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
+            />
+            <NewWorkPresetSelect
+              value={presetId}
+              onChange={setPresetId}
               selectClass="h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
             />
           <label className="mb-4 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-handwrite">
@@ -311,6 +322,9 @@ export default function MobileBookshelf() {
   useEffect(() => {
     reload();
   }, []);
+  /** 后台生成任务（5s 轮询 /active）：发起连写后切出或刷新，书架仍看得到进度并可取消；
+   *  任务终态时自动刷新书架（章数更新） */
+  const batch = useShelfBatch(reload);
 
   /** 分组：tag → 组内按 updatedAt 新→旧（未分类殿后） */
   const groups = useMemo(
@@ -342,9 +356,14 @@ export default function MobileBookshelf() {
 
   /** 封面卡通用渲染：管理模式=多选勾选；否则导航/进入分组 */
   function renderCover(w: WorkSummary, onOpen: () => void): ReactNode {
+    const task = batch.activeByWork[w.id];
     const badges = [
-      // 生成中的书在封面下方标注（书架可见哪本在写）
-      ...(streamingWorkId === w.id ? ['✍️ 生成中…'] : []),
+      // 后台生成中的书在封面下方标注进度（卡片很窄，文案要短）；书页仍开着（内存槽在写）时兜底标「生成中」
+      ...(task
+        ? [`✍️ 连写 ${task.done}/${task.chapterTotal} 章`]
+        : streamingWorkId === w.id
+          ? ['✍️ 生成中…']
+          : []),
       `${w.stats?.chapterCount ?? 0} 章`,
       ...((w.stats?.publishedChapterCount ?? 0) > 0 ? [`已上架 ${w.stats?.publishedChapterCount} 章`] : []),
       ...(w.mode === 'chat' ? ['对话'] : []),
@@ -362,7 +381,16 @@ export default function MobileBookshelf() {
         />
       );
     }
-    return <ShelfBookCover key={w.id} book={w} badges={badges} onClick={onOpen} />;
+    return (
+      <ActiveTaskBadge
+        key={w.id}
+        task={task}
+        cancelling={batch.cancellingIds.has(w.id)}
+        onCancel={() => batch.cancelTask(w.id)}
+      >
+        <ShelfBookCover book={w} badges={badges} onClick={onOpen} />
+      </ActiveTaskBadge>
+    );
   }
 
   /** 批量删除作品（用户需求 2026-11-11：移动端书架缺删除入口）——逐本 DELETE 整目录，不可恢复 */

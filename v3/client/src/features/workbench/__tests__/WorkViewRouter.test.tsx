@@ -96,6 +96,8 @@ function genStub(): UseGenerateResult {
     error: null,
     partialKept: false,
     targetMessageId: null,
+    progress: null,
+    retried: false,
     generateChapter: vi.fn(),
     continueFromPartial: vi.fn(),
     swipeRegenerate: vi.fn(),

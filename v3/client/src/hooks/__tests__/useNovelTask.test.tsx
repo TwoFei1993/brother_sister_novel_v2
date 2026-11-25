@@ -65,6 +65,10 @@ let submitStatus = 202;
 let pollScript: Array<Record<string, unknown>> = [];
 /** 终态取回的入库消息（GET messages?tail 响应） */
 let storedMessages: Message[] = [];
+/** server 此刻已入库的消息 id（null=全部）——运行中回填只应拿到已入库的章 */
+let storedVisible: Set<string> | null = null;
+/** messages 请求发出那一刻的槽 buffer（验证翻章拍「先回填后清空」的先后） */
+let bufferAtMessagesFetch: string | null = null;
 
 function stubTaskRoute(): void {
   vi.stubGlobal(
@@ -82,7 +86,11 @@ function stubTaskRoute(): void {
         return jsonRes(item);
       }
       if (path === '/api/llm/tasks/t1/cancel') return jsonRes({ ok: true });
-      if (path.startsWith('/api/works/w1/messages?')) return jsonRes({ messages: storedMessages });
+      if (path.startsWith('/api/works/w1/messages?')) {
+        bufferAtMessagesFetch = getGenSlot('w1')?.buffer ?? null;
+        const visible = storedVisible;
+        return jsonRes({ messages: visible ? storedMessages.filter((m) => visible.has(m.id)) : storedMessages });
+      }
       throw new Error(`unmocked fetch: ${path}`);
     }),
   );
@@ -117,6 +125,8 @@ beforeEach(() => {
   submitStatus = 202;
   pollScript = [];
   storedMessages = [];
+  storedVisible = null;
+  bufferAtMessagesFetch = null;
   useGenerationStore.setState({ slots: {} });
   useWorkStore.setState({ messages: [] });
   useSettingsStore.getState().setLlmPrefs({ source: 'openai', model: 'gpt-4o' });
@@ -314,6 +324,78 @@ describe('跨章增量与恢复重收（缝②：buffer 只承载当前章）', 
     expect(sinces).toEqual([0, 3, 0, 5]); // 翻章归零后从 0 重收（不再单调不减）
   });
 
+  it('多章翻章：上一章已入库 → 当拍立即回填本地视图（不再等终态），且先回填后清 buffer', async () => {
+    // 用户实测（2026-11-26）：「生成第一章完了就消失了，然后生成第二章，上面还显示在生成第一章」——
+    // 根因：翻章拍清空 buffer，而已入库的上一章要到任务终态才同步本地视图
+    pollScript = [
+      { status: 'running', progressLen: 3, progressText: '第一章', done: 0, chapterTotal: 2, phase: 'generating', chapterIndex: 1 },
+      { status: 'running', progressLen: 0, progressText: '', done: 1, chapterTotal: 2, phase: 'assembling', chapterIndex: 2 },
+      { status: 'running', progressLen: 5, progressText: '第二章开头', done: 1, chapterTotal: 2, phase: 'generating', chapterIndex: 2 },
+      { status: 'done', resultMessages: 2, resultMessageIds: ['m1', 'm2'] },
+    ];
+    storedMessages = [chapterMsg('m1', 1, '第一章'), chapterMsg('m2', 2, '第二章开头')];
+    storedVisible = new Set(['m1']); // 翻章拍时 server 只入库了第 1 章
+    await renderHook();
+    act(() => {
+      void latest!.submitAndWait({ work: workFixture(), mode: 'chapter', directive: '', chapters: 2 });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 拍1：buffer=「第一章」
+    });
+    expect(getGenSlot('w1')?.buffer).toBe('第一章');
+    expect(useWorkStore.getState().messages).toHaveLength(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 拍2：翻章 → 回填第 1 章 → 再清 buffer
+    });
+    expect(bufferAtMessagesFetch).toBe('第一章'); // 回填请求发出时上一章正文还在（不会先消失）
+    expect(useWorkStore.getState().messages.map((m) => m.id)).toEqual(['m1']); // 第 1 章已进本地视图
+    expect(getGenSlot('w1')?.buffer ?? '').toBe(''); // 回填后才清空，下一章从头流式
+    storedVisible = new Set(['m1', 'm2']);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 拍3：?since=0 重收第 2 章全文
+    });
+    expect(getGenSlot('w1')?.buffer).toBe('第二章开头');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500); // 终态拍
+    });
+    expect(useWorkStore.getState().messages.map((m) => m.id)).toEqual(['m1', 'm2']);
+  });
+
+  it('同章回落（server 首稿无效自动重试）：旧稿不清空、标记已重试，新稿到达后整体替换而不是拼接', async () => {
+    // 深度测试实测（2026-11-26）：首稿被判无效 → server 重试轮 text 从头累计 → progressLen 回落。
+    // 旧逻辑一律当翻章处理：清空 buffer → 正文闪断约一拍后才重现
+    pollScript = [
+      { status: 'running', progressLen: 4, progressText: '首稿内容', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'running', progressLen: 0, progressText: '', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'running', progressLen: 3, progressText: '新稿开', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'running', progressLen: 5, progressText: '头', done: 0, chapterTotal: 1, phase: 'generating', chapterIndex: 1 },
+      { status: 'done', resultMessages: 1, resultMessageIds: ['m1'] },
+    ];
+    storedMessages = [chapterMsg('m1', 1, '新稿开头')];
+    await renderHook();
+    act(() => {
+      void latest!.submitAndWait({ work: workFixture(), mode: 'chapter', directive: '写第一章' });
+    });
+    const tick = async (): Promise<void> => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+    };
+    await tick();
+    expect(getGenSlot('w1')?.buffer).toBe('首稿内容');
+    expect(getGenSlot('w1')?.retried).toBe(false);
+    await tick(); // 回落拍：章号没变 → 不清空
+    expect(getGenSlot('w1')?.buffer).toBe('首稿内容');
+    expect(getGenSlot('w1')?.retried).toBe(true);
+    await tick(); // ?since=0 重收：新稿整体替换
+    expect(getGenSlot('w1')?.buffer).toBe('新稿开');
+    await tick(); // 之后恢复增量追加
+    expect(getGenSlot('w1')?.buffer).toBe('新稿开头');
+    expect(getGenSlot('w1')?.progress).toEqual({ done: 0, chapterTotal: 1, chapterIndex: 1 });
+    await tick();
+    expect(getGenSlot('w1')?.streaming).toBe(false);
+  });
+
   it('mount 恢复：since=0 重收当前章全文并重置 buffer（不接旧 buffer 长度续流），taskId/targetMessageId 保留', async () => {
     // 上一会话切页前：槽已有 buffer（旧语义下会以 buffer.length 作 since——错位源头）+ 恢复锚点
     localStorage.setItem('novel-gen-w1', 't1');
@@ -332,6 +414,7 @@ describe('跨章增量与恢复重收（缝②：buffer 只承载当前章）', 
     expect(slot.streaming).toBe(true); // 仍在流式（任务未终态）
     expect(slot.targetMessageId).toBe('t-msg-1'); // 入库幂等键保留
     expect(slot.taskId).toBe('t1'); // 恢复锚点回填槽
+    expect(slot.progress).toEqual({ done: 1, chapterTotal: 2, chapterIndex: 2 }); // 恢复后同样有「已完成 x/y」
     const sinces = calls
       .filter((c) => c.path.startsWith('/api/llm/tasks/t1?since='))
       .map((c) => Number(c.path.split('since=')[1]));
