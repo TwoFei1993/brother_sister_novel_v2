@@ -93,3 +93,19 @@ describe('mergeEpisodes 合并集列表', () => {
     expect(merged[1]!.script).toBe('用户写过的第 4 集');
   });
 });
+describe('改编式拆解（用户反馈 2026-11-24：粘贴的是故事素材，不是按原文切分的剧本）', () => {
+  it('system 提示词要求「改编扩充」而非「按原文切分」，且短素材要扩充集数', () => {
+    const [system] = buildBreakdownMessages('一段很短的故事素材。', 12);
+    expect(system.content).toContain('改编扩充');
+    expect(system.content).toContain('不是把它按原文切分');
+  });
+
+  it('user 消息向模型明确目标集数与改编要求', () => {
+    const [, user] = buildBreakdownMessages('一段故事素材。', 12);
+    expect(user.content).toContain('目标集数：12 集');
+    expect(user.content).toContain('改编扩充成 12 集竖屏短剧');
+    expect(user.content).toContain('不要照搬原文切分');
+    expect(user.content).toContain('素材不够的地方合理扩充（加配角冲突、支线、细节）');
+    expect(user.content).toContain('一段故事素材');
+  });
+});

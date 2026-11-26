@@ -60,20 +60,20 @@ export function buildScriptGenMessages(input: ScriptGenInput): GenerateMessage[]
  * 每集梗概加厚到 150 字内并按结构写（续写没有原文可依，全靠它）；每集另给原文首末句锚点，
  * 供改编时按集截取原文（设计共识 2026-11-26 第 3.2 节）。
  */
-const BREAKDOWN_SYSTEM = `你是短剧制片审核助手。把给定剧本拆解为结构化审核卡，用于后续角色/场景/分镜制作。
+const BREAKDOWN_SYSTEM = `你是竖屏短剧的制片策划兼编剧。用户给你的「剧本原文」是一段故事素材——可能是完整故事、故事梗概或剧情片段，你的任务不是把它按原文切分，而是**把它改编扩充成多集竖屏短剧**：以原文的人物、关系与核心冲突为骨架，重新创作每一集——扩充戏剧冲突、增加配角与支线钩子、把概要展开成有起伏的具体情节。
 只输出一个 JSON 对象，不要 markdown 代码块、不要解释文字。字段：
 {
-  "summary": "剧情概括（100字内）",
+  "summary": "改编后全剧剧情概括（100字内）",
   "eventChain": ["事件1", "事件2"],
   "conflict": "主要冲突",
   "characterRelations": "人物关系描述",
   "emotionPoints": ["情绪点1"],
   "visualActions": ["把心理描写转成的可见动作"],
   "riskReplacements": [{"original": "高风险表达", "replacement": "中性可视化描述"}],
-  "episodes": [{"index": 1, "title": "集名", "synopsis": "本集梗概（150字内，依次写：进入状态 → 本集目标 → 转折 → 结果 → 结尾钩子）", "sourceStart": "本集对应原文的第一句（逐字抄录，20字内）", "sourceEnd": "本集对应原文的最后一句（逐字抄录，20字内）"}]
+  "episodes": [{"index": 1, "title": "集名", "synopsis": "本集梗概（150字内，依次写：进入状态 → 本集目标 → 转折 → 结果 → 结尾钩子）", "sourceStart": "本集对应原文的第一句（逐字抄录，20字内；本集为全新创作时写空字符串）", "sourceEnd": "本集对应原文的最后一句（逐字抄录，20字内；本集为全新创作时写空字符串）"}]
 }
-要求：episodes 覆盖剧本中的全部集，按剧本顺序，每集剧情不重叠、相邻集衔接；riskReplacements 只挑真正有平台审核风险的表达（暴力直写/血腥细节/敏感词），没有则空数组；visualActions 把剧本里的心理独白转成可拍摄的动作。
-原文位置：sourceStart 与 sourceEnd 必须从原文逐字抄录、不改写不加标点（程序按它们截取本集原文）；原文只够第 1 集时，其余各集这两项写空字符串。`;
+要求：episodes 集数等于目标集数（不足时基于原故事合理扩充新冲突与新支线，风格与人物保持一致）；按顺序推进，每集剧情不重叠、相邻集衔接；每集都必须基于整段故事改编创作，而不是复述原文片段；riskReplacements 只挑真正有平台审核风险的表达（暴力直写/血腥细节/敏感词），没有则空数组；visualActions 把剧本里的心理独白转成可拍摄的动作。
+原文位置：sourceStart 与 sourceEnd 是原文锚点（程序按它们截取本集对应的原文参考段），对应不上原文的集写空字符串。`;
 
 export interface BreakdownResult {
   summary: string;
@@ -124,7 +124,7 @@ export function mergeEpisodes(
 export function buildBreakdownMessages(scriptText: string, targetEpisodes: number): GenerateMessage[] {
   return [
     { role: 'system', content: BREAKDOWN_SYSTEM },
-    { role: 'user', content: `目标集数：${targetEpisodes} 集\n\n剧本原文：\n${scriptText}` },
+    { role: 'user', content: `目标集数：${targetEpisodes} 集\n\n【改编要求】下面的文字是一段故事素材（可能是完整故事、梗概或片段）。请把它改编扩充成 ${targetEpisodes} 集竖屏短剧：保留人物与核心冲突，但每集的情节要有新的发展与钩子，素材不够的地方合理扩充（加配角冲突、支线、细节），不要照搬原文切分。\n\n故事素材：\n${scriptText}` },
   ];
 }
 
