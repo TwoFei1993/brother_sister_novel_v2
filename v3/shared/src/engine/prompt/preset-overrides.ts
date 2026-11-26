@@ -5,8 +5,9 @@
  * 背景：预设（如 Sudachi-Next-Preset）的条目启停是预设全局状态，所有绑定它的书共用；
  * 此前只能在预设管理器里手动开关，无法按书设置。本模块：
  * - detectPresetGroups：按酒馆社区预设的通用排版惯例识别「分组标题 → 组内条目」
- *   （顶级标题形如 `—\📖文风设定===` / `--\📌附加选项===`；子标题形如 `===📬新文===`），
- *   并按组名归类为 文风（单选）/ 基调（多选）/ 附加（多选）；其余组不暴露。
+ *   （顶级标题形如 `—\📖文风设定===` / `--\📌附加选项===`；子标题形如 `===📬新文===`）。
+ *   组名含「文风 / 基调·情感 / 附加」的归为对应类别；其余组（常规设定 / 人称 / 模型选择…）
+ *   归为 other 原样暴露——此前整组丢弃，用户维护的那些组在选择器里凭空消失（用户反馈 2026-11-27）。
  * - applyPresetOverrides：把书的覆盖表（identifier → enabled）应用到 prompt_order，
  *   不改预设本身。单选组一旦被本书显式选过，组内以覆盖表为准（未写到的成员关闭）。
  */
@@ -15,7 +16,7 @@ import type { TavernPreset } from '@shared/tavern';
 import { substituteParams } from './macros';
 import type { MacroEnv } from '../types';
 
-export type PresetGroupCategory = 'style' | 'tone' | 'addon';
+export type PresetGroupCategory = 'style' | 'tone' | 'addon' | 'other';
 
 export interface PresetGroupMember {
   identifier: string;
@@ -41,6 +42,7 @@ export const PRESET_GROUP_CATEGORY_LABELS: Record<PresetGroupCategory, string> =
   style: '文风',
   tone: '情感基调',
   addon: '附加选项',
+  other: '其它',
 };
 
 /** 条目覆盖表：identifier → 是否启用（只存本书明确改动过的条目） */
@@ -57,15 +59,15 @@ function stripDecor(name: string): string {
   return name.replace(DECOR_RE, '').trim();
 }
 
-/** 组名 → 暴露类别（其余组如常规设定/人称/越狱不暴露给按书覆盖） */
-function categorize(groupName: string): PresetGroupCategory | null {
+/** 组名 → 类别（不匹配的归 other：组名原样展示，条目同样可按书开关） */
+function categorize(groupName: string): PresetGroupCategory {
   if (/文风/.test(groupName)) return 'style';
   if (/基调|情感/.test(groupName)) return 'tone';
   if (/附加/.test(groupName)) return 'addon';
-  return null;
+  return 'other';
 }
 
-/** 识别预设里可按书覆盖的分组；无分组标题的预设（如 Default）返回空数组 */
+/** 识别预设里可按书覆盖的分组（全部组，含 other）；无分组标题的预设（如 Default）返回空数组 */
 export function detectPresetGroups(preset: TavernPreset): PresetGroup[] {
   const promptById = new Map(preset.prompts.map((p) => [p.identifier, p]));
   const groups: PresetGroup[] = [];
@@ -79,12 +81,9 @@ export function detectPresetGroups(preset: TavernPreset): PresetGroup[] {
     if (top) {
       const groupName = stripDecor(top[1]!);
       const category = categorize(groupName);
-      current = null;
+      current = { id: groupName, name: groupName, category, mode: category === 'style' ? 'single' : 'multi', members: [] };
       subsection = undefined;
-      if (category) {
-        current = { id: groupName, name: groupName, category, mode: category === 'style' ? 'single' : 'multi', members: [] };
-        groups.push(current);
-      }
+      groups.push(current);
       continue;
     }
     // 子分组标题：`===新文===`（名称两端都是 `=`；自带变量设置内容的子标题同样只当分区名）

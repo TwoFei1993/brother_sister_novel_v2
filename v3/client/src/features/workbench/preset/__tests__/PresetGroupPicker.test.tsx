@@ -28,6 +28,8 @@ const PID = 'main-preset';
 type Row = [identifier: string, name: string, content: string, enabled?: boolean];
 const SUDACHI_LIKE: Row[] = [
   ['main', '🐳主提示', 'MAIN', true],
+  ['h-regular', '—\\⚙常规设定===', '{{//常规}}', true],
+  ['num', '🔢字数设定', '{{setvar::mincount::1200}}', true],
   ['h-style', '—\\📖文风设定===', '{{//单选}}', true],
   ['sub-new', '===📬新文===', '', true],
   ['n-light', '🔖N-轻小说', '<writing_style>日系轻小说</writing_style>', true],
@@ -263,5 +265,17 @@ describe('PresetGroupPicker', () => {
     await render(workFixture({ overrides: { drama: true, 'n-light': false }, revision: 3 }));
     expect(member(container, 'luxun').checked).toBe(true);
     expect(member(container, 'drama').checked).toBe(false);
+  });
+
+  it('其它组（常规设定）：组名原样、默认折叠；展开后可按书开关（2026-11-27 用户反馈：此前整组不可见）', async () => {
+    const container = await mountPicker(workFixture());
+    const section = container.querySelector('[data-testid="preset-group-x0"]');
+    expect(section?.textContent).toContain('常规设定');
+    expect(section?.getAttribute('data-open')).toBe('false');
+    await click(container.querySelector('[data-testid="preset-group-toggle-x0"]'), '常规设定 toggle');
+    await click(member(container, 'num'), 'num');
+    expect(member(container, 'num').checked).toBe(false);
+    await save(container);
+    expect(savedOverrides()).toEqual({ num: false });
   });
 });

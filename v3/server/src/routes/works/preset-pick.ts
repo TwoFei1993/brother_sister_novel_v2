@@ -125,7 +125,7 @@ presetPickRouter.post(
       res.status(400).json({ error: '主预设资产不存在' });
       return;
     }
-    const groups: PresetGroup[] = detectPresetGroups(asset.raw);
+    const groups: PresetGroup[] = detectPresetGroups(asset.raw).filter((g) => g.category !== 'other');
     if (groups.length === 0) {
       res.status(400).json({ error: '当前主预设没有可按书选择的文风分组' });
       return;

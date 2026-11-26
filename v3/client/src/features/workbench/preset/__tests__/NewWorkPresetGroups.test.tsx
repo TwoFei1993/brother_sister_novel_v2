@@ -48,13 +48,17 @@ const fakeAsset = {
   },
 };
 
-async function mount(presetId = 'p1', overrides: Record<string, boolean> = {}): Promise<HTMLElement> {
+async function mount(
+  presetId = 'p1',
+  overrides: Record<string, boolean> = {},
+  onChange: (next: Record<string, boolean>) => void = () => undefined,
+): Promise<HTMLElement> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   roots.push(root);
   await act(async () => {
-    root.render(<NewWorkPresetGroups presetId={presetId} overrides={overrides} onChange={() => undefined} />);
+    root.render(<NewWorkPresetGroups presetId={presetId} overrides={overrides} onChange={onChange} />);
   });
   await act(async () => {
     await Promise.resolve();
@@ -149,5 +153,42 @@ describe('NewWorkPresetGroups 建书时的预设选项', () => {
     apiFetchMock.mockResolvedValue({ id: 'p2', name: 'Default', raw: { prompts: [], prompt_order: [{ order: [] }] } } as never);
     const empty = await mount('p2');
     expect(empty.querySelector('[data-testid="new-work-preset-groups"]')).toBeNull();
+  });
+
+  it('其余分组（附加选项/常规设定…）收进「更多分组」，默认收起、可展开按书开关（2026-11-27 用户反馈：不再整组不可见）', async () => {
+    const withAddon = {
+      id: 'p3',
+      name: 'Sudachi',
+      raw: {
+        prompts: [
+          { identifier: 'g-tone', name: '—\\情感基调', content: '' },
+          { identifier: 'tone-happy', name: '⚫欢快', content: '' },
+          { identifier: 'g-addon', name: '--\\📌附加选项', content: '' },
+          { identifier: 'addon-vivid', name: '🍈生动化', content: '' },
+        ],
+        prompt_order: [
+          {
+            order: [
+              { identifier: 'g-tone', enabled: true },
+              { identifier: 'tone-happy', enabled: false },
+              { identifier: 'g-addon', enabled: true },
+              { identifier: 'addon-vivid', enabled: true },
+            ],
+          },
+        ],
+      },
+    };
+    apiFetchMock.mockResolvedValue(withAddon as never);
+    const onChange = vi.fn();
+    const c = await mount('p3', {}, onChange);
+    const extras = c.querySelector('[data-testid="new-work-preset-extras"]');
+    expect(extras?.textContent).toContain('更多分组');
+    expect(extras?.textContent).toContain('附加选项');
+    expect((extras as HTMLDetailsElement | null)?.open).toBe(false); // 默认收起
+    // 收起时成员也已在 DOM（details 的原生行为）：勾选不经展开也可用
+    const chip = c.querySelector('[data-testid="new-work-preset-x0-addon-vivid"]');
+    expect(chip?.getAttribute('aria-pressed')).toBe('true'); // 预设默认开启
+    await click(c, 'new-work-preset-x0-addon-vivid');
+    expect(onChange).toHaveBeenCalledWith({ 'addon-vivid': false });
   });
 });

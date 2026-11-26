@@ -3,23 +3,16 @@
  * 且要真实挂上预设——勾选结果随 createWork 写进 settings.presetPromptOverrides，组装时按书生效：
  * 文风条目提权进要求块（resolvePresetStyle），其余条目按覆盖表启停（applyPresetOverrides））。
  *
- * 只暴露 文风（单选）与 情感基调（多选）两组；附加选项条目多，创建后到 资料→文风与基调 里调
- * （那里的完整版 PresetGroupPicker 与本组件同一套生效判定纯函数）。
+ * 文风（单选）与情感基调（多选）默认展开；其余组（附加选项 / 常规设定 / 人称…）收在
+ * 「更多分组」里按需展开——预设里有什么组就显示什么组（用户反馈 2026-11-27：此前整组不可见）。
+ * 与资料页完整版（PresetGroupPicker）同一套生效判定纯函数。
  */
 import { useEffect, useState } from 'react';
 
 import { apiFetch } from '../../../api/client';
 import type { PresetAsset } from '@shared/preset';
-import {
-  PRESET_GROUP_CATEGORY_LABELS,
-  detectPresetGroups,
-  isEffective,
-  pickSingle,
-  toggleMulti,
-  type PresetGroup,
-  type PresetGroupMember,
-  type PresetPromptOverrides,
-} from '@shared/engine/prompt/preset-overrides';
+import type { PresetGroup, PresetGroupMember, PresetPromptOverrides } from '@shared/engine/prompt/preset-overrides';
+import { detectPresetGroups, isEffective, pickSingle, toggleMulti } from '@shared/engine/prompt/preset-overrides';
 
 interface Props {
   presetId: string;
@@ -76,29 +69,50 @@ export default function NewWorkPresetGroups({ presetId, overrides, onChange }: P
   }
   const style = groups.find((g) => g.category === 'style');
   const tone = groups.find((g) => g.category === 'tone');
-  if (!style && !tone) return null; // 该预设没有可按书选的分组
+  const extras = groups.filter((g) => g.category !== 'style' && g.category !== 'tone');
+  if (!style && !tone && extras.length === 0) return null; // 该预设没有可按书选的分组
 
   return (
     <div className="mb-3 rounded-lg border border-[hsl(var(--border-soft))] p-3" data-testid="new-work-preset-groups">
       <p className="mb-2 text-xs font-medium">
         《{name}》的文风与基调
-        <span className="ml-1 font-normal text-[hsl(var(--fg-muted))]">——随本书生效，创建后可在 资料→文风与基调 继续调（含附加选项）</span>
+        <span className="ml-1 font-normal text-[hsl(var(--fg-muted))]">——随本书生效，创建后可在 资料→文风与基调 继续调</span>
       </p>
-      {style && <GroupChips group={style} overrides={overrides} onChange={onChange} testPrefix="new-work-preset-style" />}
-      {tone && <GroupChips group={tone} overrides={overrides} onChange={onChange} testPrefix="new-work-preset-tone" />}
+      {style && <GroupChips group={style} label="文风（单选）" overrides={overrides} onChange={onChange} testPrefix="new-work-preset-style" />}
+      {tone && <GroupChips group={tone} label="情感基调（可多选）" overrides={overrides} onChange={onChange} testPrefix="new-work-preset-tone" />}
+      {extras.length > 0 && (
+        <details className="mt-1" data-testid="new-work-preset-extras">
+          <summary className="cursor-pointer text-xs text-[hsl(var(--fg-muted))]">
+            更多分组（附加选项 / 常规设定 / 人称 等 {extras.length} 组——展开可按书开关）
+          </summary>
+          <div className="mt-2 flex flex-col gap-2">
+            {extras.map((g, i) => (
+              <GroupChips
+                key={g.id}
+                group={g}
+                label={g.category === 'addon' ? `附加选项（可多选）` : `${g.name}（可多选）`}
+                overrides={overrides}
+                onChange={onChange}
+                testPrefix={`new-work-preset-x${i}`}
+              />
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
 
 interface GroupChipsProps {
   group: PresetGroup;
+  label: string;
   overrides: PresetPromptOverrides;
   onChange: (next: PresetPromptOverrides) => void;
   testPrefix: string;
 }
 
 /** 按 subsection 切连续分区（保持预设原始顺序；Sudachi 文风分 新文/老文） */
-function GroupChips({ group, overrides, onChange, testPrefix }: GroupChipsProps) {
+function GroupChips({ group, label, overrides, onChange, testPrefix }: GroupChipsProps) {
   const sections: Array<{ title?: string; members: PresetGroupMember[] }> = [];
   for (const m of group.members) {
     const last = sections[sections.length - 1];
@@ -107,9 +121,7 @@ function GroupChips({ group, overrides, onChange, testPrefix }: GroupChipsProps)
   }
   return (
     <div className="mb-2 last:mb-0" data-testid={`${testPrefix}-group`}>
-      <span className="mb-1.5 block text-xs text-[hsl(var(--fg-muted))]">
-        {PRESET_GROUP_CATEGORY_LABELS[group.category]}（{group.mode === 'single' ? '单选' : '可多选'}）
-      </span>
+      <span className="mb-1.5 block text-xs text-[hsl(var(--fg-muted))]">{label}</span>
       {sections.map((sec, i) => (
         <div key={sec.title ?? i}>
           {sec.title && <p className="mb-1 text-[11px] text-[hsl(var(--fg-muted))]">{sec.title}</p>}

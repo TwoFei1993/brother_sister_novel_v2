@@ -59,18 +59,31 @@ const enabledOf = (preset: TavernPreset, id: string): boolean =>
   preset.prompt_order?.[0]?.order.find((o) => o.identifier === id)?.enabled === true;
 
 describe('detectPresetGroups', () => {
-  it('识别 文风(单选)/基调(多选)/附加(多选) 三组；常规设定/人称/越狱不暴露', () => {
+  /** fixture 里的组按出现顺序：常规设定(其它) → 文风设定(style) → 情感基调(tone) → 人称设定(其它) → 附加选项(addon) → 越狱(其它) */
+  it('识别 全部分组：文风(单选)/基调(多选)/附加(多选)，其余组名原样归 other（用户反馈 2026-11-27：不再整组丢弃）', () => {
     const groups = detectPresetGroups(presetFixture());
-    expect(groups.map((g) => [g.category, g.mode])).toEqual([['style', 'single'], ['tone', 'multi'], ['addon', 'multi']]);
-    expect(groups[0]!.members.map((m) => m.identifier)).toEqual(['n-light', 'n-romance', 'light', 'short-drama']);
-    expect(groups[1]!.members.map((m) => m.identifier)).toEqual(['tone-general', 'tone-joy']);
-    expect(groups[2]!.members.map((m) => m.identifier)).toEqual(['anti-sf', 'vivid']);
+    // 组名存储时已剥掉装饰符（emoji 与 ===）
+    expect(groups.map((g) => [g.name, g.category, g.mode])).toEqual([
+      ['常规设定', 'other', 'multi'],
+      ['文风设定', 'style', 'single'],
+      ['情感基调', 'tone', 'multi'],
+      ['人称设定', 'other', 'multi'],
+      ['附加选项', 'addon', 'multi'],
+      ['越狱', 'other', 'multi'],
+    ]);
+    const byName = (name: string) => groups.find((g) => g.name === name)!;
+    expect(byName('常规设定').members.map((m) => m.identifier)).toEqual(['num']);
+    expect(byName('文风设定').members.map((m) => m.identifier)).toEqual(['n-light', 'n-romance', 'light', 'short-drama']);
+    expect(byName('情感基调').members.map((m) => m.identifier)).toEqual(['tone-general', 'tone-joy']);
+    expect(byName('人称设定').members.map((m) => m.identifier)).toEqual(['person-1']);
+    expect(byName('附加选项').members.map((m) => m.identifier)).toEqual(['anti-sf', 'vivid']);
+    expect(byName('越狱').members.map((m) => m.identifier)).toEqual(['jb']);
   });
 
   it('成员带预设默认启停与子分组（新文/老文）', () => {
-    const [style] = detectPresetGroups(presetFixture());
-    expect(style!.members[0]).toMatchObject({ identifier: 'n-light', name: '🔖N-轻小说', enabled: true, subsection: '新文' });
-    expect(style!.members[2]).toMatchObject({ identifier: 'light', enabled: false, subsection: '老文' });
+    const style = detectPresetGroups(presetFixture()).find((g) => g.category === 'style')!;
+    expect(style.members[0]).toMatchObject({ identifier: 'n-light', name: '🔖N-轻小说', enabled: true, subsection: '新文' });
+    expect(style.members[2]).toMatchObject({ identifier: 'light', enabled: false, subsection: '老文' });
   });
 
   it('无分组标题的预设 → 空数组；成员为空的组不产出', () => {
@@ -80,7 +93,13 @@ describe('detectPresetGroups', () => {
     emptyGroup.prompt_order![0]!.order = order.filter(
       (o) => !['tone-general', 'tone-joy'].includes(o.identifier),
     );
-    expect(detectPresetGroups(emptyGroup).map((g) => g.category)).toEqual(['style', 'addon']);
+    expect(detectPresetGroups(emptyGroup).map((g) => [g.name, g.category])).toEqual([
+      ['常规设定', 'other'],
+      ['文风设定', 'style'],
+      ['人称设定', 'other'],
+      ['附加选项', 'addon'],
+      ['越狱', 'other'],
+    ]);
   });
 });
 
@@ -109,7 +128,7 @@ describe('applyPresetOverrides', () => {
     expect(enabledOf(next, 'tone-joy')).toBe(true);
   });
 
-  it('组外条目的覆盖同样生效；预设里已不存在的 identifier 被忽略；不改原预设', () => {
+  it('其它组（人称）条目的覆盖同样生效；预设里已不存在的 identifier 被忽略；不改原预设', () => {
     const preset = presetFixture();
     const snapshot = JSON.stringify(preset);
     const next = applyPresetOverrides(preset, detectPresetGroups(preset), { 'person-1': false, 'gone-entry': true });
@@ -128,7 +147,8 @@ describe('applyPresetOverrides', () => {
 describe('UI 状态助手', () => {
   const preset = presetFixture();
   const groups = detectPresetGroups(preset);
-  const [style, tone] = groups as [typeof groups[0], typeof groups[0]];
+  const style = groups.find((g) => g.category === 'style')!;
+  const tone = groups.find((g) => g.category === 'tone')!;
 
   it('isEffective：覆盖优先，否则预设默认', () => {
     const joy = tone!.members[1]!;
@@ -169,7 +189,7 @@ function macroEnv(): MacroEnv {
 
 describe('extractPresetStyleText / resolvePresetStyle（预设文风提权到要求块）', () => {
   const preset = presetFixture();
-  const [style] = detectPresetGroups(preset);
+  const style = detectPresetGroups(preset).find((g) => g.category === 'style')!;
 
   it('新文系（正文内联在条目里）：默认启用的 N-轻小说 → 提取出 <writing_style> 正文', () => {
     const text = extractPresetStyleText(style!, {}, macroEnv());
@@ -186,7 +206,8 @@ describe('extractPresetStyleText / resolvePresetStyle（预设文风提权到要
 
   it('经 resolvePresetStyle 入口：只认文风组', () => {
     const groups = detectPresetGroups(presetFixture());
-    expect(resolvePresetStyle(groups, pickSingle(groups[0]!, 'light', {}), macroEnv())).toBe('日式轻小说');
+    const style = groups.find((g) => g.category === 'style')!;
+    expect(resolvePresetStyle(groups, pickSingle(style, 'light', {}), macroEnv())).toBe('日式轻小说'); // 正文 setvar 里写的原文
   });
 
   it('未生效的条目不提取；无文风组 → 空串', () => {
