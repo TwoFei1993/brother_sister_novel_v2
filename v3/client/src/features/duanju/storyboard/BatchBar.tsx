@@ -81,7 +81,7 @@ export default function BatchBar({ workId, episodeTitle, shots, onClose }: Props
               将生成 <strong className="text-[hsl(var(--accent))]">{tasks.length}</strong> 帧
               <span className="text-xs text-[hsl(var(--fg-muted))]">
                 {isComfy
-                  ? '（本地免费 · 秒级出图，并发 2 排队）'
+                  ? '（本地免费 · 每张约 1.5–8 分钟，并发 2 排队）'
                   : `（每张约 0.12 元 · 15-30 秒，并发 2 排队；约 ${(tasks.length * 0.12).toFixed(0)} 元）`}
               </span>
             </p>

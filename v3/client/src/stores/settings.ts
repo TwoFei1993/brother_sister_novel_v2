@@ -29,7 +29,7 @@ export interface LlmPrefs {
   repetitionPenalty?: number;
   /** 润色模型（可选）：正文生成后用该模型二次润色（同通道）；留空关闭 */
   polishModel?: string;
-  /** 生图通道（用户决策 2026-11-11：默认强制本地 ComfyUI，不再用 minimax 生图）：zhipu / seedream 为手动切换的云端备选，comfy=本地免费秒级 */
+  /** 生图通道（用户决策 2026-11-11：默认强制本地 ComfyUI，不再用 minimax 生图）：zhipu / seedream 为手动切换的云端备选，comfy=本地免费（H3-Image，每张 1.5–8 分钟） */
   imageProvider?: 'minimax' | 'zhipu' | 'seedream' | 'comfy';
 }
 

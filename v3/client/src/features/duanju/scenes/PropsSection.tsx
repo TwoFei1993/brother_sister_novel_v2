@@ -21,7 +21,7 @@ export default function PropsSection({ workId }: { workId: string }) {
   if (!project) return null;
   const props = project.props ?? [];
 
-  /** C3 道具图通道：本地 comfy 生成白底定妆图（免费，秒级） */
+  /** C3 道具图通道：本地 comfy 生成白底定妆图（免费，H3-Image 每张 1.5–8 分钟） */
   async function genImage(p: { id: string; name: string; spec: string }): Promise<void> {
     if (busyId || !project) return;
     setBusyId(p.id);

@@ -46,7 +46,7 @@ export default function CharacterCard({ workId, character }: Props) {
     await save({ outfits: lines, outfitImages: [] });
     setOutfitBusy(true);
     try {
-      // 逐套生图（Z-Image 秒级；LLM 输出行即完整生图 prompt——白底陈列规范已在 system 内）
+      // 逐套生图（本地 H3-Image，每张 1.5–8 分钟；LLM 输出行即完整生图 prompt——白底陈列规范已在 system 内）
       for (const line of lines) {
         await generateDuanjuImage(workId, { kind: 'outfit', refId: character.id, prompt: line, provider: imageProviderForApi() });
       }

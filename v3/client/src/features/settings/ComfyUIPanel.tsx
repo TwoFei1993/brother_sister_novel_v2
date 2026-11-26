@@ -1,7 +1,7 @@
 /**
  * 本地引擎面板（frontend-design 精修标准）：ComfyUI 地址 + 视频/生图工作流 + 探活
  *
- * 生图工作流留空即用内置 Z-Image-Turbo 默认模板（零配置出图）；配置存 localStorage（非敏感）。
+ * 生图工作流留空即用内置 H3-Image 默认模板（零配置出图）；配置存 localStorage（非敏感）。
  */
 import { useCallback, useEffect, useState } from 'react';
 
@@ -12,7 +12,7 @@ const WF_PLACEHOLDER = `在 ComfyUI 界面：Settings → 启用开发者模式 
 把其中图片节点的 image 值改为 "<<FRAME>>"、
 正向提示词节点的 text 改为 "<<PROMPT>>" → 粘贴到这里`;
 
-const IMG_WF_PLACEHOLDER = `留空 = 使用内置 Z-Image-Turbo 默认模板（已实测，推荐）。
+const IMG_WF_PLACEHOLDER = `留空 = 使用内置 H3-Image 默认模板（已实测，推荐；每张约 1.5–8 分钟）。
 自定义：ComfyUI 打开生图工作流 → Export (API) 导出 JSON →
 提示词节点 text 改为 "<<PROMPT>>"、尺寸节点改 "<<WIDTH>>"/"<<HEIGHT>>"、
 采样 seed 改 "<<SEED>>" → 粘贴到这里`;
@@ -71,7 +71,7 @@ export default function ComfyUIPanel() {
           />
           {!cfg.imageWorkflow.trim() && (
             <span className="mt-1 block text-[10px] text-[hsl(var(--accent))]">
-              ✅ 当前使用内置 Z-Image-Turbo 默认模板（{effectiveImageWorkflow(cfg).length} 字符，已实测）
+              ✅ 当前使用内置 H3-Image 默认模板（{effectiveImageWorkflow(cfg).length} 字符，已实测）
             </span>
           )}
         </label>

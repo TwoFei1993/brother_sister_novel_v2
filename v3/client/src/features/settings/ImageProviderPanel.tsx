@@ -16,8 +16,8 @@ const PROVIDERS: ReadonlyArray<{
 }> = [
   {
     id: 'comfy',
-    label: '本地 ComfyUI（Z-Image-Turbo）',
-    desc: '自家电脑出图：免费、秒级、中文提示词直出；需本机/局域网 ComfyUI 引擎（下方「本地引擎」面板配置地址），引擎离线时请切回云端',
+    label: '本地 ComfyUI（H3-Image）',
+    desc: '自家电脑出图：免费、每张约 1.5–8 分钟、中文提示词直出；需本机/局域网 ComfyUI 引擎（下方「本地引擎」面板配置地址），引擎离线时请切回云端',
     recommended: true,
     price: '免费',
   },
