@@ -261,9 +261,12 @@ export type DuanjuShot = z.infer<typeof DuanjuShotSchema>;
 // ---------- 项目根（project.json 全量） ----------
 
 /** 新建短剧的可选项（createWork 入参；服务端原子初始化 project.json） */
+/** 短剧目标集数缺省值（用户需求 2026-11-26：默认只出 1 集——拆解 / 流水线照此；建书弹窗与一键转换兜底共用） */
+export const DEFAULT_TARGET_EPISODES = 1;
+
 export const DuanjuInitSchema = z.strictObject({
-  /** 目标集数（默认 12，共识「六、默认值」） */
-  targetEpisodes: z.number().int().positive().max(200).default(12),
+  /** 目标集数（默认 1：先出第 1 集的剧本与分镜，后续集在剧本分区继续加） */
+  targetEpisodes: z.number().int().positive().max(200).default(DEFAULT_TARGET_EPISODES),
   /** 画风（默认 动漫风；全局可改） */
   style: z.string().min(1).default('动漫风'),
   /** 主角设定自由文本（人数/身份/关系/外形；题材中立 D9） */

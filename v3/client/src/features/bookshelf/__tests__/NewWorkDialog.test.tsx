@@ -206,3 +206,41 @@ describe('NewWorkDialog 写作风格（M1 Task 4）', () => {
     expect(attributeAssetsMock).toHaveBeenCalledWith('w1', { characterIds: [], worldbookIds: [] });
   });
 });
+
+describe('NewWorkDialog 故事基调与短剧默认集数（2026-11-26 用户反馈）', () => {
+  /** 点一枚基调芯片（原生 click 不经过 React 合成——直接派发冒泡 click） */
+  async function toggleTone(container: HTMLElement, tone: string): Promise<void> {
+    const chip = container.querySelector(`[data-testid="new-work-tone-${tone}"]`);
+    if (!chip) throw new Error(`missing tone chip ${tone}`);
+    await act(async () => {
+      chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  }
+
+  it('⑧ 基调芯片：默认「热血爽文」；改选并填自定义 → 随 settings 下发', async () => {
+    const container = await renderDialog();
+    expect(container.querySelector('[data-testid="new-work-tones"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="new-work-tone-热血爽文"]')?.getAttribute('aria-pressed')).toBe('true');
+    await toggleTone(container, '热血爽文');
+    await toggleTone(container, '温情治愈');
+    const custom = container.querySelector<HTMLInputElement>('[data-testid="new-work-custom-tone"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(custom!, '轻松欢快');
+      custom!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await submitForm(container);
+    const input = firstCreateInput();
+    expect(input.settings!.storyTones).toEqual(['温情治愈']);
+    expect(input.settings!.customStoryTone).toBe('轻松欢快');
+  });
+
+  it('⑨ 短剧目标集数默认 1（默认只出 1 集的剧本与分镜）', async () => {
+    const container = await renderDialog();
+    await clickRadio(container, 2); // 短剧
+    const episodes = container.querySelector<HTMLInputElement>('input[type="number"]');
+    expect(episodes!.value).toBe('1');
+    await submitForm(container);
+    expect(firstCreateInput().duanju!.targetEpisodes).toBe(1);
+  });
+});

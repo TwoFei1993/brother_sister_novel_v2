@@ -11,13 +11,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Check, ListChecks, WandSparkles } from 'lucide-react';
 
 import { createWork, deleteWork, getWork, listWorks, updateWork, type WorkSummary } from '../../../api/works';
-import { defaultNovelSettings, type FormatType, type GenreType, type WritingStyle } from '@shared/work';
+import { defaultNovelSettings, type FormatType, type GenreType, type StoryTone, type WritingStyle } from '@shared/work';
+import { DEFAULT_TARGET_EPISODES } from '@shared/duanju';
+import type { PresetPromptOverrides } from '@shared/engine/prompt/preset-overrides';
 import { selectStreamingWorkId, useGenerationStore } from '../../../stores/generation';
 import { groupByTag } from '../read/ReadShelf';
 import { ShelfBookCover, ShelfGroupCard } from '../ShelfCover';
 import { useShelfBatch } from '../../bookshelf/useShelfBatch';
 import ActiveTaskBadge from './ActiveTaskBadge';
 import NewWorkOptions from '../../bookshelf/NewWorkOptions';
+import NewWorkPresetGroups from '../../workbench/preset/NewWorkPresetGroups';
 import NewWorkPresetSelect from './style/NewWorkPresetSelect';
 
 const COLLAPSE_KEY = 'create-shelf-collapse-v1';
@@ -57,16 +60,20 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [genre, setGenre] = useState('xuanhuan');
   /** 模式：novel 默认 / duanju 短剧（创建后锁定，共识 D2） */
   const [mode, setMode] = useState<'novel' | 'duanju'>('novel');
-  const [targetEpisodes, setTargetEpisodes] = useState(12);
+  const [targetEpisodes, setTargetEpisodes] = useState(DEFAULT_TARGET_EPISODES);
   const [style, setStyle] = useState<string>(DUANJU_STYLES[0]);
   const [protagonists, setProtagonists] = useState('');
   /** 手写模式：创建后直达正文，自己写/粘贴，再用 AI 润色（novel 专属） */
   const [handwrite, setHandwrite] = useState(false);
-  /** 写作风格 + 内容形态（用户反馈 2026-11-24：手机端新建小说此前没有这两个下拉——与桌面端建书共用 NewWorkOptions） */
+  /** 写作风格 + 故事基调 + 内容形态（用户反馈 2026-11-24 / 11-26：与桌面端建书共用 NewWorkOptions） */
   const [writingStyle, setWritingStyle] = useState<WritingStyle>('default');
   const [format, setFormat] = useState<FormatType>('default');
+  const [tones, setTones] = useState<StoryTone[]>(defaultNovelSettings.storyTones);
+  const [customTone, setCustomTone] = useState('');
   /** 主预设（可选）：不绑定则资料页没有预设文风/情感基调/附加选项可选 */
   const [presetId, setPresetId] = useState('');
+  /** 建书时勾选的预设文风/基调条目（随 settings.presetPromptOverrides 下发，按书真实生效） */
+  const [presetOverrides, setPresetOverrides] = useState<PresetPromptOverrides>({});
   const [busy, setBusy] = useState(false);
 
   async function submit(): Promise<void> {
@@ -83,7 +90,16 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
               genre,
               // 完整 settings 整体下发（server 严格校验）：题材 + 写作风格 + 内容形态（与桌面端建书一致；
               // 此前手机端建书不传 settings，风格与形态恒为默认）
-              settings: { ...defaultNovelSettings, genre: genre as GenreType, writingStyle, format },
+              settings: {
+                ...defaultNovelSettings,
+                genre: genre as GenreType,
+                writingStyle,
+                format,
+                storyTones: tones,
+                customStoryTone: customTone.trim(),
+                // 建书时勾过的预设条目随书下发；没动过则不写，保留资料页 AI 预选的触发条件
+                ...(Object.keys(presetOverrides).length > 0 ? { presetPromptOverrides: presetOverrides } : {}),
+              },
               presetId,
             },
       );
@@ -195,13 +211,24 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
               format={format}
               onStyleChange={setWritingStyle}
               onFormatChange={setFormat}
+              tones={tones}
+              customTone={customTone}
+              onTonesChange={setTones}
+              onCustomToneChange={setCustomTone}
               selectClass="h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
             />
             <NewWorkPresetSelect
               value={presetId}
-              onChange={setPresetId}
+              onChange={(id) => {
+                // 换了主预设：清掉上一个预设的勾选（覆盖表按预设条目计，跨预设不能沿用）
+                setPresetOverrides({});
+                setPresetId(id);
+              }}
               selectClass="h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
             />
+            {presetId !== '' && (
+              <NewWorkPresetGroups presetId={presetId} overrides={presetOverrides} onChange={setPresetOverrides} />
+            )}
           <label className="mb-4 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-handwrite">
             <input type="checkbox" checked={handwrite} onChange={(e) => setHandwrite(e.target.checked)} />
             ✍️ 从手写开始（自己写/粘贴正文，再用 AI 润色）

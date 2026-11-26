@@ -21,11 +21,15 @@ import {
     FANDOM_TYPE_LABELS,
     type FandomType,
     type FormatType,
+    type StoryTone,
     type WorkMode,
     type WritingStyle,
   } from '@shared/work';
+import { DEFAULT_TARGET_EPISODES } from '@shared/duanju';
+import type { PresetPromptOverrides } from '@shared/engine/prompt/preset-overrides';
 import { GENRE_OPTIONS, type Genre } from './genres';
 import NewWorkOptions from './NewWorkOptions';
+import NewWorkPresetGroups from '../workbench/preset/NewWorkPresetGroups';
 import {
   BindingSelector, EMPTY_BINDINGS, EMPTY_OPTIONS,
   type BindingKey, type BindingOptions, type Bindings,
@@ -43,7 +47,6 @@ const MODE_CHOICES: ReadonlyArray<{ value: WorkMode; label: string; hint: string
 
 /** 短剧画风选项（共识「六、默认值」：默认动漫风，创建后可改） */
 const STYLE_OPTIONS = ['动漫风', '3D 卡通', '写实', '国漫', '水墨'] as const;
-const DEFAULT_TARGET_EPISODES = 12;
 
 export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
   const navigate = useNavigate();
@@ -56,12 +59,17 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
   const [fandomSource, setFandomSource] = useState('');
   // 内容形态（用户需求 2026-11-24：番茄小短篇/红果短剧剧本等——决定体量与格式，随 settings 下发）
   const [format, setFormat] = useState<FormatType>('default');
+  // 故事基调（用户反馈 2026-11-26：创建时就能多选开心、压抑等情绪；settings.storyTones 注入设定块）
+  const [tones, setTones] = useState<StoryTone[]>(defaultNovelSettings.storyTones);
+  const [customTone, setCustomTone] = useState('');
   const [fandomType, setFandomType] = useState<FandomType | ''>('');
   const [fandomNotes, setFandomNotes] = useState('');
   // 短剧专属字段（共识 D2/D9：目标集数/画风/主角自由设定）
   const [targetEpisodes, setTargetEpisodes] = useState(DEFAULT_TARGET_EPISODES);
   const [style, setStyle] = useState<string>(STYLE_OPTIONS[0]);
   const [protagonists, setProtagonists] = useState('');
+  // 主预设的文风 / 情感基调勾选（建书时随 settings.presetPromptOverrides 下发，按书真实生效）
+  const [presetOverrides, setPresetOverrides] = useState<PresetPromptOverrides>({});
   const [bindings, setBindings] = useState<Bindings>(EMPTY_BINDINGS);
   const [options, setOptions] = useState<BindingOptions>(EMPTY_OPTIONS);
   const [optionsFailed, setOptionsFailed] = useState(false);
@@ -110,6 +118,10 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
                 genre,
                 writingStyle,
                 format,
+                storyTones: tones,
+                customStoryTone: customTone.trim(),
+                // 建书时勾过的预设条目随书下发（只存改动过的条目）；没动过则不写，保留资料页 AI 预选的触发条件
+                ...(Object.keys(presetOverrides).length > 0 ? { presetPromptOverrides: presetOverrides } : {}),
                 ...(genre === 'fanfic'
                   ? {
                       fandomSource: fandomSource.trim(),
@@ -212,13 +224,17 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
           </select>
         </label>
 
-        {/* 写作风格 + 内容形态（novel/chat 显示，短剧不消费）——与手机端建书共用 NewWorkOptions */}
+        {/* 写作风格 + 故事基调 + 内容形态（novel/chat 显示，短剧不消费）——与手机端建书共用 NewWorkOptions */}
         {mode !== 'duanju' && (
           <NewWorkOptions
             writingStyle={writingStyle}
             format={format}
             onStyleChange={setWritingStyle}
             onFormatChange={setFormat}
+            tones={tones}
+            customTone={customTone}
+            onTonesChange={setTones}
+            onCustomToneChange={setCustomTone}
             selectClass={selectClass}
             optionClass={OPTION_CLS}
           />
@@ -323,9 +339,17 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
             bindings={bindings}
             options={options}
             optionsFailed={optionsFailed}
-            onChange={setBindings}
+            onChange={(next) => {
+              // 换了主预设：清掉上一个预设的勾选（覆盖表按预设条目计，跨预设不能沿用）
+              if (next.presetId !== bindings.presetId) setPresetOverrides({});
+              setBindings(next);
+            }}
             selectClass={selectClass}
           />
+        )}
+        {/* 绑定主预设后：该预设的文风 / 情感基调条目建书时即可多选（随 settings.presetPromptOverrides 下发） */}
+        {mode !== 'duanju' && bindings.presetId !== '' && (
+          <NewWorkPresetGroups presetId={bindings.presetId} overrides={presetOverrides} onChange={setPresetOverrides} />
         )}
 
         {error && (

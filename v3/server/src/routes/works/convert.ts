@@ -16,7 +16,7 @@ import type { RequestHandler } from 'express';
 import { HttpError } from '../../middleware/validate';
 import { readJson, writeJsonAtomic } from '../../storage/store';
 import { assertSafeId, workFile, worksDir, wrap } from './works';
-import { newDuanjuProject } from '@shared/duanju';
+import { DEFAULT_TARGET_EPISODES, newDuanjuProject } from '@shared/duanju';
 import type { Work } from '@shared/work';
 
 const MAX_CHARS = 100_000;
@@ -86,7 +86,7 @@ export const convertToDuanju: RequestHandler = async (req, res) => {
   };
   await writeJsonAtomic(workFile(work.id), work);
 
-  const project = newDuanjuProject({ targetEpisodes: 12, style: '动漫风', protagonists: '' }, now);
+  const project = newDuanjuProject({ targetEpisodes: DEFAULT_TARGET_EPISODES, style: '动漫风', protagonists: '' }, now);
   // 小说全文即「原文」：scope=full 表示各集从原文切片改编（分集剧本，设计共识 2026-11-26 第 3.3 节）
   project.script = { source: 'pasted', text: fullText, confirmed: true, scope: 'full', updatedAt: now };
   await writeJsonAtomic(join(worksDir(), work.id, 'duanju', 'project.json'), project);

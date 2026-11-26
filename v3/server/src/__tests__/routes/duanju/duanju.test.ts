@@ -76,7 +76,7 @@ describe('duanju 作品创建', () => {
     expect(project.script.confirmed).toBe(false);
   });
 
-  it('duanju 缺省：targetEpisodes=12 / style=动漫风', async () => {
+  it('duanju 缺省：targetEpisodes=1（2026-11-26 用户需求：默认只出 1 集）/ style=动漫风', async () => {
     const app = testApp();
     const res = await authed(app).post('/api/works').send({
       title: '默认短剧',
@@ -85,7 +85,7 @@ describe('duanju 作品创建', () => {
     });
     expect(res.status).toBe(201);
     const project = await authed(app).get(`/api/works/${res.body.id}/duanju`);
-    expect(project.body.targetEpisodes).toBe(12);
+    expect(project.body.targetEpisodes).toBe(1);
     expect(project.body.style).toBe('动漫风');
   });
 

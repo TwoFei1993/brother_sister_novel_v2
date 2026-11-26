@@ -28,7 +28,7 @@ import {
   type WorkStats,
   AssetBindingSchema,
 } from '@shared/work';
-import { DuanjuInitSchema, newDuanjuProject } from '@shared/duanju';
+import { DEFAULT_TARGET_EPISODES, DuanjuInitSchema, newDuanjuProject } from '@shared/duanju';
 
 // ---------- 路径解析（实时读 DATA_DIR，测试注入临时目录） ----------
 // 基准与 main.ts/paths.ts 一致：相对路径以 server/ 为基准（本文件位于 src/routes/works/，上三级即 server/），
@@ -161,7 +161,7 @@ export const createWork: RequestHandler = async (req, res) => {
     // 短剧：同事务初始化 project.json；无消息流，不建 messages.jsonl（D2 完全隔离）
     await writeJsonAtomic(
       join(worksDir(), work.id, 'duanju', 'project.json'),
-      newDuanjuProject(input.duanju ?? { targetEpisodes: 12, style: '动漫风', protagonists: '' }, now),
+      newDuanjuProject(input.duanju ?? { targetEpisodes: DEFAULT_TARGET_EPISODES, style: '动漫风', protagonists: '' }, now),
     );
   } else {
     await writeFile(join(worksDir(), work.id, 'messages.jsonl'), '', 'utf8');

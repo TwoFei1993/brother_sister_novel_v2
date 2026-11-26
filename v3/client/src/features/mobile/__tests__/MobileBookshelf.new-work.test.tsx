@@ -8,12 +8,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { apiFetch } from '../../../api/client';
 import { listPresets } from '../../../api/library';
 import { createWork, listWorks } from '../../../api/works';
 
 import MobileBookshelf from '../create/MobileBookshelf';
 
 vi.mock('../../../api/library', () => ({ listPresets: vi.fn() }));
+vi.mock('../../../api/client', () => ({ apiFetch: vi.fn() }));
 vi.mock('../../../api/works', () => ({
   createWork: vi.fn(),
   deleteWork: vi.fn(),
@@ -84,6 +86,7 @@ async function submit(container: HTMLElement): Promise<void> {
 beforeEach(() => {
   vi.mocked(listWorks).mockReset().mockResolvedValue([]);
   vi.mocked(listPresets).mockReset().mockResolvedValue([]);
+  vi.mocked(apiFetch).mockReset().mockRejectedValue(new Error('测试里没有这个请求'));
   createWorkMock.mockReset().mockResolvedValue({ id: 'new-work-1' } as never);
   localStorage.clear();
   sessionStorage.clear();
@@ -164,5 +167,90 @@ describe('手机端新建作品：写作风格与内容形态', () => {
     await fillTitle(container, '绑定预设的书');
     await submit(container);
     expect(createWorkMock.mock.calls[1]![0].presetId).toBe('p1');
+  });
+});
+
+describe('手机端新建作品：故事基调与预设条目（2026-11-26 用户反馈：创建时就要能选，且真实挂预设）', () => {
+  /** 点一枚基调芯片（关闭时点上 / 开着时点关） */
+  async function toggleTone(container: HTMLElement, tone: string): Promise<void> {
+    await click(container.querySelector(`[data-testid="new-work-tone-${tone}"]`), `基调芯片 ${tone}`);
+  }
+
+  it('基调芯片：默认含「热血爽文」；关掉它、点上「温情治愈」、填自定义 → 随 settings 下发', async () => {
+    const container = await openNovelDialog();
+    expect(container.querySelector('[data-testid="new-work-tones"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="new-work-tone-热血爽文"]')?.getAttribute('aria-pressed')).toBe('true');
+    await toggleTone(container, '热血爽文');
+    await toggleTone(container, '温情治愈');
+    const custom = container.querySelector<HTMLInputElement>('[data-testid="new-work-custom-tone"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(custom!, '轻松欢快');
+      custom!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await fillTitle(container, '基调测试书');
+    await submit(container);
+    const settings = createWorkMock.mock.calls[0]![0].settings!;
+    expect(settings.storyTones).toEqual(['温情治愈']);
+    expect(settings.customStoryTone).toBe('轻松欢快');
+  });
+
+  it('绑定主预设：预设的文风 / 情感基调条目出现，勾选随 settings.presetPromptOverrides 下发', async () => {
+    vi.mocked(listPresets).mockResolvedValue([{ id: 'p1', name: 'Sudachi' }]);
+    vi.mocked(apiFetch).mockResolvedValue({
+      id: 'p1',
+      name: 'Sudachi',
+      raw: {
+        prompts: [
+          { identifier: 'g-style', name: '—\\文风设定', content: '' },
+          { identifier: 'style-a', name: '轻盈日常', content: 'a' },
+          { identifier: 'style-b', name: '厚重史诗', content: 'b' },
+          { identifier: 'g-tone', name: '—\\情感基调', content: '' },
+          { identifier: 'tone-happy', name: '欢快开心', content: '' },
+          { identifier: 'tone-gloomy', name: '压抑', content: '' },
+        ],
+        prompt_order: [
+          {
+            order: [
+              { identifier: 'g-style', enabled: true },
+              { identifier: 'style-a', enabled: true },
+              { identifier: 'style-b', enabled: false },
+              { identifier: 'g-tone', enabled: true },
+              { identifier: 'tone-happy', enabled: false },
+              { identifier: 'tone-gloomy', enabled: false },
+            ],
+          },
+        ],
+      },
+    } as never);
+    const container = await openNovelDialog();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await selectOption(container, 'new-work-preset', 'p1');
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="new-work-preset-groups"]')).not.toBeNull();
+    // 预设默认：文风 A 开、B 关；基调全关。点开基调「欢快开心」，文风换成「厚重史诗」（单选：B 开则 A 关）
+    expect(container.querySelector('[data-testid="new-work-preset-style-style-a"]')?.getAttribute('aria-pressed')).toBe('true');
+    await click(container.querySelector('[data-testid="new-work-preset-tone-tone-happy"]'), '基调条目');
+    await click(container.querySelector('[data-testid="new-work-preset-style-style-b"]'), '文风条目');
+    await fillTitle(container, '预设条目测试书');
+    await submit(container);
+    const input = createWorkMock.mock.calls[0]![0];
+    expect(input.presetId).toBe('p1');
+    expect(input.settings!.presetPromptOverrides).toEqual({ 'tone-happy': true, 'style-b': true, 'style-a': false });
+  });
+
+  it('短剧模式目标集数默认 1（用户反馈：默认出 1 集就行）', async () => {
+    const container = await openNovelDialog();
+    await click(container.querySelector('[data-testid="new-work-mode-duanju"]'), '短剧模式');
+    const episodes = container.querySelector<HTMLInputElement>('input[type="number"]');
+    expect(episodes!.value).toBe('1');
+    await fillTitle(container, '短剧默认集数');
+    await submit(container);
+    expect(createWorkMock.mock.calls[0]![0].duanju!.targetEpisodes).toBe(1);
   });
 });
