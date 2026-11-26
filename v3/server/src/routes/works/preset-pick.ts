@@ -164,29 +164,35 @@ async function pickAndRespond(res: Response, presetId: string, bookInfo: string)
   }
   // 同人书：原著文风/氛围是挑选依据，开联网搜索兜底（非同人不开，省 token）
   const webSearchUses = bookInfo.includes('同人原著') ? 2 : 0;
-  const r = await collectWithDefense({
-    source: IMPORT_SOURCE,
-    model: IMPORT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content:
-          '你是网文配置顾问。根据书籍信息从预设条目中挑选最合适的组合。输出必须是纯 JSON 对象（不要 markdown 代码块、不要解释文字）。',
-      },
-      { role: 'user', content: pickPrompt(bookInfo, groups) },
-    ],
-    params: { webSearchUses },
-    maxTokens: 4000,
-  });
-  let picked: { overrides: Record<string, boolean>; reasons: Record<string, string> };
-  try {
-    picked = parsePicks(r.text, groups);
-  } catch {
-    res.status(502).json({ error: 'AI 输出无法解析，请重试一次' });
-    return;
+  const ask = async (): Promise<string> =>
+    (
+      await collectWithDefense({
+        source: IMPORT_SOURCE,
+        model: IMPORT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是网文配置顾问。根据书籍信息从预设条目中挑选最合适的组合。输出必须是纯 JSON 对象（不要 markdown 代码块、不要解释文字）。',
+          },
+          { role: 'user', content: pickPrompt(bookInfo, groups) },
+        ],
+        params: { webSearchUses },
+        maxTokens: 4000,
+      })
+    ).text;
+  // 上游偶发输出不可解析（建书首体验实测遇到一次）：自动重试一次再报 502
+  let picked: { overrides: Record<string, boolean>; reasons: Record<string, string> } | null = null;
+  for (let attempt = 0; attempt < 2 && !picked; attempt += 1) {
+    try {
+      picked = parsePicks(await ask(), groups);
+    } catch {
+      picked = null;
+    }
+    if (picked && Object.keys(picked.overrides).length === 0) picked = null;
   }
-  if (Object.keys(picked.overrides).length === 0) {
-    res.status(502).json({ error: 'AI 未选出有效条目，请重试一次' });
+  if (!picked) {
+    res.status(502).json({ error: 'AI 预选没成功（上游输出两次都无法解析）——可稍后重试，或手动挑选' });
     return;
   }
   res.json({ overrides: picked.overrides, reasons: picked.reasons });
