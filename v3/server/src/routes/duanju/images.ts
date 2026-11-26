@@ -22,6 +22,7 @@ import { withWorkLock } from '../../middleware/writer';
 import { readJson, writeJsonAtomic } from '../../storage/store';
 import { randomUUID } from 'node:crypto';
 import type { DuanjuProject, SpendEntry, StoredImage } from '@shared/duanju';
+import { BuiltFromHintSchema, type BuiltFromHint } from '@shared/duanju';
 import { assertSafeId, worksDir, wrap } from '../works/works';
 import { duanjuFile, readDuanjuProject } from './project';
 import { ImageError, callImageGeneration, downloadAndStore } from '../../services/image';
@@ -58,7 +59,7 @@ async function resolveRefPath(id: string, refId: string, refImageId: string): Pr
 function buildSnapshot(
   project: DuanjuProject,
   shot: import('@shared/duanju').DuanjuShot,
-  hint?: { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> },
+  hint?: BuiltFromHint,
 ): import('@shared/duanju').BuiltFrom {
   const charAt: Record<string, number> = {};
   for (const cid of shot.characterIds) {
@@ -78,14 +79,16 @@ function buildSnapshot(
       if (s) sceneAt[s.id] = s.updatedAt;
     }
   }
-  return { scriptAt: hint?.scriptAt ?? project.script.updatedAt, charAt, sceneAt };
+  // 本集分集剧本的时刻快照：出图时本集有剧本记其时刻（生成前态优先），没有记 0（待刷新判定用）
+  const episodeScriptAt = hint?.episodeScriptAt ?? project.episodes.find((e) => e.id === shot.episodeId)?.scriptUpdatedAt ?? 0;
+  return { scriptAt: hint?.scriptAt ?? project.script.updatedAt, charAt, sceneAt, episodeScriptAt };
 }
 
 /** 镜级快照写入（保留既有 frameSnapshots） */
 function snapshotBuiltFrom(
   project: DuanjuProject,
   shot: import('@shared/duanju').DuanjuShot,
-  hint?: { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> },
+  hint?: BuiltFromHint,
 ): void {
   shot.builtFrom = { ...buildSnapshot(project, shot, hint), frameSnapshots: shot.builtFrom?.frameSnapshots };
 }
@@ -104,7 +107,7 @@ async function attachImage(
   image: StoredImage,
   frameIndex?: number,
   spendNote?: string,
-  hint?: { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> },
+  hint?: BuiltFromHint,
 ): Promise<DuanjuProject> {
   return withWorkLock(id, async () => {
     const project = await readJson<DuanjuProject>(duanjuFile(id));
@@ -169,6 +172,17 @@ async function attachImage(
     await writeJsonAtomic(duanjuFile(id), project);
     return project;
   });
+}
+
+/** 解析上传带回的上游态 hint（JSON 字符串或对象；缺失 / 损坏 / 不合 schema → 没有提示，按当前态） */
+function parseHint(raw: unknown): BuiltFromHint | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = BuiltFromHintSchema.safeParse(typeof raw === 'string' ? JSON.parse(raw) : raw);
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const generateDuanjuImage: RequestHandler = async (req, res, next) => {
@@ -364,11 +378,8 @@ export const uploadDuanjuImage: RequestHandler = async (req, res, next) => {
     const spendNote = source === 'comfy' ? `本地免费${frameIndex ? ` frame-${frameIndex}` : ''}` : undefined;
     try {
       // P2 修复：comfy 通道的生成在浏览器进行——client 随上传带回「发起生成时」的上游态 hint
-      const hintRaw = req.body?.builtFromHint;
-      const hint =
-        hintRaw && typeof hintRaw === 'object'
-          ? (hintRaw as { scriptAt?: number; charAt?: Record<string, number>; sceneAt?: Record<string, number> })
-          : undefined;
+      //（multipart 文本字段是 JSON 字符串：此前按对象判类型直接丢弃，hint 实际从未生效）
+      const hint = parseHint(req.body?.builtFromHint);
       const project = await attachImage(id, kind, refId, image, frameIndex, spendNote, hint);
       res.status(201).json({ image, project });
     } catch (err) {

@@ -3,13 +3,13 @@
  *
  * 六张卡（剧情概括/冲突/人物关系/事件链/情绪点/可视化动作）逐项可编辑、逐卡确认；
  * 确认进度条 + 已确认卡降调（扫视即知进度）；人物头像卡；集列表卡化。
- * 违审替换：accepted 时把剧本原文中的 original 替换为 replacement（同步改剧本）。
+ * 草稿、保存与违审替换的处置逻辑在 hooks/useReviewCardsDraft（本文件只管渲染）。
  */
-import { useEffect, useState } from 'react';
 import { Check, Undo2, Users } from 'lucide-react';
 
-import { useDuanjuStore } from '../store';
 import type { ReviewCards as ReviewCardsData } from '@shared/duanju';
+
+import { useReviewCardsDraft } from './hooks/useReviewCardsDraft';
 
 const TEXT_CARDS: ReadonlyArray<{ key: 'summary' | 'conflict' | 'characterRelations'; title: string; hint: string; rows: number }> = [
   { key: 'summary', title: '剧情概括', hint: '100 字内讲清核心故事', rows: 3 },
@@ -27,66 +27,13 @@ const ALL_KEYS = [...TEXT_CARDS.map((c) => c.key), ...LIST_CARDS.map((c) => c.ke
 type CardKey = (typeof ALL_KEYS)[number];
 
 export default function ReviewCards({ workId }: { workId: string }) {
-  const { project, patch, saving } = useDuanjuStore();
-  const [draft, setDraft] = useState<ReviewCardsData | null>(null);
-
-  useEffect(() => {
-    if (project) {
-      const c = project.reviewCards;
-      setDraft({
-        ...c,
-        eventChain: [...c.eventChain],
-        emotionPoints: [...c.emotionPoints],
-        visualActions: [...c.visualActions],
-        riskReplacements: [...c.riskReplacements],
-      });
-    }
-  }, [project]);
+  const { project, draft, saving, update, save, settleRisk, acceptAllRisks } = useReviewCardsDraft(workId);
 
   if (!project || !draft) return null;
   const cards = project.reviewCards;
   const confirmedMap = cards.confirmed ?? {};
   const confirmedCount = ALL_KEYS.filter((k) => confirmedMap[k]).length;
   const progressPct = Math.round((confirmedCount / ALL_KEYS.length) * 100);
-
-  function update(next: Partial<ReviewCardsData>): void {
-    setDraft((d) => (d ? { ...d, ...next } : d));
-  }
-
-  async function save(next?: Partial<ReviewCardsData>, confirmedNext?: Record<string, boolean>): Promise<void> {
-    const merged: ReviewCardsData = { ...(draft ?? cards), ...next, updatedAt: Date.now() };
-    setDraft(merged);
-    await patch(workId, {
-      reviewCards: {
-        ...merged,
-        confirmed: { ...confirmedMap, ...confirmedNext },
-      },
-    });
-  }
-
-  /** 违审替换：accepted = 替换剧本原文 + 标记；dismissed = 仅标记；可撤销重置 */
-  async function settleRisk(riskId: string, status: 'accepted' | 'dismissed' | 'pending'): Promise<void> {
-    if (!project) return;
-    const risks = (draft?.riskReplacements ?? []).map((r) => (r.id === riskId ? { ...r, status } : r));
-    let scriptPatch: undefined | ReturnType<typeof buildScriptPatch>;
-    if (status === 'accepted') {
-      const risk = risks.find((r) => r.id === riskId);
-      if (risk) scriptPatch = buildScriptPatch(project.script.text, risk.original, risk.replacement);
-    }
-    setDraft((d) => (d ? { ...d, riskReplacements: risks } : d));
-    await patch(workId, {
-      reviewCards: { ...(draft ?? cards), riskReplacements: risks },
-      ...(scriptPatch
-        ? {
-            script: {
-              ...project.script,
-              text: scriptPatch.text,
-              updatedAt: Date.now(),
-            },
-          }
-        : {}),
-    });
-  }
 
   const cardShell = (k: CardKey): string =>
     `group flex flex-col gap-2 rounded-xl border p-4 transition-colors focus-within:border-[hsl(var(--accent))]/60 ${
@@ -216,14 +163,7 @@ export default function ReviewCards({ workId }: { workId: string }) {
             {cards.riskReplacements.some((r) => r.status === undefined || r.status === 'pending') && (
               <button
                 type="button"
-                onClick={() => {
-                  const pending = (draft?.riskReplacements ?? []).filter(
-                    (r) => r.status === undefined || r.status === 'pending',
-                  );
-                  void (async () => {
-                    for (const r of pending) await settleRisk(r.id, 'accepted');
-                  })();
-                }}
+                onClick={() => void acceptAllRisks()}
                 className="h-7 rounded-lg bg-[hsl(var(--accent))] px-2.5 text-[11px] font-medium text-[hsl(var(--accent-fg))]"
                 data-testid="risk-accept-all"
               >
@@ -301,9 +241,4 @@ export default function ReviewCards({ workId }: { workId: string }) {
       {saving && <p className="px-5 pb-3 text-[11px] text-[hsl(var(--fg-muted))]">保存中…</p>}
     </section>
   );
-}
-
-/** accepted 替换的剧本新文本（找不到原文时原样返回，不破坏） */
-function buildScriptPatch(text: string, original: string, replacement: string): { text: string } {
-  return { text: text.split(original).join(replacement) };
 }

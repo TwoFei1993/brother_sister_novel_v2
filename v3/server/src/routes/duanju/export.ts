@@ -11,7 +11,8 @@ import type { RequestHandler } from 'express';
 import { ZipArchive } from 'archiver';
 
 import { HttpError } from '../../middleware/validate';
-import type { DuanjuProject, DuanjuShot } from '@shared/duanju';
+import type { DuanjuEpisode, DuanjuProject, DuanjuShot } from '@shared/duanju';
+import { scriptScopeOf } from '@shared/duanju';
 import { assertSafeId, worksDir, wrap } from '../works/works';
 import { readDuanjuProject } from './project';
 
@@ -42,7 +43,7 @@ export const exportDuanjuEpisode: RequestHandler = async (req, res, next) => {
       .filter((s) => s.episodeId === episodeId)
       .sort((a, b) => a.index - b.index);
 
-    const md = buildMarkdown(project, episode.title, episode.index, shots);
+    const md = buildMarkdown(project, episode, shots);
 
     const archive = new ZipArchive({ zlib: { level: 6 } });
     archive.on('error', () => {
@@ -101,11 +102,22 @@ function videoPromptOf(shot: DuanjuShot, project: DuanjuProject): string {
   ].join('\n');
 }
 
-function buildMarkdown(project: DuanjuProject, title: string, index: number, shots: DuanjuShot[]): string {
+/** 本集的分集剧本正文：集上的 script；「只有第 1 集」的作品第 1 集即原文（性质没显式保存时按原文推断，与客户端同一规则）；都没有返回空 */
+function episodeScriptOf(project: DuanjuProject, episode: DuanjuEpisode): string {
+  if (episode.script?.trim()) return episode.script;
+  if (episode.index === 1 && scriptScopeOf(project) === 'episode1') return project.script.text.trim() ? project.script.text : '';
+  return '';
+}
+
+/** 镜头表：有分集剧本时正文在最前（拆镜头读的就是它），其后是镜头表 */
+function buildMarkdown(project: DuanjuProject, episode: DuanjuEpisode, shots: DuanjuShot[]): string {
   const lines: string[] = [
-    `# 第 ${index} 集《${title}》镜头表`,
+    `# 第 ${episode.index} 集《${episode.title}》镜头表`,
     '',
     `> 项目：${project.style} · 生成时间：${new Date().toLocaleString('zh-CN')}`,
+    '',
+    ...(episodeScriptOf(project, episode) ? ['## 本集剧本', '', episodeScriptOf(project, episode), ''] : []),
+    '## 镜头表',
     '',
     '| 镜头 | 景别 | 运镜 | 站位 | 动作 | 台词 | 声音 | 即梦提示词 |',
     '| --- | --- | --- | --- | --- | --- | --- | --- |',

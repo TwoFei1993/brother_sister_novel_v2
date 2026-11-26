@@ -12,6 +12,8 @@ import { useDuanjuStore } from '../store';
 import { useSettingsStore } from '../../../stores/settings';
 import { useBgLlmTask } from '../../../hooks/useBgLlmTask';
 import { buildStoryboardMessages, parseStoryboard } from '../lib/prompts/prompts-storyboard';
+import { effectiveEpisodeScript } from '../lib/pipeline/source';
+import { usePipelineStore } from '../lib/pipeline/stores';
 import { storyboardHealth } from '../lib/stale';
 import ShotCard from './ShotCard';
 import BatchBar from './BatchBar';
@@ -43,6 +45,13 @@ export default function StoryboardPane({ workId }: { workId: string }) {
     () => (project && episode ? storyboardHealth(project, episode.id) : { stale: 0, withImage: 0, total: 0 }),
     [project, episode],
   );
+  /** 本集的分集剧本（没有则为空：拆镜头回退「原文 + 梗概」） */
+  const episodeScript = useMemo(
+    () => (project && episode ? effectiveEpisodeScript(project, episode) : undefined),
+    [project, episode],
+  );
+  /** 流水线运行中：手动拆镜头与它抢同一批集，禁用 */
+  const pipelineRunning = usePipelineStore((s) => s.runs[workId]?.status === 'running');
 
   /** 拆镜头结果应用（onDone 与切出恢复共用）：解析 → 替换该集镜头清单。
    *  P1 修复：patch 失败（409/断网）时保留 raw 到恢复键——LLM 拆了几分钟的结果不再凭空丢失 */
@@ -113,9 +122,10 @@ export default function StoryboardPane({ workId }: { workId: string }) {
     await patch(workId, { shots: [...project!.shots, next] });
   }
 
-  /** AI 拆镜头（替换本集镜头清单；二次确认防误清）→ server 后台任务（切出安全） */
+  /** AI 拆镜头（替换本集镜头清单；二次确认防误清）→ server 后台任务（切出安全）
+   *  读本集的分集剧本；还没有时回退「原文 + 梗概」（设计共识 2026-11-26 第 3.5 节） */
   async function splitShots(): Promise<void> {
-    if (!episode || splitting) return;
+    if (!episode || splitting || pipelineRunning) return;
     if (shots.length > 0 && !confirm(`本集已有 ${shots.length} 个镜头，重新拆解将替换，继续？`)) return;
     setError(null);
     const prefs = useSettingsStore.getState().llmPrefs;
@@ -132,7 +142,7 @@ export default function StoryboardPane({ workId }: { workId: string }) {
       model: prefs.model,
       messages: buildStoryboardMessages(
         `${episode.title}：${episode.synopsis}`,
-        project!.script.text,
+        episodeScript || project!.script.text,
         project!.characters,
         project!.scenes,
         project!.props,
@@ -163,9 +173,10 @@ export default function StoryboardPane({ workId }: { workId: string }) {
         <button
           type="button"
           onClick={() => void splitShots()}
-          disabled={!episode || splitting}
+          disabled={!episode || splitting || pipelineRunning}
           className="flex h-9 items-center gap-1 rounded-lg border border-[hsl(var(--accent))] px-3 text-xs text-[hsl(var(--accent))] disabled:opacity-40"
           data-testid="storyboard-split"
+          title={pipelineRunning ? '自动流水线正在运行——停掉或等它跑完再手动拆' : episodeScript ? '按本集的分集剧本拆镜头' : '本集还没有分集剧本：将按「原文 + 梗概」拆'}
         >
           <WandSparkles className="h-3.5 w-3.5" aria-hidden />
           {splitting ? '拆解中…' : '✨ AI 拆镜头'}
@@ -251,7 +262,8 @@ export default function StoryboardPane({ workId }: { workId: string }) {
 
       {shots.length === 0 && (
         <p className="py-12 text-center text-sm text-[hsl(var(--fg-muted))]">
-          本集还没有镜头——「AI 拆镜头」按剧本自动拆，或手动加
+          本集还没有镜头——「AI 拆镜头」按本集剧本自动拆，或手动加
+          {!episodeScript && <span className="block text-xs">（本集还没有分集剧本，将按「原文 + 梗概」拆；想拆得更准，先到「剧本」tab 改编这一集）</span>}
         </p>
       )}
 

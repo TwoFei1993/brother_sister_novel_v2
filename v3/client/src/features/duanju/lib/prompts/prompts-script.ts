@@ -2,9 +2,11 @@
  * 短剧剧本环节 prompt 模板（共识 D5 / 资料第 2 课）
  *
  * - buildScriptGenMessages：AI 生成剧本（竖屏短剧规格，60-120 秒/集、强钩子）
- * - buildBreakdownMessages：剧本 → 结构化拆解 JSON（审核卡数据源 + 违审替换建议）
+ * - buildBreakdownMessages：剧本 → 结构化拆解 JSON（审核卡数据源 + 违审替换建议 + 分集与原文锚点）
  * - parseBreakdown：模型输出 → BreakdownResult（容错：剥围栏/截大括号/字段过滤）
+ * - mergeEpisodes：拆解产出的集列表与现有集合并（保留原 id；挂镜头或已有剧本的旧集不丢）
  */
+import type { DuanjuEpisode } from '@shared/duanju';
 import type { GenerateMessage } from '../../../../api/llm';
 import { extractJsonObject } from '../json-extract';
 
@@ -53,7 +55,11 @@ export function buildScriptGenMessages(input: ScriptGenInput): GenerateMessage[]
   ];
 }
 
-/** 拆解系统词：严格 JSON 输出（planner 惯例：不包 markdown 代码块） */
+/**
+ * 拆解系统词：严格 JSON 输出（planner 惯例：不包 markdown 代码块）。
+ * 每集梗概加厚到 150 字内并按结构写（续写没有原文可依，全靠它）；每集另给原文首末句锚点，
+ * 供改编时按集截取原文（设计共识 2026-11-26 第 3.2 节）。
+ */
 const BREAKDOWN_SYSTEM = `你是短剧制片审核助手。把给定剧本拆解为结构化审核卡，用于后续角色/场景/分镜制作。
 只输出一个 JSON 对象，不要 markdown 代码块、不要解释文字。字段：
 {
@@ -64,9 +70,10 @@ const BREAKDOWN_SYSTEM = `你是短剧制片审核助手。把给定剧本拆解
   "emotionPoints": ["情绪点1"],
   "visualActions": ["把心理描写转成的可见动作"],
   "riskReplacements": [{"original": "高风险表达", "replacement": "中性可视化描述"}],
-  "episodes": [{"index": 1, "title": "集名", "synopsis": "本集梗概(50字内)"}]
+  "episodes": [{"index": 1, "title": "集名", "synopsis": "本集梗概（150字内，依次写：进入状态 → 本集目标 → 转折 → 结果 → 结尾钩子）", "sourceStart": "本集对应原文的第一句（逐字抄录，20字内）", "sourceEnd": "本集对应原文的最后一句（逐字抄录，20字内）"}]
 }
-要求：episodes 覆盖剧本中的全部集，按剧本顺序；riskReplacements 只挑真正有平台审核风险的表达（暴力直写/血腥细节/敏感词），没有则空数组；visualActions 把剧本里的心理独白转成可拍摄的动作。`;
+要求：episodes 覆盖剧本中的全部集，按剧本顺序，每集剧情不重叠、相邻集衔接；riskReplacements 只挑真正有平台审核风险的表达（暴力直写/血腥细节/敏感词），没有则空数组；visualActions 把剧本里的心理独白转成可拍摄的动作。
+原文位置：sourceStart 与 sourceEnd 必须从原文逐字抄录、不改写不加标点（程序按它们截取本集原文）；原文只够第 1 集时，其余各集这两项写空字符串。`;
 
 export interface BreakdownResult {
   summary: string;
@@ -76,32 +83,40 @@ export interface BreakdownResult {
   emotionPoints: string[];
   visualActions: string[];
   riskReplacements: { original: string; replacement: string }[];
-  episodes: { index: number; title: string; synopsis: string }[];
+  episodes: { index: number; title: string; synopsis: string; sourceStart?: string; sourceEnd?: string }[];
 }
 
+/** 锚点最长保留字数（模型偶发抄整段；过长时截断——切片定位用前缀降级匹配） */
+const ANCHOR_MAX = 60;
+const clipAnchor = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() ? v.trim().slice(0, ANCHOR_MAX) : undefined;
+
 /**
- * 拆解产出的集列表与现有 episodes 按 index 合并：已存在的集**保留原 id**
- * （深度测试抓出：全量重建新 id 会让旧集的 shots 成孤儿——数据留存但 UI 永不显示）；
- * 新 index 才新建 id。
- * 防丢数据：旧集中**挂有镜头**的（用户手动建过镜头），即使模型本次未提及也追加保留。
+ * 拆解产出的集列表与现有 episodes 按 index 合并：已存在的集**保留原 id 与其余字段**
+ * （深度测试抓出：全量重建新 id 会让旧集的 shots 成孤儿——数据留存但 UI 永不显示）。
+ * 防丢数据：旧集中**挂有镜头或已有剧本**的（用户投过镜头 / 写过这一集），即使模型本次未提及也追加保留。
  */
 export function mergeEpisodes(
-  existing: ReadonlyArray<{ id: string; index: number; title: string; synopsis: string }>,
-  parsed: ReadonlyArray<{ index: number; title: string; synopsis: string }>,
+  existing: ReadonlyArray<DuanjuEpisode>,
+  parsed: BreakdownResult['episodes'],
   shotsWithEp: ReadonlyArray<{ episodeId: string }> = [],
-): Array<{ id: string; index: number; title: string; synopsis: string }> {
+): DuanjuEpisode[] {
   const now = Date.now();
-  const merged = parsed.map((e) => {
+  const anchorsOf = (e: BreakdownResult['episodes'][number]): Partial<DuanjuEpisode> => ({
+    ...(e.sourceStart ? { sourceStart: e.sourceStart } : {}),
+    ...(e.sourceEnd ? { sourceEnd: e.sourceEnd } : {}),
+  });
+  const merged = parsed.map((e): DuanjuEpisode => {
     const found = existing.find((x) => x.index === e.index);
     return found
-      ? { ...found, title: e.title, synopsis: e.synopsis }
-      : { id: `ep-${now}-${e.index}`, index: e.index, title: e.title, synopsis: e.synopsis };
+      ? { ...found, title: e.title, synopsis: e.synopsis, ...anchorsOf(e) }
+      : { id: `ep-${now}-${e.index}`, index: e.index, title: e.title, synopsis: e.synopsis, ...anchorsOf(e) };
   });
   const mergedIds = new Set(merged.map((e) => e.id));
   for (const ep of existing) {
     if (mergedIds.has(ep.id)) continue;
     const hasShots = shotsWithEp.some((s) => s.episodeId === ep.id);
-    if (hasShots) merged.push(ep); // 用户投过镜头的集不因模型未提及而丢
+    if (hasShots || ep.script?.trim()) merged.push(ep); // 投过镜头 / 写过剧本的集不因模型未提及而丢
   }
   return merged;
 }
@@ -146,11 +161,17 @@ export function parseBreakdown(raw: string): BreakdownResult | null {
               typeof (x as { index?: unknown }).index === 'number' &&
               typeof (x as { title?: unknown }).title === 'string',
           )
-          .map((x) => ({
-            index: x.index,
-            title: x.title,
-            synopsis: typeof x.synopsis === 'string' ? x.synopsis : '',
-          }))
+          .map((x) => {
+            const sourceStart = clipAnchor((x as { sourceStart?: unknown }).sourceStart);
+            const sourceEnd = clipAnchor((x as { sourceEnd?: unknown }).sourceEnd);
+            return {
+              index: x.index,
+              title: x.title,
+              synopsis: typeof x.synopsis === 'string' ? x.synopsis : '',
+              ...(sourceStart ? { sourceStart } : {}),
+              ...(sourceEnd ? { sourceEnd } : {}),
+            };
+          })
       : [],
   };
 }

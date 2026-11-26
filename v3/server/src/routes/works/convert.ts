@@ -2,7 +2,7 @@
  * 小说 → 短剧一键转换（用户需求 2026-11-11）
  *
  * POST /works/:id/convert-to-duanju：创建新短剧作品（小说本体不动）——
- * 剧本正文 = 小说全文（source:'pasted'），confirmed=true 直接定稿解锁拆解
+ * 原文 = 小说全文（source:'pasted'，scope:'full'），confirmed=true 直接定稿解锁拆解
  * （定稿本身不触发任何付费调用，拆解仍需用户在剧本 tab 主动点击）。
  *
  * 护栏：源必须 mode=novel 且有章节正文；全文 ≤10 万字符（超长提示分卷——
@@ -87,7 +87,8 @@ export const convertToDuanju: RequestHandler = async (req, res) => {
   await writeJsonAtomic(workFile(work.id), work);
 
   const project = newDuanjuProject({ targetEpisodes: 12, style: '动漫风', protagonists: '' }, now);
-  project.script = { source: 'pasted', text: fullText, confirmed: true, updatedAt: now };
+  // 小说全文即「原文」：scope=full 表示各集从原文切片改编（分集剧本，设计共识 2026-11-26 第 3.3 节）
+  project.script = { source: 'pasted', text: fullText, confirmed: true, scope: 'full', updatedAt: now };
   await writeJsonAtomic(join(worksDir(), work.id, 'duanju', 'project.json'), project);
 
   res.status(201).json({ work });

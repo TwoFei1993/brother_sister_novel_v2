@@ -5,10 +5,12 @@
  * PATCH 返回更新后的全量 project（revision+1），调用方以此刷新本地状态。
  */
 import { apiFetch } from './client';
-import type { DuanjuPatch, DuanjuProject, StoredImage } from '@shared/duanju';
+import type { BuiltFromHint, DuanjuPatch, DuanjuProject, StoredImage } from '@shared/duanju';
 import { generateImageOnComfy, loadComfyConfig } from '../features/duanju/lib/comfy';
 import { composeCharacterSheet, cropFrontView } from '../features/duanju/lib/comfyCompose';
 import { characterSheetSplitPrompts } from '../features/duanju/lib/prompts/prompts-image';
+// 本地 ComfyUI 尺寸档（2026-11-10 实测定稿：设定图/场景横版、分帧竖屏、锚点 4:5）——与试验台共用同一组尺寸
+import { comfySizeFor } from '../features/duanju/lib/lab/aspects';
 import { useSettingsStore } from '../stores/settings';
 
 export async function getDuanjuProject(workId: string): Promise<DuanjuProject> {
@@ -40,7 +42,7 @@ export interface GenerateImageInput {
   aspectRatio?: string;
   /** 角色参考图 id（保持人物一致；缺省用角色当前主参考图） */
   refImageId?: string;
-  /** 生图通道（comfy=本地 ComfyUI 免费秒级 / zhipu=GLM-Image 文字强 / seedream=火山 Seedream 质量顶级；缺省按用户设置或 comfy） */
+  /** 生图通道（comfy=本地 ComfyUI 免费（H3-Image，每张 1.5–8 分钟） / zhipu=GLM-Image 文字强 / seedream=火山 Seedream 质量顶级；缺省按用户设置或 comfy） */
   provider?: 'zhipu' | 'seedream' | 'comfy';
   /** 分帧号（kind='frame' 必填 1-4） */
   frameIndex?: number;
@@ -64,18 +66,10 @@ export function imageProviderForApi(): GenerateImageInput['provider'] {
   return 'comfy';
 }
 
-/** 本地 ComfyUI 尺寸档（2026-11-10 实测定稿）：设定图/场景横版、分帧竖屏；
- *  大头照锚点 4:5 竖版 1152×1440（32 对齐）——单视图不触发 2×2 铺排先验 */
 /** P2-12：upload 端点 kind 枚举不含 'shot'（旧整图模式）——收窄并给人话报错 */
 function assertUploadKind(kind: GenerateImageInput['kind']): 'character' | 'outfit' | 'scene' | 'frame' | 'prop' {
   if (kind === 'shot') throw new Error('旧整图模式已由分帧替代——分镜请按帧生成');
   return kind;
-}
-
-function comfySizeFor(kind: GenerateImageInput['kind'], aspectRatio?: string): { width: number; height: number } {
-  if (aspectRatio === '4:5') return { width: 1152, height: 1440 };
-  if (kind === 'outfit' || kind === 'prop') return { width: 1024, height: 1024 }; // 白底商品/道具图方图
-  return kind === 'frame' ? { width: 768, height: 1344 } : { width: 1344, height: 768 };
 }
 
 /**
@@ -85,7 +79,7 @@ function comfySizeFor(kind: GenerateImageInput['kind'], aspectRatio?: string): {
 async function generateFrameWithRef(
   workId: string,
   input: GenerateImageInput,
-  genHint?: unknown,
+  genHint?: BuiltFromHint,
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
@@ -132,7 +126,7 @@ async function generateFrameWithRef(
 async function generateCharacterSheetLocal(
   workId: string,
   input: GenerateImageInput,
-  genHint?: unknown,
+  genHint?: BuiltFromHint,
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const cfg = loadComfyConfig();
   if (!cfg.url.trim()) throw new Error('本地 ComfyUI 未配置地址——请到设置页「本地引擎」填写并保存');
@@ -185,12 +179,13 @@ async function generateCharacterSheetLocal(
 }
 
 /**
- * 生图单点收口（5 个调用场景共用）：comfy 通道浏览器直连本地 ComfyUI（免费秒级），
+ * 生图单点收口（5 个调用场景共用）：comfy 通道浏览器直连本地 ComfyUI（免费，H3-Image 每张 1.5–8 分钟），
  * 生成 blob 经回流端点归档落库；云端通道走 server API（原路径不动，作降级选项）。
  */
 
-/** P2 修复：发起生成时（浏览器侧）的上游态快照 hint——动态 import 防循环依赖 */
-async function upstreamHintAtStart(shotId?: string): Promise<unknown> {
+/** P2 修复：发起生成时（浏览器侧）的上游态快照 hint——动态 import 防循环依赖。
+ *  episodeScriptAt：本集分集剧本当时的更新时刻（没有记 0）——待刷新判定用（设计共识 3.5） */
+async function upstreamHintAtStart(shotId?: string): Promise<BuiltFromHint | undefined> {
   if (!shotId) return undefined;
   const { useDuanjuStore } = await import('../features/duanju/store');
   const p = useDuanjuStore.getState().project;
@@ -210,6 +205,7 @@ async function upstreamHintAtStart(shotId?: string): Promise<unknown> {
     sceneAt: shot.sceneId
       ? { [shot.sceneId]: p.scenes.find((x) => x.id === shot.sceneId)?.updatedAt ?? 0 }
       : {},
+    episodeScriptAt: p.episodes.find((e) => e.id === shot.episodeId)?.scriptUpdatedAt ?? 0,
   };
 }
 
@@ -282,7 +278,7 @@ export async function uploadDuanjuImageFile(
   kind: 'character' | 'outfit' | 'scene' | 'frame' | 'prop',  // C3：prop 道具图通道（与 server upload 枚举对齐）
   refId: string,
   file: File,
-  opts?: { frameIndex?: number; prompt?: string; source?: 'comfy'; builtFromHint?: unknown },
+  opts?: { frameIndex?: number; prompt?: string; source?: 'comfy'; builtFromHint?: BuiltFromHint },
 ): Promise<{ image: StoredImage; project: DuanjuProject }> {
   const form = new FormData();
   form.append('kind', kind);

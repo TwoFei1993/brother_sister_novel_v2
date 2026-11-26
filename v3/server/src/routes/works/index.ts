@@ -11,6 +11,7 @@ import { authRequired } from '../../middleware/auth';
 import { zodBody } from '../../middleware/validate';
 import { mountDuanjuProject } from '../duanju/project';
 import { mountDuanjuImages } from '../duanju/images';
+import { mountDuanjuLab } from '../duanju/lab';
 import { mountDuanjuExport } from '../duanju/export';
 import { mountDuanjuMerge } from '../duanju/merge';
 import { mountDuanjuQc } from '../duanju/qc';
@@ -63,5 +64,7 @@ mountDuanjuMerge(worksRouter);
 mountDuanjuQc(worksRouter);
 // duanju 成品视频回传（multer mp4/webm → shot.finalVideo），见 duanju/videos.ts
 mountDuanjuVideos(worksRouter);
+// duanju 试验台（测试生图的历史 / 云端生成 / 本地产物回流 / 删除），见 duanju/lab.ts
+mountDuanjuLab(worksRouter);
 // 小说 → 短剧一键转换（新建短剧作品，剧本=小说全文），见 convert.ts
 worksRouter.post('/works/:id/convert-to-duanju', wrap(convertToDuanju));

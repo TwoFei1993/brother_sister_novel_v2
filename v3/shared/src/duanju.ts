@@ -7,6 +7,11 @@
  */
 import { z } from 'zod';
 
+import { DuanjuPipelineSchema, EpisodeScriptSourceSchema, ScriptScopeSchema } from './duanju/script';
+
+// 分集剧本与流水线的契约自本处转出：调用方统一从 @shared/duanju 导入
+export * from './duanju/script';
+
 // ---------- 基础件 ----------
 
 export const idSchema = z.string().min(1);
@@ -30,6 +35,11 @@ export const DuanjuScriptSchema = z.strictObject({
   text: z.string(),
   /** 定稿确认门：确认后才解锁角色/场景/分镜 tab */
   confirmed: z.boolean(),
+  /**
+   * 原文性质（设计共识 2026-11-26 第 3.3 节）：full=整本小说（各集改编）/ episode1=只有第 1 集
+   * （第 2 集起续写）。缺省由客户端按原文推断；小说一键转换时服务端直接写 full。
+   */
+  scope: ScriptScopeSchema.optional(),
   updatedAt: tsSchema,
 });
 export type DuanjuScript = z.infer<typeof DuanjuScriptSchema>;
@@ -155,9 +165,18 @@ export const DuanjuEpisodeSchema = z.strictObject({
   /** 集号（从 1 起） */
   index: z.number().int().positive(),
   title: z.string(),
+  /** 本集梗概（进入状态 → 本集目标 → 转折 → 结果 → 结尾钩子，150 字内）——续写没有原文可依，全靠它 */
   synopsis: z.string(),
   /** 本集叙事机制（T8 机制库 id，≤2）：拆镜头时注入系统提示词作叙事锚（反转钩/人物旅程/微表情等 284 选） */
   mechanisms: z.array(z.string()).max(2).optional(),
+  /** 本集剧本正文（空白不算有剧本；缺省=未写，拆镜头回退「全文 + 梗概」） */
+  script: z.string().optional(),
+  /** 剧本来源（adapted 从原文改编 / continued 按梗概续写 / manual 手写、采用或原文） */
+  scriptSource: EpisodeScriptSourceSchema.optional(),
+  scriptUpdatedAt: tsSchema.optional(),
+  /** 本集对应原文的首句 / 末句（各 20 字内，逐字抄录）——改编时用来切片 */
+  sourceStart: z.string().optional(),
+  sourceEnd: z.string().optional(),
 });
 export type DuanjuEpisode = z.infer<typeof DuanjuEpisodeSchema>;
 
@@ -169,6 +188,8 @@ export interface BuiltFrom {
   charAt?: Record<string, number>;
   /** sceneId → 该场景当时的 updatedAt */
   sceneAt?: Record<string, number>;
+  /** 本集剧本正文的更新时刻快照（本集当时没有分集剧本记 0；旧数据无此字段） */
+  episodeScriptAt?: number;
   /** 帧级独立快照（P2 修复：单帧重roll只刷新该帧，不再洗白其余帧）——key=帧号 1-4 */
   frameSnapshots?: Record<string, BuiltFrom>;
 }
@@ -176,6 +197,7 @@ export const BuiltFromSchema: z.ZodType<BuiltFrom> = z.strictObject({
   scriptAt: tsSchema.optional(),
   charAt: z.record(z.string(), tsSchema).optional(),
   sceneAt: z.record(z.string(), tsSchema).optional(),
+  episodeScriptAt: tsSchema.optional(),
   frameSnapshots: z.record(z.string(), z.lazy(() => BuiltFromSchema)).optional(),
 });
 
@@ -266,6 +288,8 @@ export const DuanjuProjectSchema = z.strictObject({
   shots: z.array(DuanjuShotSchema),
   /** 生图记账（server 追加，cap 5000；旧数据无此字段 → 代码侧 ?? [] 防御） */
   spendLog: z.array(SpendEntrySchema).default([]),
+  /** 流水线偏好（按作品；旧数据无此字段） */
+  pipeline: DuanjuPipelineSchema.optional(),
   createdAt: tsSchema,
   updatedAt: tsSchema,
 });
@@ -305,5 +329,6 @@ export const DuanjuPatchSchema = z.strictObject({
   props: z.array(DuanjuPropSchema).optional(),
   episodes: z.array(DuanjuEpisodeSchema).optional(),
   shots: z.array(DuanjuShotSchema).optional(),
+  pipeline: DuanjuPipelineSchema.optional(),
 });
 export type DuanjuPatch = z.infer<typeof DuanjuPatchSchema>;

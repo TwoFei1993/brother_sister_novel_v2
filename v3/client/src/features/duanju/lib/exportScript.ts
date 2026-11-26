@@ -101,6 +101,18 @@ export function buildScriptTxt(project: DuanjuProject, episode: DuanjuEpisode, s
   return out.join('\n');
 }
 
+/** 本集剧本（阅读稿，设计共识 2026-11-26 M4：分集剧本有了自己的正文，可单独导出） */
+export function buildEpisodeScriptText(project: DuanjuProject, episode: DuanjuEpisode, script: string): string {
+  const bar = '─'.repeat(46);
+  return [
+    `《${episode.title}》第 ${episode.index} 集 · ${project.style}`,
+    bar,
+    ...(episode.synopsis.trim() ? [`【本集梗概】${episode.synopsis.trim()}`, ''] : []),
+    script.trim(),
+    bar,
+  ].join('\n');
+}
+
 /** 触发浏览器下载（Blob） */
 export function downloadText(filename: string, content: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });

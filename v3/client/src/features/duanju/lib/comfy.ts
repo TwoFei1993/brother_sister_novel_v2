@@ -248,7 +248,7 @@ function netErr(err: unknown): Error {
 /** 上传图片 → ComfyUI input 目录，返回可注入 LoadImage 的文件名（subfolder/name）。
  *  文件名统一加随机后缀（P1 修复）：固定名 + overwrite=true 在并发任务（批量分帧/双镜头生视频）下
  *  会互相覆盖——A 提交 workflow 时 LoadImage 读到的是 B 刚覆盖的参考图。 */
-async function uploadImage(url: string, blob: Blob, name: string, type = 'image/png'): Promise<string> {
+export async function uploadImage(url: string, blob: Blob, name: string, type = 'image/png'): Promise<string> {
   const dot = name.lastIndexOf('.');
   const unique = dot > 0
     ? `${name.slice(0, dot)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}${name.slice(dot)}`
@@ -269,7 +269,7 @@ async function uploadImage(url: string, blob: Blob, name: string, type = 'image/
 }
 
 /** 占位符全文替换后解析 workflow：值统一 JSON 转义（提示词含换行/引号/控制字符均安全）；非法 JSON 带原始原因人话报错 */
-function injectWorkflow(workflowText: string, placeholders: Record<string, string>): Record<string, unknown> {
+export function injectWorkflow(workflowText: string, placeholders: Record<string, string>): Record<string, unknown> {
   let text = workflowText;
   for (const [key, value] of Object.entries(placeholders)) {
     text = text.split(key).join(JSON.stringify(value).slice(1, -1));
@@ -351,7 +351,7 @@ function extractOutputFile(entry: { outputs?: Record<string, Record<string, unkn
  * 提交 workflow（阶段一）：注入 → 数值覆盖 → POST /prompt → promptId。
  * 与轮询拆分的原因：手机长任务跨页面生命周期——prompt_id 持久化后可恢复轮询。
  */
-async function submitWorkflow(
+export async function submitWorkflow(
   base: string,
   workflowText: string,
   placeholders: Record<string, string>,
@@ -380,7 +380,7 @@ async function submitWorkflow(
 }
 
 /** 轮询 workflow（阶段二）：至完成并下载产物 blob；deadlineMs 从调用时点起算 */
-async function pollWorkflow(
+export async function pollWorkflow(
   base: string,
   promptId: string,
   deadlineMs: number,
@@ -435,7 +435,7 @@ async function pollWorkflow(
       return await vr.blob();
     }
   }
-  throw new Error('超时未完成——可在 ComfyUI 界面查看任务状态');
+  throw Object.assign(new Error('超时未完成——可在 ComfyUI 界面查看任务状态'), { code: 'POLL_TIMEOUT' }); // 带标记：调用方据此区分「等太久」与「任务丢了」
 }
 
 /**
@@ -597,7 +597,7 @@ export interface ComfyImageParams {
   workflow?: 'qwen-edit-2511';
 }
 
-/** 生图完整流程：注入提示词/尺寸/seed → 提交 → 轮询 → 下载 png blob（秒级出图，5 分钟兜底；参考通道 15 分钟） */
+/** 生图完整流程：注入提示词/尺寸/seed → 提交 → 轮询 → 下载 png blob（H3-Image 每张 1.5–8 分钟，15 分钟兜底） */
 export async function generateImageOnComfy(cfg: ComfyuiConfig, params: ComfyImageParams): Promise<Blob> {
   const base = cfg.url.replace(/\/$/, '');
   if (params.workflow === 'qwen-edit-2511') {

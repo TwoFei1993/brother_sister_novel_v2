@@ -26,6 +26,12 @@ interface DuanjuState {
   load: (workId: string) => Promise<void>;
   /** 局部字段提交；成功本地刷新并返回 true */
   patch: (workId: string, fields: Partial<Omit<DuanjuPatch, 'revision'>>) => Promise<boolean>;
+  /**
+   * 接受服务端传来的最新作品数据——加载、保存、流水线写入三个入口统一走这里：
+   * 只在当前加载的就是这本书、且版本号不小于本地时才替换（晚到的旧响应不会把版本号退回去，
+   * 否则下一次保存会撞版本冲突）。
+   */
+  adopt: (workId: string, project: DuanjuProject) => void;
   clearConflict: () => void;
   reset: () => void;
 }
@@ -53,11 +59,18 @@ export const useDuanjuStore = create<DuanjuState>()((set, get) => ({
     try {
       const project = await getDuanjuProject(workId);
       if (seq !== loadSeq) return; // 旧响应丢弃：并发 load 乱序不覆盖新数据
-      set({ project, loading: false });
+      get().adopt(workId, project); // 流水线期间本地版本号可能已更新：旧响应不把版本号退回去
+      set({ loading: false, loadError: false });
     } catch {
       if (seq !== loadSeq) return;
       set({ loadError: true, loading: false }); // 失败保留现有 project
     }
+  },
+  adopt: (workId, project) => {
+    if (loadedWorkId !== workId) return;
+    const cur = get().project;
+    if (cur && project.revision < cur.revision) return;
+    set({ project });
   },
   patch: async (workId, fields) => {
     const cur = get().project;
@@ -65,7 +78,8 @@ export const useDuanjuStore = create<DuanjuState>()((set, get) => ({
     set({ saving: true, conflict: false });
     try {
       const next = await patchDuanju(workId, cur.revision, fields);
-      set({ project: next, saving: false });
+      get().adopt(workId, next);
+      set({ saving: false });
       return true;
     } catch {
       set({ saving: false, conflict: true });

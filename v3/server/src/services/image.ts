@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { CLOUD_IMAGE_SIZES, CLOUD_IMAGE_SIZE_FALLBACK } from '@shared/duanju/lab';
 import { logger } from '../middleware/logger';
 import { readJson } from '../storage/store';
 import { dataDir } from '../routes/core/paths';
@@ -36,31 +37,12 @@ const ENDPOINT_ARK = 'https://ark.cn-beijing.volces.com/api/v3/images/generation
 /** 生图通道：GLM-Image 文字强；Seedream（即梦同源）5.0-flash 质量顶级 0.12 元/张参考图免费 */
 export type ImageProvider = 'zhipu' | 'seedream';
 
-/** provider → 尺寸参数（zhipu/seedream 用 size 像素串，32 倍数） */
+/** provider → 尺寸参数（zhipu/seedream 用 size 像素串，32 倍数）。尺寸表在 shared（与试验台界面同源） */
 function ratioFor(provider: ImageProvider, ratio: string): Record<string, unknown> {
-  if (provider === 'seedream') {
-    const sizeMap: Record<string, string> = {
-      '1:1': '2048x2048',
-      '3:4': '1536x2048',
-      '4:3': '2048x1536',
-      '16:9': '2560x1440',
-      '9:16': '1440x2560',
-      '2:3': '1360x2040',
-      '3:2': '2040x1360',
-    };
-    return { size: sizeMap[ratio] ?? '1536x2048' };
-  }
-  const sizeMap: Record<string, string> = {
-    '1:1': '1024x1024',
-    '3:4': '864x1152',
-    '4:3': '1152x864',
-    '16:9': '1280x720',
-    '9:16': '720x1280',
-    '2:3': '832x1248',
-    '3:2': '1248x832',
-  };
-  return { size: sizeMap[ratio] ?? '864x1152' };
+  return { size: CLOUD_IMAGE_SIZES[provider][ratio as CloudRatio] ?? CLOUD_IMAGE_SIZE_FALLBACK[provider] };
 }
+
+type CloudRatio = keyof (typeof CLOUD_IMAGE_SIZES)[ImageProvider];
 
 interface SecretsLite {
   zhipu?: { apiKey?: string };

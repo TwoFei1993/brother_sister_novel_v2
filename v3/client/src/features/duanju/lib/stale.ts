@@ -6,12 +6,30 @@
  *
  * 帧级判定（P2 修复）：有 frameSnapshots 时逐帧比对——单帧重 roll 只刷自己的快照，
  * 其余帧基于旧上游的过时状态不再被洗白（缺快照的帧回退镜级 builtFrom 兜底）。
+ *
+ * 剧本这一项（设计共识 2026-11-26 第 3.5 节）——拆镜头读的是本集的分集剧本，所以：
+ * - 快照记了本集剧本的时刻（不为 0）：只比本集时刻，不再比整本剧本的时间
+ * - 快照为 0（出图时本集没有剧本）：本集现在有剧本 → 待刷新；否则比整本剧本时间（原规则）
+ * - 旧快照没有这个字段：同上一条
  */
 import type { BuiltFrom, DuanjuProject, DuanjuShot } from '@shared/duanju';
 
+/** 本集剧本正文的当前更新时刻（没有分集剧本为 0） */
+function episodeScriptAt(project: DuanjuProject, shot: DuanjuShot): number {
+  return project.episodes.find((e) => e.id === shot.episodeId)?.scriptUpdatedAt ?? 0;
+}
+
+/** 剧本这一项是否变了 */
+function scriptStale(bf: BuiltFrom, shot: DuanjuShot, project: DuanjuProject): boolean {
+  const now = episodeScriptAt(project, shot);
+  if (bf.episodeScriptAt !== undefined && bf.episodeScriptAt !== 0) return bf.episodeScriptAt !== now;
+  if (now !== 0) return true; // 出图时本集还没有剧本，现在有了：依据变了
+  return bf.scriptAt !== undefined && bf.scriptAt !== project.script.updatedAt;
+}
+
 /** 单份快照 vs 当前上游的比对（镜级与帧级共用） */
 function snapshotStale(bf: BuiltFrom, shot: DuanjuShot, project: DuanjuProject): boolean {
-  if (bf.scriptAt !== undefined && bf.scriptAt !== project.script.updatedAt) return true;
+  if (scriptStale(bf, shot, project)) return true;
   for (const cid of shot.characterIds) {
     const c = project.characters.find((x) => x.id === cid);
     const was = bf.charAt?.[cid];
@@ -37,11 +55,15 @@ export function isShotStale(shot: DuanjuShot, project: DuanjuProject): boolean {
   const hasImage = !!shot.gridImage || (shot.frames?.length ?? 0) > 0;
   if (!hasImage || !shot.builtFrom) return false;
   const bf = shot.builtFrom;
-  // 帧级：任一帧的独立快照与上游不一致 → 该镜有待刷新帧
-  if (bf.frameSnapshots && Object.keys(bf.frameSnapshots).length > 0) {
-    for (const snap of Object.values(bf.frameSnapshots)) {
+  const frameSnaps = bf.frameSnapshots ?? {};
+  if (Object.keys(frameSnaps).length > 0) {
+    // 帧级：任一帧的独立快照与上游不一致 → 该镜有待刷新帧
+    for (const snap of Object.values(frameSnaps)) {
       if (snap && snapshotStale(snap, shot, project)) return true;
     }
+    // 每一帧都有自己的快照：以帧级为准（镜级快照停在首帧落地时，单帧重 roll 后不再代表任何一帧）
+    const allFramesCovered = (shot.frames ?? []).length > 0 && (shot.frames ?? []).every((f) => frameSnaps[String(f.index)]);
+    if (allFramesCovered) return false;
   }
   // 镜级兜底：无帧快照的帧（含旧整图 gridImage）按镜级快照判定
   return snapshotStale(bf, shot, project);

@@ -9,7 +9,8 @@ import { useMemo, useState } from 'react';
 import { useDuanjuStore } from '../store';
 import { duanjuFileUrl } from '../../../api/duanju';
 import { buildVideoPrompt } from '../lib/prompts/prompts-video';
-import { buildScriptMd, buildScriptTxt, downloadText } from '../lib/exportScript';
+import { buildEpisodeScriptText, buildScriptMd, buildScriptTxt, downloadText } from '../lib/exportScript';
+import { effectiveEpisodeScript } from '../lib/pipeline/source';
 import AssetGallery from './AssetGallery';
 import EpisodePlayer from './EpisodePlayer';
 import SpendCard from './SpendCard';
@@ -56,6 +57,8 @@ export default function ExportPane({ workId }: { workId: string }) {
   if (!project) return null;
   const withImage = shots.filter((s) => (s.frames?.length ?? 0) > 0 || s.gridImage).length;
   const withVideo = shots.filter((s) => s.finalVideo).length;
+  /** 本集的分集剧本（没有则为空） */
+  const episodeScript = episode ? effectiveEpisodeScript(project, episode) : undefined;
 
   return (
     <div className="mx-auto w-full max-w-3xl lg:max-w-5xl px-4 py-4" data-testid="duanju-export">
@@ -82,6 +85,22 @@ export default function ExportPane({ workId }: { workId: string }) {
 
       {episode && (
         <div className="space-y-3">
+          {/* 分集剧本正文（设计共识 2026-11-26 M4）：有才显示——「只有第 1 集」的作品第 1 集即原文 */}
+          {episodeScript && (
+            <button
+              type="button"
+              onClick={() =>
+                downloadText(
+                  `E${episode.index}-${episode.title}-分集剧本.txt`,
+                  buildEpisodeScriptText(project, episode, episodeScript),
+                )
+              }
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[hsl(var(--accent))]/60 text-xs text-[hsl(var(--accent))]"
+              data-testid="export-episode-script"
+            >
+              📜 下载本集剧本（分集剧本正文）
+            </button>
+          )}
           <a
             href={`/api/works/${workId}/duanju/export/${episode.id}`}
             className="flex h-11 items-center justify-center gap-2 rounded-lg bg-[hsl(var(--accent))] text-sm font-medium text-[hsl(var(--accent-fg))] ${withImage === 0 ? 'opacity-40 pointer-events-none' : ''}"
