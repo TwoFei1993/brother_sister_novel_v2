@@ -87,6 +87,25 @@ export async function updateWorkTitle(id: string, input: UpdateWorkTitleInput): 
   return updateWork(id, input);
 }
 
+/** 建书弹窗的 AI 预选预览（书还没建：书籍信息内联；2026-11-27 用户反馈：选了什么就默认勾选对应的） */
+export interface PresetPickPreviewBody {
+  presetId: string;
+  title?: string;
+  genre?: string;
+  storyTones?: string[];
+  customStoryTone?: string;
+  writingStyle?: string;
+  fandomSource?: string;
+  fandomType?: string;
+  fandomNotes?: string;
+}
+
+export async function presetPickPreview(
+  body: PresetPickPreviewBody,
+): Promise<{ overrides: Record<string, boolean>; reasons: Record<string, string> }> {
+  return apiFetch(`/api/works/preset-pick-preview`, { method: 'POST', body: JSON.stringify(body) });
+}
+
 /** PATCH /api/works/:id 通用更新（revision 乐观锁；返回更新后的全量 Work，revision+1） */
 export async function updateWork(id: string, input: UpdateWorkSettingsInput): Promise<Work> {
   return apiFetch<Work>(`/api/works/${id}`, {

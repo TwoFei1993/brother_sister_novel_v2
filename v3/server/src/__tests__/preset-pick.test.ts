@@ -20,7 +20,7 @@ vi.mock('../services/llm/defense', () => ({
   collectWithDefense: (...args: unknown[]) => collectMock(...args),
 }));
 
-const { presetPickRouter } = await import('../routes/works/preset-pick');
+const { presetPickRouter, presetPickPreviewRouter } = await import('../routes/works/preset-pick');
 const { worksDir, workFile } = await import('../routes/works/works');
 
 let root = '';
@@ -101,6 +101,7 @@ beforeEach(async () => {
   app.use(express.json());
   app.use(authed);
   app.use('/works/:id', presetPickRouter);
+  app.use('/works', presetPickPreviewRouter);
   app.use(testError);
 });
 
@@ -144,6 +145,56 @@ describe('POST /works/:id/preset-pick（AI 预选）', () => {
     });
     await writeJsonAtomic(workFile(WID), workFixture('hunhe'));
     const res = await request(app).post(`/works/${WID}/preset-pick`).send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /works/preset-pick-preview（建书弹窗：书还没建，书籍信息内联）', () => {
+  /** 断言请求体里要求的基调 / 风格原样进了给 LLM 的书籍信息 */
+  const promptOf = (): string => collectMock.mock.calls[0]![0].messages[1]!.content;
+
+  it('不读 work：内联信息直送 LLM；编造 id 丢弃、单选组语义补齐', async () => {
+    collectMock.mockResolvedValue({ text: OK_JSON, finish: 'stop', lastErr: '' });
+    const res = await request(app).post('/works/preset-pick-preview').send({
+      presetId: PID,
+      title: '走查新书',
+      genre: 'moshi',
+      storyTones: ['温情治愈'],
+      customStoryTone: '轻松欢快',
+      writingStyle: 'fanqie',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.overrides).toEqual({ drama: true, 'n-light': false, 'tone-general': true, 'tone-joy': true });
+    expect(res.body.overrides['made-up-id']).toBeUndefined();
+    const prompt = promptOf();
+    expect(prompt).toContain('温情治愈');
+    expect(prompt).toContain('轻松欢快');
+    expect(prompt).toContain('番茄·快节奏'); // 内置风格键 → 中文标签
+    // 书还没建：DATA_DIR 里没有 works 目录也不影响（此前端点必须先 readWork）
+  });
+
+  it('presetId 缺失 → 400；资产不存在 → 400', async () => {
+    const noPreset = await request(app).post('/works/preset-pick-preview').send({ genre: 'moshi' });
+    expect(noPreset.status).toBe(400);
+    const ghost = await request(app)
+      .post('/works/preset-pick-preview')
+      .send({ presetId: 'ghost-preset', genre: 'moshi' });
+    expect(ghost.status).toBe(400);
+    expect(ghost.body.error).toContain('主预设资产不存在');
+  });
+
+  it('只有 other 组（无文风/基调/附加）→ 400', async () => {
+    await writeJsonAtomic(join(root, 'presets', `${PID}.json`), {
+      id: PID, name: 'plain-other',
+      raw: {
+        prompts: [
+          { identifier: 'h-regular', name: '—\\⚙常规设定===', content: '', system_prompt: true },
+          { identifier: 'num', name: '🔢字数设定', content: 'x', system_prompt: true },
+        ],
+        prompt_order: [{ character_id: 100001, order: [{ identifier: 'h-regular', enabled: true }, { identifier: 'num', enabled: true }] }],
+      },
+    });
+    const res = await request(app).post('/works/preset-pick-preview').send({ presetId: PID, genre: 'moshi' });
     expect(res.status).toBe(400);
   });
 });

@@ -1,20 +1,23 @@
 /**
  * AI 预选主预设条目（用户需求 2026-11-24：「不完全是自己选，是 AI 先根据要求预选好，人工调整」）：
- * POST /works/:id/preset-pick → 读书籍信息（题材/基调/简介/同人原著）与主预设的
- * 文风/情感基调/附加选项分组条目清单 → LLM 挑选 → 返回覆盖草稿 + 每条理由。
- * 不落库：前端把返回的 overrides 作为草稿展示（标「AI 推荐」+ 理由），用户调整后自行保存。
+ * POST /works/:id/preset-pick        → 读书籍信息（题材/基调/简介/同人原著）与主预设的
+ *                                      分组条目清单 → LLM 挑选 → 返回覆盖草稿 + 每条理由。
+ * POST /works/preset-pick-preview    → 建书弹窗用（用户反馈 2026-11-27：建书时选了什么文风基调，
+ *                                      预设条目就默认勾上对应的，其余照常显示）——书还没建，
+ *                                      书籍信息内联传递，其余逻辑相同。
+ * 两条路都不落库：前端把返回的 overrides 作为草稿展示，用户调整后自行保存。
  *
  * 模型：固定 claude/MiniMax（与 fandom-import 同先例）；同人书带原著信息时开启联网搜索
  * （原著文风/氛围是挑选的重要依据，冷门原著靠搜索兜底）。
  */
 import { join } from 'node:path';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { z } from 'zod';
 
 import type { PresetGroup } from '@shared/engine/prompt/preset-overrides';
 import { detectPresetGroups, PRESET_GROUP_CATEGORY_LABELS } from '@shared/engine/prompt/preset-overrides';
 import type { PresetAsset } from '@shared/preset';
-import { FANDOM_TYPE_LABELS, type Work } from '@shared/work';
+import { FANDOM_TYPE_LABELS, WRITING_STYLE_LABELS, type FandomType, type Work, type WritingStyle } from '@shared/work';
 
 import { zodBody } from '../../middleware/validate';
 import { collectWithDefense } from '../../services/llm/defense';
@@ -25,6 +28,23 @@ const IMPORT_SOURCE = 'claude' as const;
 const IMPORT_MODEL = 'MiniMax-M3.1-Flash';
 
 const pickSchema = z.object({});
+
+/** 建书弹窗的预览请求体（书还没建：书籍信息 + 目标预设内联传递） */
+const previewSchema = z.strictObject({
+  presetId: z.string().min(1),
+  title: z.string().default(''),
+  genre: z.string(),
+  storyTones: z.array(z.string()).default([]),
+  customStoryTone: z.string().default(''),
+  writingStyle: z.string().default(''),
+  customWritingStyle: z.string().default(''),
+  backgroundNote: z.string().default(''),
+  coreConflict: z.string().default(''),
+  fandomSource: z.string().default(''),
+  fandomType: z.string().default(''),
+  fandomNotes: z.string().default(''),
+});
+type PreviewBody = z.infer<typeof previewSchema>;
 
 /** 条目清单（给 LLM 的候选集：名称 + 内容摘要，控制 token） */
 function entryDigest(group: PresetGroup): string {
@@ -105,6 +125,73 @@ function bookInfoOf(work: Work): string {
   return bits.join('\n');
 }
 
+/** 建书弹窗的书籍信息摘要（字段还没进库，直接从请求体拼） */
+function bookInfoFromPreview(b: PreviewBody): string {
+  const bits: string[] = [`题材：${b.genre}`];
+  if (b.title.trim()) bits.push(`书名：${b.title.trim()}`);
+  const tones = [...b.storyTones, b.customStoryTone].filter(Boolean).join('、');
+  if (tones) bits.push(`基调：${tones}`);
+  const style = b.customWritingStyle || (b.writingStyle && b.writingStyle !== 'default'
+    ? (WRITING_STYLE_LABELS[b.writingStyle as WritingStyle] ?? b.writingStyle)
+    : '');
+  if (style) bits.push(`写作风格：${style}`);
+  if (b.backgroundNote.trim()) bits.push(`背景：${b.backgroundNote.trim().slice(0, 300)}`);
+  if (b.coreConflict.trim()) bits.push(`核心矛盾：${b.coreConflict.trim().slice(0, 200)}`);
+  if (b.fandomSource.trim()) {
+    const typeLabel = b.fandomType ? FANDOM_TYPE_LABELS[b.fandomType as FandomType] : undefined;
+    bits.push(`同人原著：${b.fandomSource.trim()}${typeLabel ? `（${typeLabel}）` : ''}`);
+    if (b.fandomNotes.trim()) bits.push(`同人要点：${b.fandomNotes.trim().slice(0, 300)}`);
+  }
+  return bits.join('\n');
+}
+
+/**
+ * 共用挑选流程：加载预设资产 → 只取 文风/基调/附加 三类组作候选 → LLM 挑选 → 解析。
+ * 写结果或错误到 res 后返回（不抛出）；调用方在 Handler 里 await。
+ */
+async function pickAndRespond(res: Response, presetId: string, bookInfo: string): Promise<void> {
+  const asset = (
+    await readJson<PresetAsset>(join(worksDir(), '..', 'presets', `${presetId}.json`)).catch(() => null)
+  )!;
+  if (!asset) {
+    res.status(400).json({ error: '主预设资产不存在' });
+    return;
+  }
+  const groups: PresetGroup[] = detectPresetGroups(asset.raw).filter((g) => g.category !== 'other');
+  if (groups.length === 0) {
+    res.status(400).json({ error: '当前主预设没有可按书选择的文风分组' });
+    return;
+  }
+  // 同人书：原著文风/氛围是挑选依据，开联网搜索兜底（非同人不开，省 token）
+  const webSearchUses = bookInfo.includes('同人原著') ? 2 : 0;
+  const r = await collectWithDefense({
+    source: IMPORT_SOURCE,
+    model: IMPORT_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content:
+          '你是网文配置顾问。根据书籍信息从预设条目中挑选最合适的组合。输出必须是纯 JSON 对象（不要 markdown 代码块、不要解释文字）。',
+      },
+      { role: 'user', content: pickPrompt(bookInfo, groups) },
+    ],
+    params: { webSearchUses },
+    maxTokens: 4000,
+  });
+  let picked: { overrides: Record<string, boolean>; reasons: Record<string, string> };
+  try {
+    picked = parsePicks(r.text, groups);
+  } catch {
+    res.status(502).json({ error: 'AI 输出无法解析，请重试一次' });
+    return;
+  }
+  if (Object.keys(picked.overrides).length === 0) {
+    res.status(502).json({ error: 'AI 未选出有效条目，请重试一次' });
+    return;
+  }
+  res.json({ overrides: picked.overrides, reasons: picked.reasons });
+}
+
 export const presetPickRouter = Router({ mergeParams: true });
 
 presetPickRouter.post(
@@ -118,48 +205,18 @@ presetPickRouter.post(
       res.status(400).json({ error: '本书未绑定主预设——先在绑定里选择预设，再 AI 预选' });
       return;
     }
-    const asset = (
-      await readJson<PresetAsset>(join(worksDir(), '..', 'presets', `${work.presetId}.json`)).catch(() => null)
-    )!;
-    if (!asset) {
-      res.status(400).json({ error: '主预设资产不存在' });
-      return;
-    }
-    const groups: PresetGroup[] = detectPresetGroups(asset.raw).filter((g) => g.category !== 'other');
-    if (groups.length === 0) {
-      res.status(400).json({ error: '当前主预设没有可按书选择的文风分组' });
-      return;
-    }
+    await pickAndRespond(res, work.presetId, bookInfoOf(work));
+  }),
+);
 
-    const bookInfo = bookInfoOf(work);
-    // 同人书：原著文风/氛围是挑选依据，开联网搜索兜底（非同人不开，省 token）
-    const webSearchUses = work.genre === 'fanfic' && bookInfo.includes('同人原著') ? 2 : 0;
+/** 建书弹窗预览：书还没建，书籍信息内联（2026-11-27 用户反馈：选了什么就默认勾选对应的，其余照常显示可调） */
+export const presetPickPreviewRouter = Router();
 
-    const r = await collectWithDefense({
-      source: IMPORT_SOURCE,
-      model: IMPORT_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content:
-            '你是网文配置顾问。根据书籍信息从预设条目中挑选最合适的组合。输出必须是纯 JSON 对象（不要 markdown 代码块、不要解释文字）。',
-        },
-        { role: 'user', content: pickPrompt(bookInfo, groups) },
-      ],
-      params: { webSearchUses },
-      maxTokens: 4000,
-    });
-    let picked: { overrides: Record<string, boolean>; reasons: Record<string, string> };
-    try {
-      picked = parsePicks(r.text, groups);
-    } catch {
-      res.status(502).json({ error: 'AI 输出无法解析，请重试一次' });
-      return;
-    }
-    if (Object.keys(picked.overrides).length === 0) {
-      res.status(502).json({ error: 'AI 未选出有效条目，请重试一次' });
-      return;
-    }
-    res.json({ overrides: picked.overrides, reasons: picked.reasons });
+presetPickPreviewRouter.post(
+  '/preset-pick-preview',
+  zodBody(previewSchema),
+  wrap(async (req, res) => {
+    const body = req.body as PreviewBody;
+    await pickAndRespond(res, body.presetId, bookInfoFromPreview(body));
   }),
 );

@@ -20,7 +20,7 @@ import { commentsRouter } from './comments';
 import { convertToDuanju } from './convert';
 import { messagesRouter } from './messages';
 import { fandomRouter } from './fandom';
-import { presetPickRouter } from './preset-pick';
+import { presetPickPreviewRouter, presetPickRouter } from './preset-pick';
 import {
   createWork,
   createWorkSchema,
@@ -50,6 +50,8 @@ worksRouter.use('/works/:id', fandomRouter);
 
 // AI 预选主预设条目（用户需求 2026-11-24：AI 预选 → 人工调整），见 preset-pick.ts
 worksRouter.use('/works/:id', presetPickRouter);
+// 建书弹窗的 AI 预选预览（书还没建，书籍信息内联）——挂在同一前缀下
+worksRouter.use('/works', presetPickPreviewRouter);
 
 // comments 子路由（安卓 app 划线评论）：全量读 + 幂等 upsert + 删除，见 comments.ts
 worksRouter.use('/works/:id/comments', commentsRouter);

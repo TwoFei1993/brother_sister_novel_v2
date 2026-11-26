@@ -227,7 +227,12 @@ function NewWorkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
               selectClass="h-11 w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 text-sm outline-none focus:border-[hsl(var(--accent))]"
             />
             {presetId !== '' && (
-              <NewWorkPresetGroups presetId={presetId} overrides={presetOverrides} onChange={setPresetOverrides} />
+              <NewWorkPresetGroups
+                presetId={presetId}
+                overrides={presetOverrides}
+                onChange={setPresetOverrides}
+                bookInfo={{ title: title.trim(), genre, storyTones: tones, customStoryTone: customTone.trim(), writingStyle }}
+              />
             )}
           <label className="mb-4 flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-handwrite">
             <input type="checkbox" checked={handwrite} onChange={(e) => setHandwrite(e.target.checked)} />

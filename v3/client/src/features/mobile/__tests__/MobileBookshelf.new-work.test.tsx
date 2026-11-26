@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiFetch } from '../../../api/client';
 import { listPresets } from '../../../api/library';
-import { createWork, listWorks } from '../../../api/works';
+import { createWork, listWorks, presetPickPreview } from '../../../api/works';
 
 import MobileBookshelf from '../create/MobileBookshelf';
 
@@ -22,6 +22,7 @@ vi.mock('../../../api/works', () => ({
   getWork: vi.fn(),
   listWorks: vi.fn(),
   updateWork: vi.fn(),
+  presetPickPreview: vi.fn(),
 }));
 
 const createWorkMock = vi.mocked(createWork);
@@ -87,6 +88,7 @@ beforeEach(() => {
   vi.mocked(listWorks).mockReset().mockResolvedValue([]);
   vi.mocked(listPresets).mockReset().mockResolvedValue([]);
   vi.mocked(apiFetch).mockReset().mockRejectedValue(new Error('测试里没有这个请求'));
+  vi.mocked(presetPickPreview).mockReset().mockRejectedValue(new Error('测试里没有这个请求'));
   createWorkMock.mockReset().mockResolvedValue({ id: 'new-work-1' } as never);
   localStorage.clear();
   sessionStorage.clear();

@@ -13,6 +13,8 @@ import NewWorkPresetGroups from '../NewWorkPresetGroups';
 vi.mock('../../../../api/client', () => ({ apiFetch: vi.fn() }));
 
 const apiFetchMock = vi.mocked(apiFetch);
+/** 预选请求的内联书籍信息（断言用；在各用例里赋值） */
+let lastPreviewBody: Record<string, unknown> | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -52,19 +54,26 @@ async function mount(
   presetId = 'p1',
   overrides: Record<string, boolean> = {},
   onChange: (next: Record<string, boolean>) => void = () => undefined,
+  bookInfo?: { title?: string; genre?: string; storyTones?: string[]; writingStyle?: string },
 ): Promise<HTMLElement> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   roots.push(root);
   await act(async () => {
-    root.render(<NewWorkPresetGroups presetId={presetId} overrides={overrides} onChange={onChange} />);
+    root.render(<NewWorkPresetGroups presetId={presetId} overrides={overrides} onChange={onChange} bookInfo={bookInfo} />);
   });
   await act(async () => {
     await Promise.resolve();
   });
   return container;
 }
+
+const flush = async (): Promise<void> => {
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
 
 async function click(c: HTMLElement, testid: string): Promise<void> {
   const el = c.querySelector(`[data-testid="${testid}"]`);
@@ -190,5 +199,45 @@ describe('NewWorkPresetGroups 建书时的预设选项', () => {
     expect(chip?.getAttribute('aria-pressed')).toBe('true'); // 预设默认开启
     await click(c, 'new-work-preset-x0-addon-vivid');
     expect(onChange).toHaveBeenCalledWith({ 'addon-vivid': false });
+  });
+
+  it('AI 预选预勾（2026-11-27：选了什么文风基调就默认勾选对应的，其余照常显示）', async () => {
+    const onChange = vi.fn();
+    apiFetchMock.mockImplementation(async (path: unknown, init?: unknown) => {
+      const url = String(path);
+      if (url.startsWith('/api/presets/')) return fakeAsset;
+      if (url === '/api/works/preset-pick-preview') {
+        // 记录内联书籍信息（断言用）
+        lastPreviewBody = JSON.parse(String((init as { body?: string } | undefined)?.body)) as Record<string, unknown>;
+        return { overrides: { 'style-b': true, 'style-a': false, 'tone-happy': true }, reasons: {} };
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+    const c = await mount('p1', {}, onChange, { title: '新书', genre: 'moshi', storyTones: ['温情治愈'], writingStyle: 'fanqie' });
+    await flush();
+    expect(lastPreviewBody).toMatchObject({ presetId: 'p1', genre: 'moshi', storyTones: ['温情治愈'], writingStyle: 'fanqie' });
+    expect(onChange).toHaveBeenCalledWith({ 'style-b': true, 'style-a': false, 'tone-happy': true });
+    expect(c.querySelector('[data-testid="new-work-preset-ai-done"]')?.textContent).toContain('已按你选的文风与基调预选');
+  });
+
+  it('AI 预选失败：回落预设默认勾选态（onChange 不被覆盖），提示可手动调', async () => {
+    const onChange = vi.fn();
+    apiFetchMock.mockImplementation(async (path: unknown) => {
+      const url = String(path);
+      if (url.startsWith('/api/presets/')) return fakeAsset;
+      throw new Error('AI 挂了');
+    });
+    const c = await mount('p1', {}, onChange, { genre: 'moshi' });
+    await flush();
+    expect(c.querySelector('[data-testid="new-work-preset-ai-failed"]')?.textContent).toContain('AI 预选没成功');
+    expect(onChange).not.toHaveBeenCalled();
+    // 预设默认勾选态仍在
+    expect(c.querySelector('[data-testid="new-work-preset-style-style-a"]')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('没传 bookInfo → 不自动预选（资料页的既有入口不受影响）', async () => {
+    await mount('p1');
+    const previewCalls = apiFetchMock.mock.calls.filter((c) => String(c[0]) === '/api/works/preset-pick-preview');
+    expect(previewCalls).toHaveLength(0);
   });
 });

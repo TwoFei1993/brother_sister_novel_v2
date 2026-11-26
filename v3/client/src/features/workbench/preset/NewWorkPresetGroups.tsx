@@ -6,19 +6,38 @@
  * 文风（单选）与情感基调（多选）默认展开；其余组（附加选项 / 常规设定 / 人称…）收在
  * 「更多分组」里按需展开——预设里有什么组就显示什么组（用户反馈 2026-11-27：此前整组不可见）。
  * 与资料页完整版（PresetGroupPicker）同一套生效判定纯函数。
+ *
+ * 绑定预设后自动 AI 预选（用户反馈 2026-11-27：选了什么文风基调，就默认勾选对应的条目，其余照常显示可调）：
+ * 书籍信息内联走 /works/preset-pick-preview（与资料页的自动预选同一套挑选逻辑，一次调用）；失败时
+ * 静默回落到预设默认勾选态。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { apiFetch } from '../../../api/client';
+import { presetPickPreview } from '../../../api/works';
 import type { PresetAsset } from '@shared/preset';
 import type { PresetGroup, PresetGroupMember, PresetPromptOverrides } from '@shared/engine/prompt/preset-overrides';
 import { detectPresetGroups, isEffective, pickSingle, toggleMulti } from '@shared/engine/prompt/preset-overrides';
+
+/** 建书弹窗当前选择的书籍信息（AI 预选的依据；字段与 preset-pick-preview 请求体对应） */
+export interface NewWorkBookInfo {
+  title?: string;
+  genre?: string;
+  storyTones?: string[];
+  customStoryTone?: string;
+  writingStyle?: string;
+  fandomSource?: string;
+  fandomType?: string;
+  fandomNotes?: string;
+}
 
 interface Props {
   presetId: string;
   /** 勾选状态（本书的覆盖表；只收改动过的条目） */
   overrides: PresetPromptOverrides;
   onChange: (next: PresetPromptOverrides) => void;
+  /** 当前建书选择（AI 预选的依据）；不传则不自动预选 */
+  bookInfo?: NewWorkBookInfo;
 }
 
 const chipCls = (on: boolean): string =>
@@ -28,11 +47,17 @@ const chipCls = (on: boolean): string =>
       : 'border-[hsl(var(--border-soft))] text-[hsl(var(--fg-muted))]'
   }`;
 
-export default function NewWorkPresetGroups({ presetId, overrides, onChange }: Props) {
+export default function NewWorkPresetGroups({ presetId, overrides, onChange, bookInfo }: Props) {
   const [name, setName] = useState('');
   const [groups, setGroups] = useState<PresetGroup[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [tick, setTick] = useState(0);
+  const [aiState, setAiState] = useState<'idle' | 'picking' | 'done' | 'failed'>('idle');
+  /** 每个预设只自动预选一次；预选期间用户手动勾的以手动为准 */
+  const firedFor = useRef('');
+  const lastUser = useRef<Record<string, boolean> | null>(null);
+  const bookInfoRef = useRef(bookInfo);
+  bookInfoRef.current = bookInfo;
 
   useEffect(() => {
     if (presetId === '') return undefined;
@@ -52,6 +77,29 @@ export default function NewWorkPresetGroups({ presetId, overrides, onChange }: P
       alive = false;
     };
   }, [presetId, tick]);
+
+  // 绑定预设后按当前选择自动 AI 预选一次（每个预设只发一次；失败回落到预设默认，不打扰）。
+  // 必须在所有提前 return 之前：hooks 顺序不能随分支变化
+  useEffect(() => {
+    if (groups === null || presetId === '' || !bookInfoRef.current) return;
+    if (firedFor.current === presetId) return;
+    if (!groups.some((g) => g.category !== 'other')) return; // 没有可预选的语义分组
+    firedFor.current = presetId;
+    setAiState('picking');
+    presetPickPreview({ presetId, ...bookInfoRef.current })
+      .then((r) => {
+        onChange({ ...r.overrides, ...(lastUser.current ?? {}) }); // 预选期间手动勾的以手动为准
+        setAiState('done');
+      })
+      .catch(() => setAiState('failed'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 每个预设只发一次；onChange 为父级稳定引用
+  }, [groups, presetId]);
+
+  /** 芯片的手动勾选：记录最后一次手动结果（预选迟到时以手动为准） */
+  const handleChipChange = (next: PresetPromptOverrides): void => {
+    lastUser.current = next;
+    onChange(next);
+  };
 
   if (presetId === '') return null;
   if (failed) {
@@ -78,8 +126,27 @@ export default function NewWorkPresetGroups({ presetId, overrides, onChange }: P
         《{name}》的文风与基调
         <span className="ml-1 font-normal text-[hsl(var(--fg-muted))]">——随本书生效，创建后可在 资料→文风与基调 继续调</span>
       </p>
-      {style && <GroupChips group={style} label="文风（单选）" overrides={overrides} onChange={onChange} testPrefix="new-work-preset-style" />}
-      {tone && <GroupChips group={tone} label="情感基调（可多选）" overrides={overrides} onChange={onChange} testPrefix="new-work-preset-tone" />}
+      {aiState === 'picking' && (
+        <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-preset-ai">
+          AI 正按你选的文风与基调预选条目…（约 30-60 秒，其余条目照常显示）
+        </p>
+      )}
+      {aiState === 'done' && (
+        <p className="mb-2 text-xs text-[hsl(var(--accent))]" data-testid="new-work-preset-ai-done">
+          已按你选的文风与基调预选——其余条目也都在，可逐项调整
+        </p>
+      )}
+      {aiState === 'failed' && (
+        <p className="mb-2 text-xs text-[hsl(var(--fg-muted))]" data-testid="new-work-preset-ai-failed">
+          AI 预选没成功——先按预设默认勾选；可手动调，或创建后在 资料→文风与基调 重试
+        </p>
+      )}
+      {style && (
+        <GroupChips group={style} label="文风（单选）" overrides={overrides} onChange={handleChipChange} testPrefix="new-work-preset-style" />
+      )}
+      {tone && (
+        <GroupChips group={tone} label="情感基调（可多选）" overrides={overrides} onChange={handleChipChange} testPrefix="new-work-preset-tone" />
+      )}
       {extras.length > 0 && (
         <details className="mt-1" data-testid="new-work-preset-extras">
           <summary className="cursor-pointer text-xs text-[hsl(var(--fg-muted))]">
@@ -92,7 +159,7 @@ export default function NewWorkPresetGroups({ presetId, overrides, onChange }: P
                 group={g}
                 label={g.category === 'addon' ? `附加选项（可多选）` : `${g.name}（可多选）`}
                 overrides={overrides}
-                onChange={onChange}
+                onChange={handleChipChange}
                 testPrefix={`new-work-preset-x${i}`}
               />
             ))}

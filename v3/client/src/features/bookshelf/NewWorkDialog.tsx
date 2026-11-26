@@ -347,9 +347,27 @@ export default function NewWorkDialog({ onClose }: NewWorkDialogProps) {
             selectClass={selectClass}
           />
         )}
-        {/* 绑定主预设后：该预设的文风 / 情感基调条目建书时即可多选（随 settings.presetPromptOverrides 下发） */}
+        {/* 绑定主预设后：按你选的文风基调 AI 预选对应的条目（默认勾选），其余条目照常显示可调 */}
         {mode !== 'duanju' && bindings.presetId !== '' && (
-          <NewWorkPresetGroups presetId={bindings.presetId} overrides={presetOverrides} onChange={setPresetOverrides} />
+          <NewWorkPresetGroups
+            presetId={bindings.presetId}
+            overrides={presetOverrides}
+            onChange={setPresetOverrides}
+            bookInfo={{
+              title: title.trim(),
+              genre,
+              storyTones: tones,
+              customStoryTone: customTone.trim(),
+              writingStyle,
+              ...(genre === 'fanfic'
+                ? {
+                    fandomSource: fandomSource.trim(),
+                    ...(fandomType !== '' ? { fandomType } : {}),
+                    fandomNotes: fandomNotes.trim(),
+                  }
+                : {}),
+            }}
+          />
         )}
 
         {error && (
