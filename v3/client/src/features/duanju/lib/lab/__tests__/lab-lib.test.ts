@@ -79,9 +79,12 @@ describe('画幅与尺寸', () => {
       expect(height % 32).toBe(0);
     }
   });
-  it('既有入口（设定图/服装/分镜帧）仍为小图档，不受试验台升档影响', () => {
-    expect(comfySizeFor('frame')).toEqual({ width: 768, height: 1344 });
-    expect(comfySizeFor('character', '4:5')).toEqual({ width: 1152, height: 1440 });
+  it('既有入口（设定图/服装/分镜帧）同步 8MP 档（2026-11-27 用户裁定全通道）', () => {
+    expect(comfySizeFor('frame')).toEqual({ width: 2016, height: 3584 });
+    expect(comfySizeFor('character', '4:5')).toEqual({ width: 2400, height: 3008 });
+    expect(comfySizeFor('scene')).toEqual({ width: 3584, height: 2016 });
+    expect(comfySizeFor('outfit')).toEqual({ width: 2688, height: 2688 });
+    expect(comfySizeFor('prop')).toEqual({ width: 2688, height: 2688 });
   });
 
   it('云端：没有 4:5；尺寸取自共享尺寸表', () => {
@@ -93,12 +96,12 @@ describe('画幅与尺寸', () => {
     expect(labSizeForProvider('comfy', '4:5')).toEqual({ width: 2400, height: 3008 });
   });
 
-  it('既有入口的尺寸函数迁入后行为不变', () => {
-    expect(comfySizeFor('character', '4:5')).toEqual({ width: 1152, height: 1440 });
-    expect(comfySizeFor('outfit')).toEqual({ width: 1024, height: 1024 });
-    expect(comfySizeFor('prop')).toEqual({ width: 1024, height: 1024 });
-    expect(comfySizeFor('frame')).toEqual({ width: 768, height: 1344 });
-    expect(comfySizeFor('scene')).toEqual({ width: 1344, height: 768 });
+  it('既有入口的尺寸函数迁入后升 8MP 档（2026-11-27 用户裁定全通道）', () => {
+    expect(comfySizeFor('character', '4:5')).toEqual({ width: 2400, height: 3008 });
+    expect(comfySizeFor('outfit')).toEqual({ width: 2688, height: 2688 });
+    expect(comfySizeFor('prop')).toEqual({ width: 2688, height: 2688 });
+    expect(comfySizeFor('frame')).toEqual({ width: 2016, height: 3584 });
+    expect(comfySizeFor('scene')).toEqual({ width: 3584, height: 2016 });
   });
 });
 

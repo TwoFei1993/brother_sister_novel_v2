@@ -1,10 +1,9 @@
 /**
  * 试验台画幅与尺寸（设计共识 2026-11-26 第 2.3 / 2.6 节；分辨率 2026-11-27 用户裁定：8MP 档）
  *
- * - 试验台本地出图：8MP 分镜档（与用户 H3-Image 生成管线同档；宽高为 32 的倍数）。
- *   此前是 768×1344 小图档——用户实测质量不满意（2026-11-26 试验台测试用图即此档）。
- * - comfySizeFor：既有生图入口（设定图/服装/分镜帧）仍为小图档，跑批量快；
- *   要跟着升 8MP 是另一个决定（批量出图时长会 ×4 以上），未动。
+ * - 全通道本地出图 8MP 分镜档（与用户 H3-Image 生成管线同档；宽高为 32 的倍数）。
+ *   2026-11-27 用户裁定「都升到8mp」：试验台与设定图/服装/分镜帧等既有入口一并升档。
+ *   批量出图时长随之 ×4 以上（每张约 2–5 分钟），并发 2 排队不变。
  * - 云端：尺寸表在 shared（服务端透传与界面显示同源）；云端没有 4:5
  */
 import {
@@ -27,13 +26,8 @@ export const LAB_SIZES = {
   tall4x5: { width: 2400, height: 3008 }, // 4:5
 } as const;
 
-/** 既有生图入口（设定图/服装/分镜帧）的小图档尺寸 */
-export const COMFY_SIZES = {
-  portrait: { width: 768, height: 1344 }, // 9:16 分镜帧
-  landscape: { width: 1344, height: 768 }, // 16:9 设定图 / 场景图
-  square: { width: 1024, height: 1024 }, // 方图（服装 / 道具）
-  tall4x5: { width: 1152, height: 1440 }, // 4:5 胸像锚点
-} as const;
+/** 既有生图入口（设定图/服装/分镜帧）尺寸——2026-11-27 用户裁定：全通道升 8MP 档 */
+export const COMFY_SIZES = LAB_SIZES;
 
 /** 各通道支持的画幅（云端尺寸表没有 4:5） */
 export const ASPECTS_BY_PROVIDER: Record<LabProvider, readonly LabAspect[]> = {

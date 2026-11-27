@@ -119,9 +119,11 @@ async function generateFrameWithRef(
 }
 
 /**
- * 设定图双段生成（版式硬规定 v3 + 参考图修正）：三视图 1344×1024 + 头像特写 704×1024
- * → 版式合成图 2048×1024（人看）+ **特写单图单独归档并设为主参考**（AI 参考用——
+ * 设定图双段生成（版式硬规定 v3 + 参考图修正）：三视图 + 头像特写按同比例 8MP 档生成
+ * （704×1024 → 2240×3264、1344×1024 → 3104×2368，面积对齐 7.2MP 分镜档；2026-11-27 用户裁定全通道 8MP）
+ * → 版式合成图 2048×1024（人看，大源自动缩放入槽）+ **特写单图单独归档并设为主参考**（AI 参考用——
  * 2511 参考生图的定妆照必须是单主体干净图；版式拼图（多只猫/多人）会让参考通道理解混乱跨帧漂移）。
+ * 特写主参考以生成原分辨率归档：分镜参考通道拿到的底图从 704×1024 升到 2240×3264。
  */
 async function generateCharacterSheetLocal(
   workId: string,
@@ -135,8 +137,8 @@ async function generateCharacterSheetLocal(
   const { portrait, triView } = characterSheetSplitPrompts(split.style, split.name, split.profile);
   const seed = () => Math.floor(Math.random() * 2_147_483_647);
   const [portraitBlob, triViewBlob] = await Promise.all([
-    generateImageOnComfy(cfg, { prompt: portrait, width: 704, height: 1024, seed: seed() }),
-    generateImageOnComfy(cfg, { prompt: triView, width: 1344, height: 1024, seed: seed() }),
+    generateImageOnComfy(cfg, { prompt: portrait, width: 2240, height: 3264, seed: seed() }),
+    generateImageOnComfy(cfg, { prompt: triView, width: 3104, height: 2368, seed: seed() }),
   ]);
   // ① 特写单图先归档（单主体干净图——分镜参考通道的定妆照）
   const upKind = assertUploadKind(input.kind);
