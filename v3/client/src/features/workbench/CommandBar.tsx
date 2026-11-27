@@ -12,6 +12,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Dices, FilePlus2, Play, Square, Zap } from 'lucide-react';
 
 import FieldHint from '../../components/FieldHint';
+import OutlineRunPanel from './OutlineRunPanel';
 
 interface CommandBarProps {
   streaming: boolean;
@@ -73,9 +74,8 @@ export default function CommandBar({
   onSeedConsumed,
 }: CommandBarProps) {
   const [directive, setDirective] = useState('');
-  // 📖按大纲弹层：点 📖 后展开「本次生成几章」选择（默认 3），确认才发起
+  // 📖按大纲弹层：点 📖 后展开「本次生成几章」选择（默认 3），确认才发起（弹层为两端共用组件）
   const [outlinePanelOpen, setOutlinePanelOpen] = useState(false);
-  const [outlineLimit, setOutlineLimit] = useState(3);
   // 思考流可视化已移至 ReadingView 正文上方（用户反馈：💭 应在屏幕中间而非底部指挥条）
 
   // 外部指令复填：注入输入框后立即回调复位（允许同一指令再次点击重新注入）
@@ -99,12 +99,6 @@ export default function CommandBar({
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
-  }
-
-  function submitOutline(): void {
-    const limit = Math.max(1, Math.floor(Number(outlineLimit) || 3));
-    onByOutline(limit);
-    setOutlinePanelOpen(false);
   }
 
   return (
@@ -197,30 +191,13 @@ export default function CommandBar({
               </>
             )}
             {canOutline && outlinePanelOpen && !streaming && (
-              <div
-                data-testid="outline-panel"
-                className="flex basis-full items-center gap-2 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2"
-              >
-                <span className="text-xs text-[hsl(var(--fg-muted))]">本次按大纲生成</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={99}
-                  value={outlineLimit}
-                  onChange={(e) => setOutlineLimit(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                  data-testid="outline-limit-input"
-                  aria-label="本次生成章数"
-                  className="h-8 w-20 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              <div className="basis-full">
+                <OutlineRunPanel
+                  onStart={(limit) => {
+                    onByOutline(limit);
+                    setOutlinePanelOpen(false);
+                  }}
                 />
-                <span className="text-xs text-[hsl(var(--fg-muted))]">章（默认 3，可随时停止）</span>
-                <button
-                  type="button"
-                  onClick={submitOutline}
-                  data-testid="outline-start"
-                  className={`${btnBase} bg-[hsl(var(--accent))] text-[hsl(var(--accent-fg))]`}
-                >
-                  开始
-                </button>
               </div>
             )}
             <FieldHint

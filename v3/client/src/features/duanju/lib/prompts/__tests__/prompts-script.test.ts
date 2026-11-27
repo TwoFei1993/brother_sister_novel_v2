@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DuanjuEpisode } from '@shared/duanju';
 
-import { buildBreakdownMessages, mergeEpisodes, parseBreakdown } from '../prompts-script';
+import { buildBreakdownMessages, buildScriptGenMessages, mergeEpisodes, parseBreakdown } from '../prompts-script';
 
 function ep(index: number, overrides: Partial<DuanjuEpisode> = {}): DuanjuEpisode {
   return { id: `ep-old-${index}`, index, title: `旧标题${index}`, synopsis: `旧梗概${index}`, ...overrides };
@@ -107,5 +107,37 @@ describe('改编式拆解（用户反馈 2026-11-24：粘贴的是故事素材�
     expect(user.content).toContain('不要照搬原文切分');
     expect(user.content).toContain('素材不够的地方合理扩充（加配角冲突、支线、细节）');
     expect(user.content).toContain('一段故事素材');
+  });
+});
+
+describe('AI 生成剧本（用户反馈 2026-11-27：贴整段故事也被当第 1 集写；要可选从第几集写起、写几集）', () => {
+  const base = { genre: '都市', tone: '热血爽感', idea: '一段完整故事素材。', protagonists: '', targetEpisodes: 12 };
+
+  it('默认从第 1 集写 1 集（与旧行为兼容）', () => {
+    const [, user] = buildScriptGenMessages({ ...base });
+    expect(user.content).toContain('全剧规划 12 集');
+    expect(user.content).toContain('从第 1 集起连续写 1 集');
+    expect(user.content).toContain('第1集');
+  });
+
+  it('可指定从第 N 集起写 M 集，列明本次覆盖的集', () => {
+    const [, user] = buildScriptGenMessages({ ...base, startEpisode: 4, episodeCount: 3 });
+    expect(user.content).toContain('从第 4 集起连续写 3 集');
+    expect(user.content).toContain('第4集、第5集、第6集');
+    expect(user.content).not.toContain('第7集、');
+  });
+
+  it('明确改编语义：故事想法是素材（完整故事/梗概/片段），改编而非逐字搬用', () => {
+    const [, user] = buildScriptGenMessages({ ...base, startEpisode: 1, episodeCount: 2 });
+    expect(user.content).toContain('完整故事、故事梗概或剧情片段');
+    expect(user.content).toContain('改编');
+    expect(user.content).not.toContain('本次先写第 1 集完整剧本');
+  });
+
+  it('system 保持竖屏短剧规格（60-120 秒/集、8-12 镜头、结构化标签）', () => {
+    const [system] = buildScriptGenMessages({ ...base });
+    expect(system.content).toContain('60-120 秒');
+    expect(system.content).toContain('8-12 个镜头');
+    expect(system.content).toContain('[画面文字]');
   });
 });

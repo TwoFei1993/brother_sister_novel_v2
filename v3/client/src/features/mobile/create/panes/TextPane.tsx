@@ -22,6 +22,7 @@ import { ThinkingInline } from './ThinkingInline';
 import { confirmPendingAsset } from './PendingAssetsCard';
 import { polishChapterText } from './polish';
 import MobileTtsBar from '../voice/MobileTtsBar';
+import OutlineRunPanel from '../../../workbench/OutlineRunPanel';
 import type { ChapterMsg, Gen } from './types';
 
 /** 流式状态行的完成进度：发起页用 batch（全书口径）；切出回来的恢复路径 batch 已丢，用槽进度（任务内口径） */
@@ -54,6 +55,8 @@ export function TextPane({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [directive, setDirective] = useState('');
+  // 📖按大纲弹层：此前手机端没有弹层，点按钮直接写满全部大纲（用户反馈 2026-11-27：不要一次写 12 章）
+  const [outlineOpen, setOutlineOpen] = useState(false);
   /** 待绑定确认队列：本章生成检出的新素材（D8 side-channel） */
   const [pendingList, setPendingList] = useState<DetectedAsset[]>([]);
   /** 共享入库：勾选后本次检出的素材不归属本书（跨书可见的共享卡） */
@@ -417,15 +420,29 @@ export function TextPane({
         </button>
         <button
           type="button"
-          onClick={() => void gen.runByOutline(work, useWorkStore.getState().messages)}
+          onClick={() => setOutlineOpen((v) => !v)}
           disabled={myStreaming || otherStreaming || Boolean(gen.batch)}
           data-testid="mobile-outline-run-btn"
-          className="h-9 flex-1 rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] text-xs disabled:opacity-40"
+          className={`h-9 flex-1 rounded-xl border text-xs disabled:opacity-40 ${
+            outlineOpen
+              ? 'border-[hsl(var(--accent))]/50 bg-[hsl(var(--accent))]/10 text-[hsl(var(--accent))]'
+              : 'border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))]'
+          }`}
         >
           <BookOpen className="h-4 w-4" aria-hidden />
           按大纲写
         </button>
       </div>
+      {outlineOpen && (
+        <div className="mx-4 mb-2">
+          <OutlineRunPanel
+            onStart={(limit) => {
+              setOutlineOpen(false);
+              void gen.runByOutline(work, useWorkStore.getState().messages, limit).then(() => setDirective(''));
+            }}
+          />
+        </div>
+      )}
 
       {/* 写下一章 */}
       <div className="mx-4 mt-3 flex gap-2">

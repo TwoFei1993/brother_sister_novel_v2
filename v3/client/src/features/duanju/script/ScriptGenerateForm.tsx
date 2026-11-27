@@ -17,6 +17,8 @@ import type { DuanjuProject } from '@shared/duanju';
 
 interface Props {
   project: DuanjuProject;
+  /** 剧本栏当前文本（从第 N>1 集写起时，生成结果追加在它后面而不是覆盖） */
+  currentText: string;
   onClose: () => void;
   /** 生成完成（全文）；父级负责落库与关闭 */
   onGenerated: (text: string) => void;
@@ -26,16 +28,21 @@ const TONES = ['轻松日常', '热血爽感', '虐恋深情', '悬疑反转', '
 const RESULT_KEY = 'v3-script-gen-result';
 const SLOT = 'script-gen';
 
-export default function ScriptGenerateForm({ project, onClose, onGenerated }: Props) {
+export default function ScriptGenerateForm({ project, currentText, onClose, onGenerated }: Props) {
   const [idea, setIdea] = useState('');
   const [tone, setTone] = useState<string>(TONES[0]);
   const [genreText, setGenreText] = useState('');
+  const [startEpisode, setStartEpisode] = useState(1);
+  const [episodeCount, setEpisodeCount] = useState(1);
   const [streaming, setStreaming] = useState(false);
   const [buffer, setBuffer] = useState('');
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const prefs = useSettingsStore((s) => s.llmPrefs);
+
+  const start = Math.max(1, Math.floor(startEpisode) || 1);
+  const count = Math.min(12, Math.max(1, Math.floor(episodeCount) || 1));
 
   function buildMessages() {
     return buildScriptGenMessages({
@@ -44,7 +51,15 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
       idea: idea.trim(),
       protagonists: project.protagonists,
       targetEpisodes: project.targetEpisodes,
+      startEpisode: start,
+      episodeCount: count,
     });
+  }
+
+  /** 结果回填：从第 1 集写=替换剧本栏；从第 N>1 集写=追加在已有文本后（不覆盖已写的集） */
+  function deliver(text: string): void {
+    const merged = start > 1 && currentText.trim() ? `${currentText.trimEnd()}\n\n${text}` : text;
+    onGenerated(merged);
   }
 
   /**
@@ -53,7 +68,7 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
    */
   function applyResult(text: string): void {
     localStorage.setItem(RESULT_KEY, text);
-    onGenerated(text);
+    deliver(text);
     localStorage.removeItem(RESULT_KEY);
   }
 
@@ -66,13 +81,7 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
       await submitTask(SLOT, {
         source: prefs.source,
         model: prefs.model,
-        messages: buildScriptGenMessages({
-          genre: genreText.trim() || '自由发挥',
-          tone,
-          idea: idea.trim(),
-          protagonists: project.protagonists,
-          targetEpisodes: project.targetEpisodes,
-        }),
+        messages: buildMessages(),
         thinking: false,
         params: { max_tokens: 32000 },
         label: '剧本生成',
@@ -104,13 +113,7 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
         buildGenerateBody({
           source: prefs.source,
           model: prefs.model,
-          messages: buildScriptGenMessages({
-            genre: genreText.trim() || '自由发挥',
-            tone,
-            idea: idea.trim(),
-            protagonists: project.protagonists,
-            targetEpisodes: project.targetEpisodes,
-          }),
+          messages: buildMessages(),
           thinking: false,
           maxTokens: 32000,
         }),
@@ -121,7 +124,7 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
           },
           onDone: () => {
             done = true;
-            if (acc.trim()) onGenerated(acc);
+            if (acc.trim()) deliver(acc);
             else setError('模型无文本输出（思考流吃掉了输出），请重试');
           },
           onError: (e) => setError(e.message || '生成失败'),
@@ -155,7 +158,7 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
         aria-label="AI 生成剧本"
       >
         <div className="flex items-center justify-between border-b border-[hsl(var(--border-soft))] px-4 py-3">
-          <h3 className="text-sm font-semibold">✨ AI 生成剧本（第 1 集）</h3>
+          <h3 className="text-sm font-semibold">✨ AI 生成剧本（第 {start}~{start + count - 1} 集）</h3>
           <button
             type="button"
             onClick={streaming ? stop : onClose}
@@ -168,15 +171,45 @@ export default function ScriptGenerateForm({ project, onClose, onGenerated }: Pr
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <label className="mb-3 block">
-            <span className="mb-1 block text-xs text-[hsl(var(--fg-muted))]">一句话想法 *</span>
+            <span className="mb-1 block text-xs text-[hsl(var(--fg-muted))]">故事想法 / 完整故事素材 *</span>
             <textarea
               value={idea}
               onChange={(e) => setIdea(e.target.value)}
-              placeholder="例：外卖小哥送餐进豪门，发现大小姐是自己失散多年的妹妹……"
-              rows={2}
+              placeholder="一句话想法，或直接贴整段故事/梗概——AI 会把它改编成短剧，而不是只当第 1 集。例：外卖小哥送餐进豪门，发现大小姐是自己失散多年的妹妹……"
+              rows={4}
               className="w-full rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none placeholder:text-[hsl(var(--fg-muted))] focus:border-[hsl(var(--accent))]"
             />
           </label>
+          <div className="mb-3 flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]">
+              从第
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={startEpisode}
+                onChange={(e) => setStartEpisode(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                data-testid="script-gen-start-episode"
+                aria-label="从第几集写起"
+                className="h-9 w-16 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              />
+              集写起
+            </label>
+            <label className="flex items-center gap-2 text-xs text-[hsl(var(--fg-muted))]">
+              本次写
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={episodeCount}
+                onChange={(e) => setEpisodeCount(Math.min(12, Math.max(1, Math.floor(Number(e.target.value) || 1))))}
+                data-testid="script-gen-episode-count"
+                aria-label="本次写几集"
+                className="h-9 w-16 rounded-lg border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg))] px-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              />
+              集（全剧目标 {project.targetEpisodes} 集）
+            </label>
+          </div>
           <div className="mb-3">
             <span className="mb-1 block text-xs text-[hsl(var(--fg-muted))]">基调</span>
             <div className="flex flex-wrap gap-2">

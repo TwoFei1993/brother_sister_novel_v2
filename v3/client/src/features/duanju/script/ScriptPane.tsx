@@ -211,6 +211,7 @@ export default function ScriptPane({ workId }: { workId: string }) {
       {genOpen && (
         <ScriptGenerateForm
           project={project}
+          currentText={text}
           onClose={() => setGenOpen(false)}
           onGenerated={(genText) => {
             setGenOpen(false);

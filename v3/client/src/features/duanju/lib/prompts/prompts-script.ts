@@ -30,27 +30,34 @@ export interface ScriptGenInput {
   genre: string;
   /** 基调文风 */
   tone: string;
-  /** 一句话想法 / 故事梗概 */
+  /** 一句话想法 / 完整故事素材（用户反馈 2026-11-27：常贴整段故事，不是第 1 集专用原料） */
   idea: string;
   /** 主角设定（新建时可留空） */
   protagonists: string;
-  /** 目标集数 */
+  /** 全剧目标集数 */
   targetEpisodes: number;
+  /** 本次从第几集写起（缺省 1） */
+  startEpisode?: number;
+  /** 本次连续写几集（缺省 1） */
+  episodeCount?: number;
 }
 
 export function buildScriptGenMessages(input: ScriptGenInput): GenerateMessage[] {
+  const start = Math.max(1, Math.floor(input.startEpisode ?? 1));
+  const count = Math.max(1, Math.floor(input.episodeCount ?? 1));
+  const list = Array.from({ length: count }, (_, i) => `第${start + i}集`).join('、');
   const user = [
     `题材：${input.genre}`,
     `基调：${input.tone}`,
     input.protagonists ? `主角设定：${input.protagonists}` : '主角设定：（由你构思，保持精简鲜明）',
-    `目标集数：${input.targetEpisodes} 集（本次先写第 1 集完整剧本，结尾附第 2 集钩子预告）`,
     `故事想法：${input.idea}`,
+    `全剧规划 ${input.targetEpisodes} 集；本次从第 ${start} 集起连续写 ${count} 集（${list}）。`,
   ].join('\n');
   return [
     { role: 'system', content: SCRIPT_SYSTEM },
     {
       role: 'user',
-      content: `${user}\n\n请输出第 1 集完整剧本。格式：每行一个镜头，形如「场景｜人物｜动作｜台词」。`,
+      content: `${user}\n\n故事想法可能是完整故事、故事梗概或剧情片段——把它**改编**成短剧剧情（不要逐字搬用原文；素材覆盖不到的地方合理扩充配角冲突与细节）。请依次输出 ${list} 的完整剧本：每集先写一行集标题（形如「第${start}集 集名」），随后每行一个镜头，形如「场景｜人物｜动作｜台词」；每集开头 3 秒强钩子、结尾留悬念钩子衔接下一集。`,
     },
   ];
 }
