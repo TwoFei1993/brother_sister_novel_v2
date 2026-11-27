@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { apiFetch } from '../../../../api/client';
 import { updateWork } from '../../../../api/works';
+import FanficSection from '../../../workbench/dialog/FanficSection';
 import { chapterTitle } from '../../../../lib/chapter-title';
 import { volumeOfChapter } from '../../../../lib/outline/chapters';
 import type { VolumeOutlineItem, Work } from '@shared/work';
@@ -113,6 +114,9 @@ export function AssetsPane({ work, nextIndex, onUpdated }: { work: Work; nextInd
           <dd>{s.storyTones.join(' / ') || '—'}</dd>
         </dl>
       </section>
+
+      {/* ---------- 同人原著资料（与桌面作品设置同一组件）：填原著名 → 联网搜索设定录入世界书 → 素材绑定页查看校对 ---------- */}
+      {work.genre === 'fanfic' && <FanficSection work={work} onSaved={onUpdated} />}
 
       {/* ---------- 分卷规划（卷规划层，在章细纲之上） ---------- */}
       <section className="rounded-xl border border-[hsl(var(--border-soft))] bg-[hsl(var(--surface))] p-4">

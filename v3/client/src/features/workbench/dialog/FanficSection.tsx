@@ -135,7 +135,7 @@ export default function FanficSection({ work, onSaved }: { work: Work; onSaved: 
           className={inputCls}
         />
       </label>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void save()}
