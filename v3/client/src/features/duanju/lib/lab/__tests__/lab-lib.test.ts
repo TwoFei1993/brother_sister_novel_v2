@@ -68,11 +68,20 @@ afterEach(() => {
 });
 
 describe('画幅与尺寸', () => {
-  it('本地：四种画幅映射到 32 倍数的尺寸', () => {
-    expect(labSizeFor('9:16')).toEqual({ width: 768, height: 1344 });
-    expect(labSizeFor('16:9')).toEqual({ width: 1344, height: 768 });
-    expect(labSizeFor('1:1')).toEqual({ width: 1024, height: 1024 });
-    expect(labSizeFor('4:5')).toEqual({ width: 1152, height: 1440 });
+  it('本地：四种画幅映射到 8MP 档（2026-11-27 用户裁定；32 倍数，面积对齐 2016×3584）', () => {
+    expect(labSizeFor('9:16')).toEqual({ width: 2016, height: 3584 });
+    expect(labSizeFor('16:9')).toEqual({ width: 3584, height: 2016 });
+    expect(labSizeFor('1:1')).toEqual({ width: 2688, height: 2688 });
+    expect(labSizeFor('4:5')).toEqual({ width: 2400, height: 3008 });
+    for (const aspect of ['9:16', '16:9', '1:1', '4:5'] as const) {
+      const { width, height } = labSizeFor(aspect);
+      expect(width % 32).toBe(0);
+      expect(height % 32).toBe(0);
+    }
+  });
+  it('既有入口（设定图/服装/分镜帧）仍为小图档，不受试验台升档影响', () => {
+    expect(comfySizeFor('frame')).toEqual({ width: 768, height: 1344 });
+    expect(comfySizeFor('character', '4:5')).toEqual({ width: 1152, height: 1440 });
   });
 
   it('云端：没有 4:5；尺寸取自共享尺寸表', () => {
@@ -81,7 +90,7 @@ describe('画幅与尺寸', () => {
     expect(cloudSizeFor('seedream', '9:16')).toEqual({ width: 1440, height: 2560 });
     expect(cloudSizeFor('zhipu', '1:1')).toEqual({ width: 1024, height: 1024 });
     expect(() => cloudSizeFor('zhipu', '4:5')).toThrow();
-    expect(labSizeForProvider('comfy', '4:5')).toEqual({ width: 1152, height: 1440 });
+    expect(labSizeForProvider('comfy', '4:5')).toEqual({ width: 2400, height: 3008 });
   });
 
   it('既有入口的尺寸函数迁入后行为不变', () => {
@@ -290,7 +299,7 @@ describe('通道分流与归档', () => {
     expect(record).toEqual(stored);
     expect(submitLabComfy).toHaveBeenCalledWith(
       expect.objectContaining({ url: base }),
-      { prompt: '完整提示词', width: 768, height: 1344, seed: 42, refBlobs: [] },
+      { prompt: '完整提示词', width: 2016, height: 3584, seed: 42, refBlobs: [] },
     );
     expect(pollLabComfy).toHaveBeenCalledWith({ base, promptId: 'p1' });
     const meta = {
@@ -299,8 +308,8 @@ describe('通道分流与归档', () => {
       kind: 'free',
       provider: 'comfy',
       aspect: '9:16',
-      width: 768,
-      height: 1344,
+      width: 2016,
+      height: 3584,
       seed: 42,
       refs: [],
       characterIds: [],

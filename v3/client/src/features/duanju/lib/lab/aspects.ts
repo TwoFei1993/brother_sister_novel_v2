@@ -1,9 +1,11 @@
 /**
- * 试验台画幅与尺寸（设计共识 2026-11-26 第 2.3 / 2.6 节）
+ * 试验台画幅与尺寸（设计共识 2026-11-26 第 2.3 / 2.6 节；分辨率 2026-11-27 用户裁定：8MP 档）
  *
- * - 本地 ComfyUI：宽高为 32 的倍数，约 2MP 以内（12GB 显存 + 32GB 内存机器的上限）
+ * - 试验台本地出图：8MP 分镜档（与用户 H3-Image 生成管线同档；宽高为 32 的倍数）。
+ *   此前是 768×1344 小图档——用户实测质量不满意（2026-11-26 试验台测试用图即此档）。
+ * - comfySizeFor：既有生图入口（设定图/服装/分镜帧）仍为小图档，跑批量快；
+ *   要跟着升 8MP 是另一个决定（批量出图时长会 ×4 以上），未动。
  * - 云端：尺寸表在 shared（服务端透传与界面显示同源）；云端没有 4:5
- * - comfySizeFor：既有生图入口的尺寸函数，自 api/duanju.ts 迁来与本文件共用同一组尺寸
  */
 import {
   CLOUD_IMAGE_SIZES,
@@ -17,7 +19,15 @@ export interface ImageSize {
   height: number;
 }
 
-/** 本地 ComfyUI 常用尺寸 */
+/** 试验台 8MP 档尺寸（面积与 2016×3584 = 7.2MP 对齐，32 的倍数） */
+export const LAB_SIZES = {
+  portrait: { width: 2016, height: 3584 }, // 9:16
+  landscape: { width: 3584, height: 2016 }, // 16:9
+  square: { width: 2688, height: 2688 }, // 1:1
+  tall4x5: { width: 2400, height: 3008 }, // 4:5
+} as const;
+
+/** 既有生图入口（设定图/服装/分镜帧）的小图档尺寸 */
 export const COMFY_SIZES = {
   portrait: { width: 768, height: 1344 }, // 9:16 分镜帧
   landscape: { width: 1344, height: 768 }, // 16:9 设定图 / 场景图
@@ -45,17 +55,17 @@ export const ASPECT_LABELS: Record<LabAspect, string> = {
   '4:5': '竖图 4:5',
 };
 
-/** 试验台画幅 → 本地尺寸 */
+/** 试验台画幅 → 本地尺寸（8MP 档） */
 export function labSizeFor(aspect: LabAspect): ImageSize {
   switch (aspect) {
     case '9:16':
-      return { ...COMFY_SIZES.portrait };
+      return { ...LAB_SIZES.portrait };
     case '16:9':
-      return { ...COMFY_SIZES.landscape };
+      return { ...LAB_SIZES.landscape };
     case '1:1':
-      return { ...COMFY_SIZES.square };
+      return { ...LAB_SIZES.square };
     case '4:5':
-      return { ...COMFY_SIZES.tall4x5 };
+      return { ...LAB_SIZES.tall4x5 };
   }
 }
 
